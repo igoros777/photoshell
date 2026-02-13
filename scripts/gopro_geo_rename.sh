@@ -1,9 +1,24 @@
 #!/bin/bash
+#
+#                                      |
+#                                  ___/"\___
+#                          __________/ o \__________
+#                            (I) (G) \___/ (O) (R)
+#                                   Igor Os
+#                              igor@igoros.com
+#                                 2023-09-04
+# ----------------------------------------------------------------------------
+# Extract photo EXIF metadata, rewrite it consicely, and save as a comment
 # Rename GoPro videos in the current folder to include:
 # Date the video was taken
 # Full address
 # Duration in seconds
 # Original filename
+# ----------------------------------------------------------------------------
+# Change Log:
+# ****************************************************************************
+# 2023-09-04	igor@igoros.com	Wrote this script
+# ****************************************************************************
 #
 # Example:
 # 20220706-1128-000-190_s_park_st_lake_city_co_81235-31s-GH010135.MP4.mp4
@@ -47,4 +62,4 @@ convert_function() {
 }
 export -f convert_function
 
-find . -mindepth 1 -maxdepth 1 -type f -name "*\.MP4" | while read i; do convert_function "${i}"; done
+find . -mindepth 1 -maxdepth 1 -type f -name "*\.MP4" | while read -r i; do convert_function "${i}"; done
