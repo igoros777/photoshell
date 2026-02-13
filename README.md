@@ -1,10 +1,10 @@
 # PhotoShell
 A collection of shell scripts for photographers
 
-![](C:\zip\aeternus\GitHub\igoros777\photoshell\images\cr055wy0gy57rhbux1sseidcglg.png)
+![](.\images\cr055wy0gy57rhbux1sseidcglg.png)
 
 ## Scripts
-- [`scripts/gps_gap_fill.sh`](scripts/gps_gap_fill.sh): Fill missing GPS coordinates by copying coordinates from the nearest-in-time photo that already has geotags.
+- [`scripts/gps_gap_fill.sh`](scripts/gps_gap_fill.sh): Fill in missing GPS coordinates by copying them from the nearest-in-time photo with geotags.
 - [`scripts/extract_photo_summary.sh`](scripts/extract_photo_summary.sh): Extract key EXIF details, build a concise photo summary, and write it into comment/description metadata tags.
 - [`scripts/geo_rename_photos.sh`](scripts/geo_rename_photos.sh): Rename photos using capture timestamp, camera model, and reverse-geocoded location, with optional date-based folder structure.
 - [`scripts/gopro_geo_rename.sh`](scripts/gopro_geo_rename.sh): Rename GoPro MP4 clips with capture time, reverse-geocoded location, duration, and original filename.
