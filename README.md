@@ -1,7 +1,7 @@
 # PhotoShell
 A collection of shell scripts for photographers
 
-![./images/]()
+![](.\images\cr055wy0gy57rhbux1sseidcglg.png)
 
 ## Scripts
 - [`scripts/gps_gap_fill.sh`](scripts/gps_gap_fill.sh): Fill in missing GPS coordinates by copying them from the nearest-in-time photo with geotags.
