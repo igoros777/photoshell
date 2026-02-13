@@ -8,12 +8,16 @@
 #                              igor@igoros.com
 #                                 2023-09-04
 # ----------------------------------------------------------------------------
-# Extract photo EXIF metadata, rewrite it consicely, and save as a comment
-# Rename GoPro videos in the current folder to include:
-# Date the video was taken
-# Full address
-# Duration in seconds
-# Original filename
+# Rename GoPro MP4 clips in the current folder using EXIF/GPS metadata.
+# Why this exists:
+# GoPro default names (for example GH010135.MP4) are not descriptive and make
+# archive/search workflows difficult after offloading many clips.
+# This script builds filename context directly from metadata:
+# - capture datetime
+# - reverse-geocoded address from GPS
+# - clip duration in seconds
+# - original filename (preserved at the end)
+# Requirements: exiftool, curl, jq, geocod.io API key
 # ----------------------------------------------------------------------------
 # Change Log:
 # ****************************************************************************
