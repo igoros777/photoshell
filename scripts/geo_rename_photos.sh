@@ -8,7 +8,16 @@
 #                               igor@igoros.com
 #                                  2026-02-13
 # ----------------------------------------------------------------------------
-# Rename photos with capture time, camera model, and reverse-geocoded location.
+# Batch-rename photos using EXIF metadata and optional reverse geocoding.
+# Filename pattern:
+#   YYYYMMDD-HHMMSS-<camera_model>-<location>.<ext>
+# Metadata sources:
+# - timestamp: DateTimeOriginal (fallback: CreateDate)
+# - model    : Model
+# - GPS      : GPSLatitude,GPSLongitude -> geocod.io reverse lookup
+# Fallbacks:
+# - missing/failed geocode or API key -> mystery_town
+# - missing model -> unknowncamera
 # Optional folder structures:
 # - none    : keep files in current folder
 # - daily   : YYYY/YYYY-MM-DD
