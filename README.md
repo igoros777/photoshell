@@ -1,5 +1,9 @@
 # PhotoShell
-A collection of shell scripts for photographers
+PhotoShell is a practical Bash toolkit for photographers who need fast, repeatable metadata workflows on local files.
+
+It focuses on common archive-cleanup tasks such as repairing missing GPS tags, generating standardized metadata summaries, and renaming photos/videos into searchable, context-rich filenames.
+
+The scripts are designed for batch use in a working directory and built around `exiftool` plus a small set of standard CLI utilities.
 
 ![](https://github.com/igoros777/photoshell/blob/main/images/d41k59go09e2ntacd5r2jzjoecg.png?raw=true)
 
