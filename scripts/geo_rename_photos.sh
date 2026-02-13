@@ -258,7 +258,7 @@ process_photo() {
 
   if [[ -z "${dt_raw}" ]]; then
     echo "SKIP $(basename "${file}"): no DateTimeOriginal/CreateDate"
-    ((SKIPPED++))
+    ((SKIPPED+=1))
     return
   fi
 
@@ -266,7 +266,7 @@ process_photo() {
   epoch="$(date -d "${dt_norm}" +%s 2>/dev/null || true)"
   if [[ -z "${epoch}" ]]; then
     echo "SKIP $(basename "${file}"): invalid date '${dt_raw}'"
-    ((SKIPPED++))
+    ((SKIPPED+=1))
     return
   fi
   stamp="$(date -d "@${epoch}" '+%Y%m%d-%H%M%S')"
@@ -291,13 +291,13 @@ process_photo() {
 
   if [[ "${file}" == "${final_target}" ]]; then
     echo "SKIP $(basename "${file}"): already matches target name/location"
-    ((SKIPPED++))
+    ((SKIPPED+=1))
     return
   fi
 
   if [[ ${DRY_RUN} -eq 1 ]]; then
     echo "PLAN ${file} -> ${final_target}"
-    ((PLANNED++))
+    ((PLANNED+=1))
     return
   fi
 
@@ -311,7 +311,7 @@ process_photo() {
 
   mv -- "${file}" "${final_target}"
   echo "DONE ${file} -> ${final_target}"
-  ((RENAMED++))
+  ((RENAMED+=1))
 }
 
 # ----------------------------------------------------------------------------
