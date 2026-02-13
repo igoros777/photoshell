@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 #                                      |
 #                                  ___/"\___
@@ -6,90 +6,332 @@
 #                            (I) (G) \___/ (O) (R)
 #                                Igor Oseledko
 #                               igor@igoros.com
-#                                  2024-03-14
-# -----------------------------------------------------------------------------
-# Rename photos to show geo location
-# -----------------------------------------------------------------------------
-# Change Log:
-# *****************************************************************************
-# 2024-03-14  igor      Working as hard as a cat trying to bury a turd on a
-#                       marble floor
-# *****************************************************************************
+#                                  2026-02-13
+# ----------------------------------------------------------------------------
+# Rename photos with capture time, camera model, and reverse-geocoded location.
+# Optional folder structures:
+# - none    : keep files in current folder
+# - daily   : YYYY/YYYY-MM-DD
+# - monthly : YYYY/YYYY-MM
+# ----------------------------------------------------------------------------
+set -euo pipefail
+
+# ----------------------------------------------------------------------------
+# CONFIGURATION
+# ----------------------------------------------------------------------------
 configure() {
   v='v1.7'
   apibase="https://api.geocod.io/${v}"
-  api_key="Get your API key from https://www.geocod.io"
+  api_key="${GEOCODIO_API_KEY:-Get your API key from https://www.geocod.io}"
+
+  DRY_RUN=0
+  STRUCTURE="none"
+
+  PHOTO_EXTS=(
+    jpg jpeg jpe
+    heic heif
+    tif tiff
+    png webp
+    dng
+    nef cr2 cr3 arw orf rw2 rwl srw raf pef x3f
+  )
 }
 
-convert_function_xt3() {
-  echo "Saving original filename as a tag in "
-  exiftool -P -overwrite_original_in_place '-XMP-xmpMM:PreservedFileName<${filename;s/\.[^.]*$//}' ""
-  echo "Renaming "
-  exiftool '-filename<${CreateDate}-${model;s/[- ]//g;tr/A-Z/a-z/}.%le' -d "%Y%m%d-%H%M%%-03.c-$(curl -s0 -q -k "${apibase}/reverse?q=$(exiftool -q -m -n -p '$GPSLatitude,$GPSLongitude' "")&api_key=${api_key}&limit=1" | jq -r '.results[]|.address_components|"\(.city) \(.state) \(.country)"' 2>/dev/null | sed -e 's/\(.*\)/\L/' -e 's/[^A-Za-z0-9._-]/_/g')" ""
+usage() {
+  cat <<'EOF'
+Usage: geo_rename_photos.sh [--dry-run] [--structure none|daily|monthly]
+
+Options:
+  --dry-run                 Print planned changes only (no writes/moves)
+  --structure <value>       Optional folder structure:
+                            none (default)  -> keep files in current folder
+                            daily           -> YYYY/YYYY-MM-DD
+                            monthly         -> YYYY/YYYY-MM
+  -h, --help                Show this help
+
+Environment:
+  GEOCODIO_API_KEY          geocod.io API key (recommended)
+EOF
 }
 
-export -f convert_function_xt3
-
-convert_function_iphone() {
-  echo "Saving original filename as a tag in "
-  exiftool -P -overwrite_original_in_place '-XMP-xmpMM:PreservedFileName<${filename;s/\.[^.]*$//}' ""
-  echo "Renaming "
-  exiftool '-filename<${DateTimeOriginal}-${model;s/[- ]//g;tr/A-Z/a-z/}.%le' \
-  -d "%Y%m%d-%H%M%%-03.c-$(curl -s0 -q -k "${apibase}/reverse?q=$(exiftool -q -m -n -p '$GPSLatitude,$GPSLongitude' "")&api_key=${api_key}&limit=1" | \
-  jq -r '.results[]|.address_components|"\(.city) \(.state) \(.country)"' 2>/dev/null | sed -e 's/[^A-Za-z0-9._-]/_/g')" ""
+check_requirements() {
+  local missing=0
+  local cmd
+  for cmd in exiftool curl jq find sed date grep awk; do
+    if ! command -v "${cmd}" >/dev/null 2>&1; then
+      echo "Missing required command: ${cmd}" >&2
+      missing=1
+    fi
+  done
+  if [[ ${missing} -ne 0 ]]; then
+    exit 1
+  fi
 }
 
-export -f convert_function_iphone
-
-rename_photos_in_current_folder_xt3() {
-  find . -mindepth 1 -maxdepth 1 -type f -iname "*\.jpg" | while read file_name
-  do
-    echo "Saving original filename as a tag in ${file_name}"
-    exiftool -P -overwrite_original_in_place '-XMP-xmpMM:PreservedFileName<${filename;s/\.[^.]*$//}' "${file_name}"
-    
-    echo "Renaming ${file_name}"
-    exiftool '-filename<${CreateDate}-${model;s/[- ]//g;tr/A-Z/a-z/}.%le' -d "%Y%m%d-%H%M%%-03.c-$(curl -s0 -q -k "${apibase}/reverse?q=$(exiftool -q -m -n -p '$GPSLatitude,$GPSLongitude' "${file_name}")&api_key=${api_key}&limit=1" | jq -r '.results[]|.address_components|"\(.city) \(.state) \(.country)"' 2>/dev/null | sed -e 's/\(.*\)/\L/' -e 's/[^A-Za-z0-9._-]/_/g')" "${file_name}"
-    done
-}
-
-rename_photos_in_current_folder_iphone() {
-  find . -mindepth 1 -maxdepth 1 -type f -iname "*\.jpg" | while read file_name
-  do
-    echo "Saving original filename as a tag in ${file_name}"
-    exiftool -P -overwrite_original_in_place '-XMP-xmpMM:PreservedFileName<${filename;s/\.[^.]*$//}' "${file_name}"
-    
-    echo "Renaming ${file_name}"
-    exiftool '-filename<${DateTimeOriginal}-${model;s/[- ]//g;tr/A-Z/a-z/}.%le' \
-    -d "%Y%m%d-%H%M%%-03.c-$(curl -s0 -q -k "${apibase}/reverse?q=$(exiftool -q -m -n -p '$GPSLatitude,$GPSLongitude' "${file_name}")&api_key=${api_key}&limit=1" | \
-    jq -r '.results[]|.address_components|"\(.city) \(.state) \(.country)"' 2>/dev/null | sed -e 's/[^A-Za-z0-9._-]/_/g')" "${file_name}"
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "${1}" in
+      --dry-run)
+        DRY_RUN=1
+        shift
+        ;;
+      --structure)
+        if [[ $# -lt 2 ]]; then
+          echo "Error: --structure requires a value" >&2
+          usage
+          exit 1
+        fi
+        case "${2}" in
+          none|flat)
+            STRUCTURE="none"
+            ;;
+          daily|day|one|1)
+            STRUCTURE="daily"
+            ;;
+          monthly|month|two|2)
+            STRUCTURE="monthly"
+            ;;
+          *)
+            echo "Error: invalid structure '${2}'. Use none|daily|monthly" >&2
+            usage
+            exit 1
+            ;;
+        esac
+        shift 2
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Error: unknown argument '${1}'" >&2
+        usage
+        exit 1
+        ;;
+    esac
   done
 }
 
-rename_photos_in_current_folder_xargs_iphone() {
-  find . -mindepth 1 -maxdepth 1 -type f -iname "*\.jpg" -print0 | xargs -r0 -n1 -P$(grep -c proc /proc/cpuinfo) -I {} bash -c 'convert_function_iphone "$@"' _ {}
+build_find_expr() {
+  FIND_EXPR=()
+  local ext
+  for ext in "${PHOTO_EXTS[@]}"; do
+    [[ ${#FIND_EXPR[@]} -gt 0 ]] && FIND_EXPR+=("-o")
+    FIND_EXPR+=("-iname" "*.${ext}")
+  done
 }
 
-move_photos_to_structure_one() {
-  # .
-  # └── 2020
-  #     ├── 2020-07-18
-  #     ├── 2020-07-21
-  #     └── 2020-07-31
-  exiftool "-Directory<DateTimeOriginal" -d "%Y/%Y-%m-%d" .
+find_photos() {
+  build_find_expr
+  mapfile -d '' -t PHOTO_FILES < <(
+    find . -mindepth 1 -maxdepth 1 -type f \( "${FIND_EXPR[@]}" \) -print0
+  )
+
+  if [[ ${#PHOTO_FILES[@]} -eq 0 ]]; then
+    echo "No supported photo files found in current directory."
+    exit 0
+  fi
+  echo "Found ${#PHOTO_FILES[@]} photo file(s)."
 }
 
-move_photos_to_structure_two() {
-  #   .
-  # └── 2020
-  #     └── 2020-07
-  exiftool "-Directory<DateTimeOriginal" -d "%Y/%Y-%m" .
+sanitize_location() {
+  echo "${1}" | tr '[:upper:]' '[:lower:]' | \
+    sed -e 's/[^A-Za-z0-9._-]/_/g' -e 's/__/_/g' -e 's/^_//' -e 's/_$//'
 }
 
-# -----------------------------------------------------------------------------
+sanitize_model() {
+  echo "${1}" | tr '[:upper:]' '[:lower:]' | \
+    sed -e 's/[- ]//g' -e 's/[^A-Za-z0-9._-]/_/g' -e 's/__/_/g' -e 's/^_//' -e 's/_$//'
+}
+
+query_location() {
+  local coordinates="${1}"
+  local raw_location
+  raw_location="$(
+    curl -s0 -q -k "${apibase}/reverse?q=${coordinates}&api_key=${api_key}&limit=1" | \
+      jq -r '.results[0].formatted_address // empty' 2>/dev/null
+  )"
+  sanitize_location "${raw_location}"
+}
+
+resolve_location() {
+  local coordinates="${1}"
+  if [[ -z "${coordinates}" ]]; then
+    echo "mystery_town"
+    return
+  fi
+
+  if [[ "${api_key}" == "Get your API key from https://www.geocod.io" ]]; then
+    echo "mystery_town"
+    return
+  fi
+
+  local location
+  location="$(query_location "${coordinates}")"
+  if [[ -n "${location}" ]]; then
+    echo "${location}"
+    return
+  fi
+
+  local lat lon
+  lat="$(echo "${coordinates}" | awk -F, '{print $1}' | sed 's/[0-9]$//')"
+  lon="$(echo "${coordinates}" | awk -F, '{print $2}' | sed 's/[0-9]$//')"
+  coordinates="${lat},${lon}"
+
+  location="$(query_location "${coordinates}")"
+  if [[ -n "${location}" ]]; then
+    echo "${location}"
+  else
+    echo "mystery_town"
+  fi
+}
+
+normalize_datetime() {
+  echo "${1}" | sed 's/^\([0-9]\{4\}\):\([0-9]\{2\}\):\([0-9]\{2\}\)/\1-\2-\3/'
+}
+
+choose_target_dir() {
+  local epoch="${1}"
+  case "${STRUCTURE}" in
+    none)
+      echo "."
+      ;;
+    daily)
+      date -d "@${epoch}" '+%Y/%Y-%m-%d'
+      ;;
+    monthly)
+      date -d "@${epoch}" '+%Y/%Y-%m'
+      ;;
+    *)
+      echo "."
+      ;;
+  esac
+}
+
+resolve_collision() {
+  local source_path="${1}"
+  local target_path="${2}"
+
+  if [[ "${source_path}" == "${target_path}" || ! -e "${target_path}" ]]; then
+    echo "${target_path}"
+    return
+  fi
+
+  local dir file base ext i candidate
+  dir="$(dirname "${target_path}")"
+  file="$(basename "${target_path}")"
+  base="${file}"
+  ext=""
+
+  if [[ "${file}" == *.* ]]; then
+    base="${file%.*}"
+    ext=".${file##*.}"
+  fi
+
+  i=1
+  while true; do
+    candidate="${dir}/${base}-${i}${ext}"
+    if [[ ! -e "${candidate}" || "${source_path}" == "${candidate}" ]]; then
+      echo "${candidate}"
+      return
+    fi
+    ((i++))
+  done
+}
+
+process_photo() {
+  local file="${1}"
+  local dt_raw dt_norm epoch stamp model_raw model coordinates location ext
+  local target_dir target_path final_target
+
+  dt_raw="$(exiftool -s -s -s -DateTimeOriginal "${file}" 2>/dev/null || true)"
+  [[ -z "${dt_raw}" ]] && dt_raw="$(exiftool -s -s -s -CreateDate "${file}" 2>/dev/null || true)"
+
+  if [[ -z "${dt_raw}" ]]; then
+    echo "SKIP $(basename "${file}"): no DateTimeOriginal/CreateDate"
+    ((SKIPPED++))
+    return
+  fi
+
+  dt_norm="$(normalize_datetime "${dt_raw}")"
+  epoch="$(date -d "${dt_norm}" +%s 2>/dev/null || true)"
+  if [[ -z "${epoch}" ]]; then
+    echo "SKIP $(basename "${file}"): invalid date '${dt_raw}'"
+    ((SKIPPED++))
+    return
+  fi
+  stamp="$(date -d "@${epoch}" '+%Y%m%d-%H%M%S')"
+
+  model_raw="$(exiftool -s -s -s -Model "${file}" 2>/dev/null || true)"
+  model="$(sanitize_model "${model_raw}")"
+  [[ -z "${model}" ]] && model="unknowncamera"
+
+  coordinates="$(exiftool -q -m -n -p '$GPSLatitude,$GPSLongitude' "${file}" 2>/dev/null || true)"
+  if ! echo "${coordinates}" | grep -qE '^-?[0-9]+([.][0-9]+)?,-?[0-9]+([.][0-9]+)?$'; then
+    coordinates=""
+  fi
+  location="$(resolve_location "${coordinates}")"
+  [[ -z "${location}" ]] && location="mystery_town"
+
+  ext="${file##*.}"
+  ext="$(echo "${ext}" | tr '[:upper:]' '[:lower:]')"
+
+  target_dir="$(choose_target_dir "${epoch}")"
+  target_path="${target_dir}/${stamp}-${model}-${location}.${ext}"
+  final_target="$(resolve_collision "${file}" "${target_path}")"
+
+  if [[ "${file}" == "${final_target}" ]]; then
+    echo "SKIP $(basename "${file}"): already matches target name/location"
+    ((SKIPPED++))
+    return
+  fi
+
+  if [[ ${DRY_RUN} -eq 1 ]]; then
+    echo "PLAN ${file} -> ${final_target}"
+    ((PLANNED++))
+    return
+  fi
+
+  exiftool -P -overwrite_original_in_place \
+    '-XMP-xmpMM:PreservedFileName<${filename;s/\.[^.]*$//}' \
+    "${file}" >/dev/null 2>&1 || true
+
+  if [[ "${target_dir}" != "." ]]; then
+    mkdir -p "${target_dir}"
+  fi
+
+  mv -- "${file}" "${final_target}"
+  echo "DONE ${file} -> ${final_target}"
+  ((RENAMED++))
+}
+
+# ----------------------------------------------------------------------------
 # RUNTIME
 # \(^_^)/                                      __|__
 #                                     __|__ *---o0o---*
 #                            __|__ *---o0o---*
 #                         *---o0o---*
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 configure
+parse_args "$@"
+check_requirements
+find_photos
+
+PLANNED=0
+RENAMED=0
+SKIPPED=0
+
+if [[ ${DRY_RUN} -eq 1 ]]; then
+  echo "[DRY-RUN mode: no files will be changed]"
+fi
+
+for photo_file in "${PHOTO_FILES[@]}"; do
+  process_photo "${photo_file}"
+done
+
+echo ""
+if [[ ${DRY_RUN} -eq 1 ]]; then
+  echo "Dry run complete: ${PLANNED} planned, ${SKIPPED} skipped."
+else
+  echo "Complete: ${RENAMED} renamed/moved, ${SKIPPED} skipped."
+fi
