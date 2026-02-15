@@ -13,6 +13,7 @@
 # Change Log:
 # ****************************************************************************
 # 2026-02-15	igor@igoros.com	Wrote this script
+# 2026-02-15	igor@igoros.com	Added visual similarity scene split controls
 # ****************************************************************************
 
 set -euo pipefail
@@ -28,6 +29,9 @@ WINDOW="5x5"
 MODE="all"
 DRY_RUN=0
 CLEAN_OUTPUT=0
+USE_VISUAL=1
+VISUAL_THRESHOLD="0.10"
+THUMB_SIZE=256
 
 declare -a IMAGES=()
 declare -a SCENE_DIRS=()
@@ -36,6 +40,7 @@ declare -A SCENE_IMAGES=()
 IM_STYLE=""
 IDENTIFY_CMD=()
 CONVERT_CMD=()
+COMPARE_CMD=()
 
 usage() {
   cat <<EOF
@@ -44,8 +49,8 @@ Usage:
 
 Purpose:
   Detect blur level in JPG/JPEG files using ImageMagick StandardDeviation.
-  Can also split images into scenes by EXIF time gap and select one sharpest
-  image per scene.
+  Can also split images into scenes by EXIF time gap plus visual-change
+  analysis and select one sharpest image per scene.
 
 Modes:
   analyze   Score all images and copy to analyzed dir as <score>_<filename>
@@ -58,6 +63,9 @@ Options:
   --scenes-dir DIR           Output dir for scenes (default: ./scenes)
   --selected-dir DIR         Output dir for chosen images (default: ./selected)
   -t, --time-gap SECONDS     New scene gap threshold (default: 5)
+  --no-visual                Disable visual similarity checks for scene split
+  --visual-threshold FLOAT   New-scene threshold for visual delta (default: 0.10)
+  --thumb-size PX            Comparison thumbnail edge size (default: 256)
   -w, --window WxH           Statistic window size (default: 5x5)
   -m, --mode MODE            analyze | select | all (default: all)
   --clean                    Remove output dirs before running
@@ -67,6 +75,7 @@ Options:
 Examples:
   ${SCRIPT_NAME} --mode analyze
   ${SCRIPT_NAME} --mode select --time-gap 8
+  ${SCRIPT_NAME} --mode select --time-gap 8 --visual-threshold 0.12
   ${SCRIPT_NAME} --mode all --input "./trip" --clean
 EOF
 }
@@ -134,6 +143,7 @@ detect_imagemagick() {
     IM_STYLE="im7"
     IDENTIFY_CMD=(magick identify)
     CONVERT_CMD=(magick)
+    COMPARE_CMD=(magick compare)
     return 0
   fi
 
@@ -141,6 +151,9 @@ detect_imagemagick() {
     IM_STYLE="im6"
     IDENTIFY_CMD=(identify)
     CONVERT_CMD=(convert)
+    if command -v compare >/dev/null 2>&1; then
+      COMPARE_CMD=(compare)
+    fi
     return 0
   fi
 
@@ -176,6 +189,63 @@ blur_score() {
       printf "%04d\n", n;
     }
   '
+}
+
+float_gt() {
+  local left="$1"
+  local right="$2"
+  awk -v a="${left}" -v b="${right}" 'BEGIN { if ((a + 0.0) > (b + 0.0)) exit 0; exit 1; }'
+}
+
+visual_delta() {
+  local image_a="$1"
+  local image_b="$2"
+  local thumb_a
+  local thumb_b
+  local out
+  local metric
+
+  thumb_a="$(mktemp --suffix=.png)"
+  thumb_b="$(mktemp --suffix=.png)"
+
+  if ! "${CONVERT_CMD[@]}" "${image_a}" -auto-orient -colorspace Gray -resize "${THUMB_SIZE}x${THUMB_SIZE}!" "${thumb_a}" >/dev/null 2>&1; then
+    rm -f "${thumb_a}" "${thumb_b}"
+    echo "1.000000"
+    return 0
+  fi
+  if ! "${CONVERT_CMD[@]}" "${image_b}" -auto-orient -colorspace Gray -resize "${THUMB_SIZE}x${THUMB_SIZE}!" "${thumb_b}" >/dev/null 2>&1; then
+    rm -f "${thumb_a}" "${thumb_b}"
+    echo "1.000000"
+    return 0
+  fi
+
+  out="$("${COMPARE_CMD[@]}" -metric RMSE "${thumb_a}" "${thumb_b}" null: 2>&1 || true)"
+  rm -f "${thumb_a}" "${thumb_b}"
+
+  metric="$(echo "${out}" | awk '
+    {
+      if (match($0, /\([0-9]+(\.[0-9]+)?\)/)) {
+        v = substr($0, RSTART + 1, RLENGTH - 2);
+        print v;
+        exit;
+      }
+      if (match($0, /^[0-9]+(\.[0-9]+)?$/)) {
+        print $0;
+        exit;
+      }
+    }
+  ')"
+
+  if [[ -z "${metric}" ]]; then
+    metric="1.0"
+  fi
+
+  awk -v v="${metric}" 'BEGIN {
+    n = v + 0.0;
+    if (n < 0) n = 0;
+    if (n > 1) n = 1;
+    printf "%.6f\n", n;
+  }'
 }
 
 image_epoch() {
@@ -228,10 +298,15 @@ split_scenes() {
   local image
   local epoch
   local prev_epoch=""
+  local prev_image=""
   local scene_index=0
   local scene_dir=""
   local line_epoch
   local line_image
+  local new_scene=0
+  local scene_reason=""
+  local delta_seconds=0
+  local delta_visual="0.000000"
 
   prepare_dir "${SCENES_DIR}"
   map_file="$(mktemp)"
@@ -247,7 +322,45 @@ split_scenes() {
   while IFS=$'\t' read -r line_epoch line_image; do
     [[ -z "${line_image}" ]] && continue
 
+    new_scene=0
+    scene_reason=""
+
     if [[ -z "${prev_epoch}" ]]; then
+      new_scene=1
+      scene_reason="start"
+    else
+      delta_seconds=$((line_epoch - prev_epoch))
+      if (( delta_seconds > TIME_GAP )); then
+        new_scene=1
+        scene_reason="time(${delta_seconds}s>${TIME_GAP}s)"
+      fi
+
+      if [[ "${USE_VISUAL}" -eq 1 ]]; then
+        delta_visual="$(visual_delta "${prev_image}" "${line_image}")"
+        if float_gt "${delta_visual}" "${VISUAL_THRESHOLD}"; then
+          if [[ -n "${scene_reason}" ]]; then
+            scene_reason="${scene_reason}+visual(${delta_visual}>${VISUAL_THRESHOLD})"
+          else
+            scene_reason="visual(${delta_visual}>${VISUAL_THRESHOLD})"
+          fi
+          new_scene=1
+        fi
+      fi
+    fi
+
+    if [[ "${new_scene}" -eq 1 ]]; then
+      ((scene_index += 1))
+      scene_dir="${SCENES_DIR}/scene_$(printf '%010d' "${scene_index}")"
+      SCENE_DIRS+=("${scene_dir}")
+      if [[ "${DRY_RUN}" -eq 1 ]]; then
+        log "[plan] mkdir -p \"${scene_dir}\""
+      else
+        mkdir -p "${scene_dir}"
+      fi
+      log "Scene ${scene_index}: ${scene_reason}"
+    fi
+
+    if [[ -z "${scene_dir}" ]]; then
       scene_index=1
       scene_dir="${SCENES_DIR}/scene_$(printf '%010d' "${scene_index}")"
       SCENE_DIRS+=("${scene_dir}")
@@ -256,22 +369,12 @@ split_scenes() {
       else
         mkdir -p "${scene_dir}"
       fi
-    else
-      if (( line_epoch - prev_epoch > TIME_GAP )); then
-        ((scene_index += 1))
-        scene_dir="${SCENES_DIR}/scene_$(printf '%010d' "${scene_index}")"
-        SCENE_DIRS+=("${scene_dir}")
-        if [[ "${DRY_RUN}" -eq 1 ]]; then
-          log "[plan] mkdir -p \"${scene_dir}\""
-        else
-          mkdir -p "${scene_dir}"
-        fi
-      fi
     fi
 
     SCENE_IMAGES["${scene_dir}"]+=$'\n'"${line_image}"
     copy_file "${line_image}" "${scene_dir}/$(basename "${line_image}")"
     prev_epoch="${line_epoch}"
+    prev_image="${line_image}"
   done < "${sorted_file}"
 
   rm -f "${map_file}" "${sorted_file}"
@@ -372,6 +475,20 @@ parse_args() {
         TIME_GAP="$2"
         shift 2
         ;;
+      --no-visual)
+        USE_VISUAL=0
+        shift
+        ;;
+      --visual-threshold)
+        [[ $# -lt 2 ]] && die "$1 requires a decimal value"
+        VISUAL_THRESHOLD="$2"
+        shift 2
+        ;;
+      --thumb-size)
+        [[ $# -lt 2 ]] && die "$1 requires a positive integer"
+        THUMB_SIZE="$2"
+        shift 2
+        ;;
       -w|--window)
         [[ $# -lt 2 ]] && die "$1 requires a window size (e.g., 5x5)"
         WINDOW="$2"
@@ -408,6 +525,18 @@ parse_args() {
     die "time gap must be a non-negative integer"
   fi
 
+  if [[ ! "${THUMB_SIZE}" =~ ^[1-9][0-9]*$ ]]; then
+    die "thumb size must be a positive integer"
+  fi
+
+  if [[ ! "${VISUAL_THRESHOLD}" =~ ^([0-9]+([.][0-9]+)?|[.][0-9]+)$ ]]; then
+    die "visual threshold must be a decimal value between 0 and 1"
+  fi
+
+  if float_gt "${VISUAL_THRESHOLD}" "1"; then
+    die "visual threshold must be between 0 and 1"
+  fi
+
   case "${MODE}" in
     analyze|select|all) ;;
     *)
@@ -419,11 +548,19 @@ parse_args() {
 main() {
   parse_args "$@"
   detect_imagemagick
+
+  if [[ "${USE_VISUAL}" -eq 1 && "${MODE}" != "analyze" && "${#COMPARE_CMD[@]}" -eq 0 ]]; then
+    die "visual scene split requires ImageMagick compare command (install compare or use --no-visual)"
+  fi
+
   list_images
 
   log "Mode: ${MODE}"
   log "Input: ${INPUT_DIR}"
   log "Images found: ${#IMAGES[@]}"
+  if [[ "${MODE}" != "analyze" ]]; then
+    log "Scene split: time-gap=${TIME_GAP}s visual=$([[ "${USE_VISUAL}" -eq 1 ]] && echo "on(thr=${VISUAL_THRESHOLD},thumb=${THUMB_SIZE})" || echo "off")"
+  fi
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     log "Dry run: yes"
   fi
