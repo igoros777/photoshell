@@ -54,7 +54,7 @@ iPhone 14 Pro Max | iPhone 14 Pro Max back triple camera 9mm f/2.8 | ISO: 32 | f
 - `curl`
 - `jq`
 - Internet access for reverse geocoding
-- Valid geocod.io API key configured in the script
+- Valid geocod.io API key configured in the script or as an environmental variable.
 
 ## Usage
 
@@ -81,7 +81,6 @@ Usage: ./scripts/extract_photo_summary.sh <image-file>
 
 - Metadata writes use `exiftool -overwrite_original` (original file is replaced).
 - Test on copied files first if you need a reversible workflow.
-- The script currently embeds an API key value directly in source; prefer moving this to an environment variable for safer key handling.
 
 ## Known Limitations
 

@@ -29,7 +29,7 @@
 
 v='v1.7'
 apibase="https://api.geocod.io/${v}"
-api_key="Get your API key from https://www.geocod.io"
+api_key="${GEOCODIO_API_KEY:-Get your API key from https://www.geocod.io}"
 
 convert_function() {
   echo "Renaming ${1}"

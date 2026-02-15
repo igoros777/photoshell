@@ -44,10 +44,10 @@ Example:
 
 ## Configuration
 
-Set your geocod.io API key in `scripts/gopro_geo_rename.sh`:
+Set your geocod.io API key in `scripts/gopro_geo_rename.sh` or as an environmental variable:
 
 ```bash
-api_key="Get your API key from https://www.geocod.io"
+api_key="${GEOCODIO_API_KEY:-Get your API key from https://www.geocod.io}"
 ```
 
 Replace that string with your actual key before running.
