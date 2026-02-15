@@ -39,6 +39,10 @@ The script outputs and writes a line in this shape:
 
 Missing metadata is replaced with `N/A` when possible.
 
+### Example:
+
+![]()
+
 ## Requirements
 
 - Bash
