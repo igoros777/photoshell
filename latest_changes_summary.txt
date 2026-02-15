@@ -1,0 +1,1 @@
+Latest updates in PhotoShell include a new and improved blur-detection workflow with visual-similarity scene splitting, broader Linux Bash support for photofolders automation, cleaner and more consistent script structure and docs, safer geocod.io API key handling via environment variables, and a newly added SECURITY.md that clarifies reporting scope and response process.
