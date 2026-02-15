@@ -1,8 +1,13 @@
-# photofolders.bat
+# photofolders (Windows + Linux)
 
-`photofolders.bat` creates a repeatable folder scaffold for a photo/video project.
+`photofolders` creates a repeatable folder scaffold for a photo/video project.
 
-The script logic is intentionally generic. The actual folder model comes from an external config file (`scripts/photofolders.config.cmd` by default).
+Available variants:
+
+- Windows CMD: `scripts/photofolders.bat` + `scripts/photofolders.config.cmd`
+- Linux Bash: `scripts/photofolders.sh` + `scripts/photofolders.config.sh`
+
+The script logic is intentionally generic. The actual folder model comes from an external config file.
 
 ## Why This Exists
 
@@ -32,8 +37,16 @@ With the current default config, categories are:
 
 ## Usage
 
+Windows:
+
 ```bat
 scripts\photofolders.bat [project_name] [options]
+```
+
+Linux:
+
+```bash
+scripts/photofolders.sh [project_name] [options]
 ```
 
 Options:
@@ -53,17 +66,27 @@ scripts\photofolders.bat "ClientA" --config "D:\Templates\photofolders.config.cm
 scripts\photofolders.bat "ClientA" --dry-run
 ```
 
+```bash
+scripts/photofolders.sh "Iceland Trip 2026"
+scripts/photofolders.sh --project "Wedding_Boston" --root "/mnt/photos"
+scripts/photofolders.sh "ClientA" --config "/opt/templates/photofolders.config.sh"
+scripts/photofolders.sh "ClientA" --dry-run
+```
+
 ## Defaults
 
 Root path lookup order:
 
 1. `--root`
 2. `PHOTOSHELL_ROOT`
-3. `%USERPROFILE%\Pictures\Photography`
+3. platform default:
+   - Windows: `%USERPROFILE%\Pictures\Photography`
+   - Linux: `$HOME/Pictures/Photography`
 
 Default config:
 
-- `scripts\photofolders.config.cmd` (same directory as `photofolders.bat`)
+- Windows: `scripts\photofolders.config.cmd` (same directory as `photofolders.bat`)
+- Linux: `scripts/photofolders.config.sh` (same directory as `photofolders.sh`)
 
 ## Validation And Safety
 
@@ -77,7 +100,7 @@ The script only creates directories. It does not move, rename, or delete media.
 
 ## Config Format
 
-Configuration is a CMD file that sets variables (`set "NAME=value"`). The script `call`s that file at runtime.
+Configuration is code (CMD or Bash) that sets variables. The script executes/sources that file at runtime.
 
 Detailed format reference:
 
@@ -87,7 +110,7 @@ Detailed format reference:
 
 Typical flow:
 
-1. Create project skeleton with `photofolders.bat`.
+1. Create project skeleton with `photofolders.bat` or `photofolders.sh`.
 2. Copy camera cards into `originals/...`.
 3. Run metadata/rename scripts from this repo.
 4. Export derivatives into `processed/...`.

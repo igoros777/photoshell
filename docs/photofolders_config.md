@@ -1,12 +1,15 @@
-# photofolders.config.cmd
+# photofolders config (CMD + Bash)
 
-This file defines the folder template consumed by `scripts/photofolders.bat`.
+This file defines the folder template consumed by:
+
+- `scripts/photofolders.bat` via `scripts/photofolders.config.cmd`
+- `scripts/photofolders.sh` via `scripts/photofolders.config.sh`
 
 ## Purpose
 
-`photofolders.bat` handles argument parsing, validation, and directory creation.
+`photofolders` handles argument parsing, validation, and directory creation.
 
-`photofolders.config.cmd` defines:
+The config file defines:
 
 - which equipment categories exist
 - which devices belong to each category
@@ -17,17 +20,23 @@ This separation keeps operational logic stable while letting you change structur
 
 ## File Format
 
-The config is a Windows CMD script. Use standard assignment style:
+Windows (CMD):
 
 ```cmd
 set "VARIABLE_NAME=value"
 ```
 
+Linux (Bash):
+
+```bash
+VARIABLE_NAME="value"
+```
+
 Recommendations:
 
-- keep `@echo off` at the top
-- use `rem` for comments
-- always quote assignments as `set "A=B"` to avoid trailing-space bugs
+- CMD: keep `@echo off` at the top and use `rem` for comments
+- Bash: use `#` for comments
+- always quote assignments
 
 ## Required Variables
 
@@ -60,6 +69,12 @@ set "CFG_CATEGORY_EQUIPMENT_cell_phones=iPhone;Pixel"
 set "CFG_CATEGORY_SUBFOLDERS_cell_phones=photos;photos\jpg;photos\raw;videos;videos\original;videos\clips"
 ```
 
+```bash
+CFG_CATEGORY_PATH_cell_phones="cell_phones"
+CFG_CATEGORY_EQUIPMENT_cell_phones="iPhone;Pixel"
+CFG_CATEGORY_SUBFOLDERS_cell_phones="photos;photos/jpg;photos/raw;videos;videos/original;videos/clips"
+```
+
 Meaning:
 
 - `CFG_CATEGORY_PATH_<id>`: folder name under `originals\`
@@ -77,6 +92,10 @@ Meaning:
 set "CFG_PROCESSED_SUBFOLDERS=photos;photos\working;photos\exports;social;social\instagram;stock;stock\adobe\submitted"
 ```
 
+```bash
+CFG_PROCESSED_SUBFOLDERS="photos;photos/working;photos/exports;social;social/instagram;stock;stock/adobe/submitted"
+```
+
 ## Delimiter Rules
 
 All list variables use semicolon (`;`) separators.
@@ -85,7 +104,9 @@ Important constraints:
 
 - do not use semicolons inside values
 - avoid spaces around separators
-- use backslashes (`\`) for nested folder paths
+- nested folder separators:
+  - CMD: backslashes (`\`)
+  - Bash: forward slashes (`/`)
 
 Good:
 
@@ -150,8 +171,12 @@ Run with:
 scripts\photofolders.bat "Demo Project" --config "D:\Templates\my_photofolders.config.cmd" --dry-run
 ```
 
+```bash
+scripts/photofolders.sh "Demo Project" --config "/opt/templates/my_photofolders.config.sh" --dry-run
+```
+
 ## Security Note
 
-The config file is executed with `call`. Treat it as executable code.
+The config file is executed (`call` in CMD / `source` in Bash). Treat it as executable code.
 
 Only use trusted config files.
