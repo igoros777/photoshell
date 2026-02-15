@@ -41,7 +41,11 @@ Missing metadata is replaced with `N/A` when possible.
 
 ### Example:
 
-![]()
+~~~bash
+iPhone 14 Pro Max | iPhone 14 Pro Max back triple camera 9mm f/2.8 | ISO: 32 | f/2.8 | 1/215 | 9.0 mm | WB: Auto | Metering: Multi-segment | Flash: Off, Did not fire | ExpComp: 0 EV | 4032x3024 | Oct 31, 2024, late Thu afternoon | 1684 Hyner View Rd, Renovo, PA 17764
+~~~
+
+![](https://github.com/igoros777/photoshell/raw/main/images/HBIYw6OWwAARoDK.jpg)
 
 ## Requirements
 
