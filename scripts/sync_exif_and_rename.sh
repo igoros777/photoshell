@@ -11,22 +11,73 @@
 set -euo pipefail
 
 # Usage:
-#   ./sync_exif_and_rename.sh /path/to/.../processed/adobe [--dry-run]
+#   ./sync_exif_and_rename.sh /path/to/processed/exports [--orig-dir /path/to/originals] [--dry-run]
 #
 # Does:
-#   a) Only processes JPG/JPEG in the given "adobe" folder (non-recursive)
-#   b) Finds a matching original under "../../originals" by filename stem (stripping trailing edit/LuminarAI/HDR suffixes)
+#   a) Processes JPG/JPEG in the given target folder (non-recursive)
+#   b) Finds a matching original by filename stem (stripping trailing editor/upscale suffixes)
 #   c) Copies all EXIF from original to target JPEG, overwriting metadata
 #   d) Renames the target JPEG to match the original's basename (stem) with .jpg
 # ----------------------------------------------------------------------------
 DRY_RUN=0
-if [[ "${2:-}" == "--dry-run" ]]; then
-  DRY_RUN=1
-fi
+TARGET_DIR=""
+ORIG_DIR=""
 
-ADOBE_DIR="${1:-}"
-if [[ -z "$ADOBE_DIR" ]]; then
-  echo "Give me the 'processed/adobe' path. This isn't telepathy."
+usage() {
+  cat <<'EOF'
+Usage:
+  ./sync_exif_and_rename.sh <target-dir> [--orig-dir <originals-dir>] [--dry-run]
+
+Arguments:
+  <target-dir>   Folder containing exported JPG/JPEG files to fix (non-recursive).
+
+Options:
+  --orig-dir     Explicit originals folder. If omitted, script tries to auto-find
+                 an "originals" directory by walking up from <target-dir>.
+  --dry-run      Print planned actions without writing metadata or renaming files.
+  -h, --help     Show this help text.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    --orig-dir)
+      if [[ $# -lt 2 ]]; then
+        echo "Missing value for --orig-dir."
+        usage
+        exit 1
+      fi
+      ORIG_DIR="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      echo "Unknown option: $1"
+      usage
+      exit 1
+      ;;
+    *)
+      if [[ -n "$TARGET_DIR" ]]; then
+        echo "Unexpected extra argument: $1"
+        usage
+        exit 1
+      fi
+      TARGET_DIR="$1"
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$TARGET_DIR" ]]; then
+  echo "Missing required <target-dir>."
+  usage
   exit 1
 fi
 
@@ -35,15 +86,41 @@ if ! command -v exiftool >/dev/null 2>&1; then
   exit 1
 fi
 
-# Resolve originals dir relative to adobe dir
-ADOBE_DIR="$(cd "$ADOBE_DIR" && pwd)"
-ORIG_DIR="$(cd "$ADOBE_DIR/../../originals" 2>/dev/null && pwd || true)"
+# Resolve folders
+if [[ ! -d "$TARGET_DIR" ]]; then
+  echo "Target directory does not exist: $TARGET_DIR"
+  exit 1
+fi
+TARGET_DIR="$(cd "$TARGET_DIR" && pwd)"
+
+if [[ -n "$ORIG_DIR" ]]; then
+  if [[ ! -d "$ORIG_DIR" ]]; then
+    echo "Originals directory does not exist: $ORIG_DIR"
+    exit 1
+  fi
+  ORIG_DIR="$(cd "$ORIG_DIR" && pwd)"
+else
+  search_dir="$TARGET_DIR"
+  while :; do
+    parent_dir="$(dirname "$search_dir")"
+    candidate="$parent_dir/originals"
+    if [[ -d "$candidate" ]]; then
+      ORIG_DIR="$(cd "$candidate" && pwd)"
+      break
+    fi
+    if [[ "$parent_dir" == "$search_dir" ]]; then
+      break
+    fi
+    search_dir="$parent_dir"
+  done
+fi
+
 if [[ -z "$ORIG_DIR" || ! -d "$ORIG_DIR" ]]; then
-  echo "Can't find originals at: $ADOBE_DIR/../../originals"
+  echo "Can't find an originals directory. Pass it explicitly with --orig-dir."
   exit 1
 fi
 
-echo "Adobe: $ADOBE_DIR"
+echo "Target: $TARGET_DIR"
 echo "Originals: $ORIG_DIR"
 [[ $DRY_RUN -eq 1 ]] && echo "[DRY-RUN mode]"
 
@@ -62,7 +139,7 @@ shopt -s nullglob
 while IFS= read -r -d '' jpg; do
   base="$(basename "$jpg")"
   dir="$(dirname "$jpg")"
-  # stem is the export basename without common editor suffixes
+  # stem is the export basename without common editor/upscale suffixes
   base_no_ext="${base%.*}"
   stem="$base_no_ext"
   # Peel trailing editor/upscale noise tokens
@@ -154,7 +231,7 @@ while IFS= read -r -d '' jpg; do
 
   echo "Processing:"
   echo "  target: $base"
-  echo "  source: $(realpath --relative-to="$ADOBE_DIR" "$pick")"
+  echo "  source: $(realpath --relative-to="$TARGET_DIR" "$pick")"
   echo "  rename: $base -> $new_name"
 
   if [[ $DRY_RUN -eq 0 ]]; then
@@ -186,7 +263,7 @@ while IFS= read -r -d '' jpg; do
     fi
   fi
 
-done < <(find "$ADOBE_DIR" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' \) -print0)
+done < <(find "$TARGET_DIR" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' \) -print0)
 # ----------------------------------------------------------------------------
 # RUNTIME
 # \(^_^)                                      __|__
