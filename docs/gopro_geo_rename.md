@@ -60,6 +60,42 @@ Run from the directory that contains target GoPro clips:
 ./scripts/gopro_geo_rename.sh
 ```
 
+## Workflow Diagram
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[Set API base and API key]
+    B --> C[Find top-level files matching *.MP4]
+    C --> D{Next MP4 file?}
+    D -->|No| Z([Done])
+    D -->|Yes| E[convert_function(file)]
+
+    E --> F[Read original filename]
+    F --> G[Read GPS lat,lon from EXIF]
+    G --> H[Reverse geocode with full coordinates]
+    H --> I{Location resolved?}
+    I -->|Yes| L[Use resolved location]
+    I -->|No| J[Trim last digit from lat/lon]
+    J --> K[Reverse geocode with reduced precision]
+    K --> L2{Location resolved?}
+    L2 -->|Yes| L
+    L2 -->|No| M[Set location = mystery_town]
+    M --> N[Read duration from EXIF]
+    L --> N
+
+    N --> O{Duration contains ':' ?}
+    O -->|No| P[Normalize as 00:00:duration]
+    O -->|Yes| Q[Keep parsed duration]
+    P --> R[Convert duration to seconds + 's']
+    Q --> R
+    R --> S{Duration empty?}
+    S -->|Yes| T[Set duration = 0s]
+    S -->|No| U[Keep computed duration]
+    T --> V[Rename with exiftool filename template]
+    U --> V
+    V --> D
+```
+
 ## Safety Notes
 
 - Renaming is done in place; original filenames are changed.
