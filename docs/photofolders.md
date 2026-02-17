@@ -73,6 +73,74 @@ scripts/photofolders.sh "ClientA" --config "/opt/templates/photofolders.config.s
 scripts/photofolders.sh "ClientA" --dry-run
 ```
 
+## Unified Workflow Diagram
+
+```mermaid
+flowchart TD
+    A([Start]) --> B{Script variant}
+    B -->|Windows| C[Run photofolders.bat]
+    B -->|Linux| D[Run photofolders.sh]
+    C --> E[Parse arguments]
+    D --> E
+
+    E --> F{Help requested}
+    F -->|Yes| G[Print usage and exit]
+    F -->|No| H[Resolve root directory]
+    H --> I{Root provided by option}
+    I -->|Yes| J[Use provided root]
+    I -->|No| K{PHOTOSHELL_ROOT set}
+    K -->|Yes| L[Use PHOTOSHELL_ROOT]
+    K -->|No| M[Use platform default root]
+    J --> N[Resolve config path]
+    L --> N
+    M --> N
+
+    N --> O{Config provided by option}
+    O -->|Yes| P[Use provided config file]
+    O -->|No| Q[Use platform default config file]
+    P --> R[Load config and validate required variables]
+    Q --> R
+    R --> S{Config valid}
+    S -->|No| Z1([Exit with error])
+    S -->|Yes| T{Project name provided}
+    T -->|No| U[Prompt for project name]
+    T -->|Yes| V[Use project name]
+    U --> W{Project name now set}
+    W -->|No| Z2([Exit with usage error])
+    W -->|Yes| V
+
+    V --> X[Validate project name segment]
+    X --> Y{Project name valid}
+    Y -->|No| Z3([Exit with error])
+    Y -->|Yes| AA[Set base directory root plus project]
+
+    AA --> AB[Build tree from config]
+    AB --> AC[Add originals directory]
+    AC --> AD[Loop categories from CFG_CATEGORY_IDS]
+    AD --> AE[Add originals category path]
+    AE --> AF[Loop category equipment names]
+    AF --> AG[Validate equipment name]
+    AG --> AH[Add equipment directory]
+    AH --> AI[Loop category subfolders and add each]
+    AI --> AF
+    AF --> AJ[After categories add processed directory]
+    AJ --> AK[Loop processed subfolders and add each]
+
+    AK --> AL{For each directory add request}
+    AL -->|Exists| AM[Print exists and increment existing counter]
+    AL -->|Dry run| AN[Print plan and increment created counter]
+    AL -->|Create| AO[Create directory and increment created counter]
+    AO --> AP{Create succeeded}
+    AP -->|No| Z4([Exit with error])
+    AP -->|Yes| AQ[Continue]
+    AM --> AQ
+    AN --> AQ
+    AQ --> AR{More directories pending}
+    AR -->|Yes| AL
+    AR -->|No| AS[Print final summary]
+    AS --> AT([Done])
+```
+
 ## Defaults
 
 Root path lookup order:
