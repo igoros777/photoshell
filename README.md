@@ -20,6 +20,7 @@ And in case you like photography, here are some of mine: https://fieldexposure.c
 - [`scripts/sync_exif_and_rename.sh`](scripts/sync_exif_and_rename.sh): Sync export JPEG metadata from matching originals and rename files back to source-aligned basenames.
 - [`scripts/geo_rename_photos.sh`](scripts/geo_rename_photos.sh): Rename photos using capture timestamp, camera model, and reverse-geocoded location, with optional date-based folder structure.
 - [`scripts/gopro_geo_rename.sh`](scripts/gopro_geo_rename.sh): Rename GoPro MP4 clips with capture time, reverse-geocoded location, duration, and original filename.
+- [`scripts/search_exif_iptc.sh`](scripts/search_exif_iptc.sh): Search EXIF/IPTC metadata text across supported image/raw/video files with field, type, and recursion filters.
 
 ## Documentation
 - [`docs/photofolders.md`](docs/photofolders.md): `photofolders` behavior, rationale, usage, and workflow integration for Windows and Linux variants.
@@ -30,3 +31,4 @@ And in case you like photography, here are some of mine: https://fieldexposure.c
 - [`docs/sync_exif_and_rename.md`](docs/sync_exif_and_rename.md): Why this script exists, matching/metadata sync behavior, usage, safety, and limitations.
 - [`docs/geo_rename_photos.md`](docs/geo_rename_photos.md): Why this script exists, how naming and folder structure work, requirements, usage, and limitations.
 - [`docs/gopro_geo_rename.md`](docs/gopro_geo_rename.md): Why this script exists, how filename construction works, requirements, usage, and limitations.
+- [`docs/search_exif_iptc.md`](docs/search_exif_iptc.md): EXIF/IPTC metadata search behavior, field/media filters, recursive control, and examples.
