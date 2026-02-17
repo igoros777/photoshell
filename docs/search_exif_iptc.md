@@ -58,6 +58,49 @@ Search only selected media types:
 ./scripts/search_exif_iptc.sh -q "DJI" -m image,video /photos
 ```
 
+## Workflow Diagram
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[Parse command line arguments]
+    B --> C{Help requested}
+    C -->|Yes| D[Print usage and exit]
+    C -->|No| E{Query provided}
+    E -->|No| Z1([Exit with error])
+    E -->|Yes| F{Search directory exists}
+    F -->|No| Z2([Exit with error])
+    F -->|Yes| G{exiftool available}
+    G -->|No| Z3([Exit with error])
+    G -->|Yes| H[Resolve selected metadata fields]
+
+    H --> I{Fields selection valid}
+    I -->|No| Z4([Exit with error])
+    I -->|Yes| J[Resolve media extensions from media types spec]
+    J --> K{Media extension selection valid}
+    K -->|No| Z5([Exit with error])
+    K -->|Yes| L[Build find arguments with recursive or maxdepth]
+    L --> M[Collect matching files]
+    M --> N{Any files found}
+    N -->|No| Z6([Exit with status zero no files])
+    N -->|Yes| O[Build exiftool tag arguments]
+
+    O --> P[Initialize scanned and matched counters]
+    P --> Q{Next file}
+    Q -->|No| R[Print scanned and matched totals]
+    Q -->|Yes| S[Read selected metadata via exiftool]
+    S --> T{Metadata returned}
+    T -->|No| Q
+    T -->|Yes| U[Search metadata lines with case insensitive match]
+    U --> V{Any lines matched query}
+    V -->|No| Q
+    V -->|Yes| W[Print file and matching lines and increment matched]
+    W --> Q
+
+    R --> X{Matched count equals zero}
+    X -->|Yes| Z7([Exit with status one])
+    X -->|No| Z8([Done])
+```
+
 ## Options
 
 - `-q`, `--query <text>`: search text (required).
