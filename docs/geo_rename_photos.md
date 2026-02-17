@@ -94,6 +94,52 @@ Apply changes with daily folder structure:
 ./scripts/geo_rename_photos.sh --structure daily
 ```
 
+## Workflow Diagram
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[Load config and defaults]
+    B --> C[Parse command line arguments]
+    C --> D[Check required commands]
+    D --> E[Find supported photo files in current folder]
+    E --> F{Any files found}
+    F -->|No| Z1([Exit with no work])
+    F -->|Yes| G[Initialize counters]
+    G --> H{Next photo file}
+    H -->|No| Z2([Print summary and exit])
+    H -->|Yes| I[Read capture datetime from EXIF]
+
+    I --> J{Datetime available}
+    J -->|No| K[Skip file and increment skipped]
+    J -->|Yes| L[Normalize datetime and compute timestamp]
+    L --> M{Datetime valid}
+    M -->|No| K
+    M -->|Yes| N[Read and sanitize camera model]
+    N --> O[Read GPS coordinates]
+    O --> P{Coordinates valid}
+    P -->|No| Q[Set location to mystery_town]
+    P -->|Yes| R[Resolve location by reverse geocoding]
+    R --> S{Location resolved}
+    S -->|No| Q
+    S -->|Yes| T[Use resolved location]
+    Q --> U[Build target path from stamp model location extension]
+    T --> U
+
+    U --> V[Apply structure mode none daily or monthly]
+    V --> W[Resolve filename collision if needed]
+    W --> X{Target equals source}
+    X -->|Yes| K
+    X -->|No| Y{Dry run mode}
+    Y -->|Yes| AA[Print plan and increment planned]
+    Y -->|No| AB[Write preserved filename tag]
+    AB --> AC[Create target directory if needed]
+    AC --> AD[Move file and increment renamed]
+
+    K --> H
+    AA --> H
+    AD --> H
+```
+
 ## Safety Notes
 
 - Renaming and moves are done in place.
