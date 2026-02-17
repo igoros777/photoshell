@@ -49,6 +49,38 @@ Apply changes:
 ./scripts/gps_gap_fill.sh
 ```
 
+## Workflow Diagram
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[Read config and optional dry run flag]
+    B --> C[Find supported photo files in current directory]
+    C --> D{Any files found}
+    D -->|No| Z1([Exit with no work])
+    D -->|Yes| E[Extract datetime and GPS metadata with exiftool]
+    E --> F[Print file report and summary]
+    F --> G[Build donor list with files that have datetime and GPS]
+    G --> H{Any donors found}
+    H -->|No| Z2([Exit nothing to donate])
+    H -->|Yes| I{Next file}
+    I -->|No| Z3([Print tagged skipped summary and exit])
+    I -->|Yes| J{File already has GPS}
+    J -->|Yes| I
+    J -->|No| K{File has usable datetime}
+    K -->|No| L[Skip file no date]
+    K -->|Yes| M[Find nearest donor by absolute time difference]
+    M --> N{Best donor within max gap}
+    N -->|No| O[Skip file donor too far]
+    N -->|Yes| P[Print planned tag assignment]
+    P --> Q{Dry run mode}
+    Q -->|Yes| R[Do not modify metadata]
+    Q -->|No| S[Write GPS lat lon and refs with exiftool]
+    R --> I
+    S --> I
+    L --> I
+    O --> I
+```
+
 ## Matching Rules
 
 - Date priority:
