@@ -24,6 +24,7 @@ TEXT_COLOR="#1c1c1c"
 GAP=12
 TARGET_MAX_WIDTH=4096
 TARGET_ASPECT=1.6
+CAPTION_POINT_SIZE=13
 
 declare -a IMAGE_FILES=()
 declare -a TILE_FILES=()
@@ -185,16 +186,6 @@ collect_images() {
   fi
 }
 
-calc_caption_height() {
-  local min_h=64
-  local dynamic_h
-  dynamic_h=$(( THUMB_LONG_EDGE / 3 ))
-  if (( dynamic_h < min_h )); then
-    dynamic_h=${min_h}
-  fi
-  echo "${dynamic_h}"
-}
-
 calc_columns() {
   local count="$1"
   local tile_width="$2"
@@ -228,19 +219,26 @@ calc_columns() {
 
 build_tiles() {
   local temp_dir="$1"
-  local caption_height="$2"
   local file base caption tile
   local index=0
+  local current=0
+  local total=0
+
+  total="${#IMAGE_FILES[@]}"
+  log "Building tiles..."
 
   for file in "${IMAGE_FILES[@]}"; do
     base="$(basename "${file}")"
+    current=$((index + 1))
+    log "  [${current}/${total}] ${base}"
+
     caption="$(caption_for_file "${file}")"
     caption="${base} | ${caption}"
 
     tile="${temp_dir}/tile_$(printf '%05d' "${index}").png"
     "${CONVERT_CMD[@]}" \
       \( "${file}" -auto-orient -thumbnail "${THUMB_LONG_EDGE}x${THUMB_LONG_EDGE}>" -background white -gravity center -extent "${THUMB_LONG_EDGE}x${THUMB_LONG_EDGE}" \) \
-      \( -size "${THUMB_LONG_EDGE}x${caption_height}" -background white -fill "${TEXT_COLOR}" -gravity northwest -pointsize 13 caption:"${caption}" \) \
+      \( -size "${THUMB_LONG_EDGE}x" -background white -fill "${TEXT_COLOR}" -gravity northwest -pointsize "${CAPTION_POINT_SIZE}" caption:"${caption}" -bordercolor white -border 0x8 \) \
       -append "${tile}"
 
     TILE_FILES+=("${tile}")
@@ -252,6 +250,7 @@ build_contact_sheet() {
   local cols="$1"
   local output="$2"
 
+  log "Assembling contact sheet..."
   "${MONTAGE_CMD[@]}" "${TILE_FILES[@]}" \
     -tile "${cols}x" \
     -geometry +"${GAP}"+"${GAP}" \
@@ -304,12 +303,12 @@ if (( THUMB_LONG_EDGE < 64 || THUMB_LONG_EDGE > 4096 )); then
 fi
 
 check_requirements
+log "Scanning source folder for images..."
 collect_images
 
 temp_dir="$(mktemp -d)"
 trap 'rm -rf "${temp_dir}"' EXIT
 
-caption_height="$(calc_caption_height)"
 tile_width=$(( THUMB_LONG_EDGE + (GAP * 2) ))
 cols="$(calc_columns "${#IMAGE_FILES[@]}" "${tile_width}")"
 rows=$(( (${#IMAGE_FILES[@]} + cols - 1) / cols ))
@@ -318,7 +317,7 @@ log "Found ${#IMAGE_FILES[@]} image(s)"
 log "Thumbnail long edge: ${THUMB_LONG_EDGE}px"
 log "Contact sheet geometry: ${cols} columns x ${rows} rows"
 
-build_tiles "${temp_dir}" "${caption_height}"
+build_tiles "${temp_dir}"
 build_contact_sheet "${cols}" "${OUTPUT_FILE}"
 
 log "Wrote contact sheet: ${OUTPUT_FILE}"
