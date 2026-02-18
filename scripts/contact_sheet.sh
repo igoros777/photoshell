@@ -5,7 +5,7 @@
 #                          __________/ o \__________
 #                            (I) (G) \___/ (O) (R)
 #                                Igor Oseledko
-#                           igor@comradegeneral.com
+#                               igor@igoros.com
 #                                 2026-02-18
 # ----------------------------------------------------------------------------
 # Build a contact/proof sheet with metadata captions.
