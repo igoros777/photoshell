@@ -24,7 +24,6 @@ TEXT_COLOR="#1c1c1c"
 GAP=12
 TARGET_MAX_WIDTH=4096
 TARGET_ASPECT=1.6
-CAPTION_POINT_SIZE=13
 
 declare -a IMAGE_FILES=()
 declare -a TILE_FILES=()
@@ -217,8 +216,25 @@ calc_columns() {
   echo "${cols}"
 }
 
+calc_caption_point_size() {
+  local min_pt=11
+  local max_pt=24
+  local scaled
+
+  scaled=$(( THUMB_LONG_EDGE / 18 ))
+  if (( scaled < min_pt )); then
+    scaled=${min_pt}
+  fi
+  if (( scaled > max_pt )); then
+    scaled=${max_pt}
+  fi
+
+  echo "${scaled}"
+}
+
 build_tiles() {
   local temp_dir="$1"
+  local caption_point_size="$2"
   local file base caption tile
   local index=0
   local current=0
@@ -238,7 +254,7 @@ build_tiles() {
     tile="${temp_dir}/tile_$(printf '%05d' "${index}").png"
     "${CONVERT_CMD[@]}" \
       \( "${file}" -auto-orient -thumbnail "${THUMB_LONG_EDGE}x${THUMB_LONG_EDGE}>" -background white -gravity center -extent "${THUMB_LONG_EDGE}x${THUMB_LONG_EDGE}" \) \
-      \( -size "${THUMB_LONG_EDGE}x" -background white -fill "${TEXT_COLOR}" -gravity northwest -pointsize "${CAPTION_POINT_SIZE}" caption:"${caption}" -bordercolor white -border 0x8 \) \
+      \( -size "${THUMB_LONG_EDGE}x" -background white -fill "${TEXT_COLOR}" -gravity northwest -pointsize "${caption_point_size}" caption:"${caption}" -bordercolor white -border 0x8 \) \
       -append "${tile}"
 
     TILE_FILES+=("${tile}")
@@ -312,12 +328,14 @@ trap 'rm -rf "${temp_dir}"' EXIT
 tile_width=$(( THUMB_LONG_EDGE + (GAP * 2) ))
 cols="$(calc_columns "${#IMAGE_FILES[@]}" "${tile_width}")"
 rows=$(( (${#IMAGE_FILES[@]} + cols - 1) / cols ))
+caption_point_size="$(calc_caption_point_size)"
 
 log "Found ${#IMAGE_FILES[@]} image(s)"
 log "Thumbnail long edge: ${THUMB_LONG_EDGE}px"
+log "Caption font size: ${caption_point_size}pt"
 log "Contact sheet geometry: ${cols} columns x ${rows} rows"
 
-build_tiles "${temp_dir}"
+build_tiles "${temp_dir}" "${caption_point_size}"
 build_contact_sheet "${cols}" "${OUTPUT_FILE}"
 
 log "Wrote contact sheet: ${OUTPUT_FILE}"
