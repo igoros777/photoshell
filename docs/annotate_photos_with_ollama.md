@@ -73,6 +73,49 @@ Custom model:
 ./scripts/annotate_photos_with_ollama.sh -m gemma3:12b -r /photos/archive
 ```
 
+## Workflow Diagram
+
+```mermaid
+flowchart TD
+    A([Start]) --> B[Parse command line arguments]
+    B --> C{Help requested}
+    C -->|Yes| D[Print usage and exit]
+    C -->|No| E[Check required commands find ollama exiftool]
+    E --> F{Requirements available}
+    F -->|No| Z1([Exit with error])
+    F -->|Yes| G{Both file and list options set}
+    G -->|Yes| Z2([Exit with error])
+    G -->|No| H{Directory argument used with file or list}
+    H -->|Yes| Z3([Exit with error])
+    H -->|No| I{Input mode}
+
+    I -->|Single file| J[Validate file exists and supported extension]
+    I -->|List file| K[Read list file and collect valid image paths]
+    I -->|Directory scan| L[Validate source directory and scan image files]
+
+    J --> M{Images collected}
+    K --> M
+    L --> M
+    M -->|No| Z4([Exit with error])
+    M -->|Yes| N[Log file count and selected model]
+
+    N --> O{Next image}
+    O -->|No| Z5([Done])
+    O -->|Yes| P[Run ollama to generate description]
+    P --> Q{Description generated}
+    Q -->|No| R[Warn and skip file]
+    Q -->|Yes| S[Read IPTC caption and EXIF user comment]
+    S --> T[Append new description to both fields]
+    T --> U[Write metadata with exiftool overwrite original]
+    U --> V{Write succeeded}
+    V -->|No| W[Warn and continue]
+    V -->|Yes| X[Log successful append]
+
+    R --> O
+    W --> O
+    X --> O
+```
+
 ## List File Format
 
 - One path per line.
