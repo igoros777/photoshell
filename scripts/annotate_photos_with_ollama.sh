@@ -177,13 +177,18 @@ collect_images_from_list_file() {
 append_text() {
   local existing="$1"
   local addition="$2"
+  local existing_clean
+  local addition_clean
 
-  if [[ -z "${existing}" ]]; then
-    printf '%s' "${addition}"
+  existing_clean="$(printf '%s' "${existing}" | sed -E 's/[[:space:]]+$//')"
+  addition_clean="$(printf '%s' "${addition}" | sed -E 's/^[[:space:]]+//')"
+
+  if [[ -z "${existing_clean}" ]]; then
+    printf '%s' "${addition_clean}"
     return
   fi
 
-  printf '%s\n%s' "${existing}" "${addition}"
+  printf '%s %s' "${existing_clean}" "${addition_clean}"
 }
 
 read_tag() {
