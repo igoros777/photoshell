@@ -5,10 +5,9 @@
 Each tile includes:
 
 1. A thumbnail (long edge controlled by `--thumb-size`).
-2. Caption text selected with fallback priority:
-   1. `IPTC:Caption-Abstract`
-   2. `EXIF:UserComment`
-   3. Brief EXIF summary (`Model`, `Lens`, `FNumber`, `ExposureTime`, `ISO`, `FocalLength`, `DateTimeOriginal`/`CreateDate`)
+2. Caption from `IPTC:Caption-Abstract` when available.
+3. Otherwise caption from `EXIF:UserComment`.
+4. Otherwise a brief EXIF summary (`Model`, `Lens`, `FNumber`, `ExposureTime`, `ISO`, `FocalLength`, `DateTimeOriginal`/`CreateDate`).
 
 ## Why This Script Exists
 
@@ -20,9 +19,12 @@ This script automates both thumbnail layout and per-image caption extraction fro
 
 1. Scans the source folder for supported image files.
 2. Optionally scans subfolders (`--recursive`).
-3. Builds one tile per image (thumbnail + caption block).
-4. Computes sheet geometry (columns/rows) from thumbnail long-edge size and image count.
-5. Writes a single contact sheet image.
+3. Applies a visual theme (`light` or low-contrast `dark`) to sheet and caption areas.
+4. Builds one tile per image (thumbnail + caption block).
+5. Scales caption font size from thumbnail size for better readability at larger thumbnail dimensions.
+6. Computes sheet geometry (columns/rows) from thumbnail long-edge size and image count.
+7. Prints progress updates during scan, tile generation, and final assembly.
+8. Writes a single contact sheet image.
 
 ## Requirements
 
@@ -53,12 +55,19 @@ Non-recursive scan in a specific folder:
 ./scripts/contact_sheet.sh --source /photos/exports --no-recursive --thumb-size 192
 ```
 
+Use the dark low-contrast theme:
+
+```bash
+./scripts/contact_sheet.sh -s /photos/exports -r -t 320 --theme dark -o proof_dark.jpg
+```
+
 ## Options
 
 - `-s`, `--source DIR`: source folder (default: `.`).
 - `-r`, `--recursive`: include subfolders.
 - `-n`, `--no-recursive`: only the source folder (default).
 - `-t`, `--thumb-size PX`: thumbnail long-edge size in pixels (default: `256`).
+- `--theme NAME`: `light` or `dark` (default: `light`).
 - `-o`, `--output FILE`: output contact sheet file (default: `contact_sheet.jpg`).
 - `-h`, `--help`: show help text.
 
@@ -76,7 +85,7 @@ Non-recursive scan in a specific folder:
 
 The script derives geometry from the thumbnail long-edge size and number of images.
 
-- Caption block height scales from thumbnail size (minimum 64px).
+- Caption block height is auto-sized by ImageMagick so long captions are not cut off.
 - Column count targets a balanced sheet aspect while respecting a max canvas width.
 - Row count is derived from `ceil(image_count / columns)`.
 
@@ -85,3 +94,26 @@ The computed geometry is printed before rendering, for example:
 ```text
 Contact sheet geometry: 6 columns x 4 rows
 ```
+
+## Caption Typography
+
+- Caption point size scales with thumbnail size using `thumb_size / 18`.
+- Font size is clamped to a readable range of `11pt` to `24pt`.
+- The chosen font size is printed before rendering.
+
+## Progress Output
+
+The script prints status lines so longer runs do not appear stuck. Typical output includes:
+
+```text
+Scanning source folder for images...
+Building tiles...
+  [17/220] IMG_4017.JPG
+Assembling contact sheet...
+Wrote contact sheet: contact_sheet.jpg
+```
+
+## Theme Notes
+
+- `light`: neutral light gray sheet with white tile/caption backgrounds and dark text.
+- `dark`: low-contrast dark gray sheet/tile/caption backgrounds with soft light-gray text, designed to keep thumbnail content visually dominant.
