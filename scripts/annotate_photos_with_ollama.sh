@@ -18,6 +18,8 @@ SCRIPT_NAME="$(basename "$0")"
 SOURCE_DIR="."
 RECURSIVE=0
 MODEL="gemma3:27b"
+SINGLE_FILE=""
+LIST_FILE=""
 
 PROMPT_TEXT="Provide a concise description most relevant to the technical photographic aspects. Inspect the IPTC Comment field and the EXIF UserComment field for location information. Use this location data to enhance your description with subject details. Do not mention the source of the location data. If both fields have location data, then use both to construct the most complete location. Present your response in a concise and information-dense format. Do not include any formatting or commentary."
 
@@ -29,7 +31,7 @@ Usage:
   ${SCRIPT_NAME} [options] [DIRECTORY]
 
 Purpose:
-  Find image files and, for each file:
+  Find image files (directory scan, single file, or list file) and, for each file:
     1) Run Ollama to generate a concise technical description
     2) Append that description to IPTC Caption-Abstract
     3) Append that description to EXIF UserComment
@@ -37,6 +39,8 @@ Purpose:
 Options:
   -r, --recursive            Include subfolders
   -n, --no-recursive         Current folder only (default)
+  -f, --file FILE            Process exactly one image file
+  -l, --list FILE            Read image paths from a text file (one per line)
   -m, --model NAME           Ollama model (default: ${MODEL})
   -h, --help                 Show this help
 
@@ -44,6 +48,8 @@ Examples:
   ${SCRIPT_NAME}
   ${SCRIPT_NAME} -r
   ${SCRIPT_NAME} -r /photos/session42
+  ${SCRIPT_NAME} -f /photos/session42/img001.cr3
+  ${SCRIPT_NAME} -l /photos/batch_file_list.txt
   ${SCRIPT_NAME} -m gemma3:12b /photos
 EOF
 }
@@ -73,7 +79,22 @@ check_requirements() {
   command -v exiftool >/dev/null 2>&1 || die "exiftool is required but not found in PATH"
 }
 
-collect_images() {
+is_supported_image_file() {
+  local file="$1"
+  local lower
+  lower="$(printf '%s' "${file}" | tr '[:upper:]' '[:lower:]')"
+
+  case "${lower}" in
+    *.jpg|*.jpeg|*.jpe|*.png|*.tif|*.tiff|*.heic|*.heif|*.webp|*.bmp|*.gif|*.dng|*.arw|*.cr2|*.cr3|*.nef|*.nrw|*.orf|*.raf|*.rw2|*.pef|*.srw|*.x3f)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+collect_images_from_directory() {
   local -a find_args=()
 
   find_args=("${SOURCE_DIR}")
@@ -100,6 +121,56 @@ collect_images() {
 
   if [[ "${#IMAGE_FILES[@]}" -eq 0 ]]; then
     die "no supported image files found in ${SOURCE_DIR}"
+  fi
+}
+
+collect_images_from_single_file() {
+  if [[ ! -f "${SINGLE_FILE}" ]]; then
+    die "file does not exist: ${SINGLE_FILE}"
+  fi
+
+  if ! is_supported_image_file "${SINGLE_FILE}"; then
+    die "unsupported image format for --file: ${SINGLE_FILE}"
+  fi
+
+  IMAGE_FILES=("${SINGLE_FILE}")
+}
+
+collect_images_from_list_file() {
+  local line trimmed list_dir candidate
+
+  [[ -f "${LIST_FILE}" ]] || die "list file does not exist: ${LIST_FILE}"
+  list_dir="$(cd "$(dirname "${LIST_FILE}")" && pwd)"
+  IMAGE_FILES=()
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%$'\r'}"
+    trimmed="$(printf '%s' "${line}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+
+    [[ -z "${trimmed}" ]] && continue
+    [[ "${trimmed}" == \#* ]] && continue
+
+    if [[ "${trimmed}" == /* ]]; then
+      candidate="${trimmed}"
+    else
+      candidate="${list_dir}/${trimmed}"
+    fi
+
+    if [[ ! -f "${candidate}" ]]; then
+      warn "skipping missing file from list: ${candidate}"
+      continue
+    fi
+
+    if ! is_supported_image_file "${candidate}"; then
+      warn "skipping unsupported file from list: ${candidate}"
+      continue
+    fi
+
+    IMAGE_FILES+=("${candidate}")
+  done < "${LIST_FILE}"
+
+  if [[ "${#IMAGE_FILES[@]}" -eq 0 ]]; then
+    die "no supported image files found in list: ${LIST_FILE}"
   fi
 }
 
@@ -185,6 +256,16 @@ while [[ $# -gt 0 ]]; do
       RECURSIVE=0
       shift
       ;;
+    -f|--file)
+      [[ $# -lt 2 ]] && die "missing value for $1"
+      SINGLE_FILE="$2"
+      shift 2
+      ;;
+    -l|--list)
+      [[ $# -lt 2 ]] && die "missing value for $1"
+      LIST_FILE="$2"
+      shift 2
+      ;;
     -m|--model)
       [[ $# -lt 2 ]] && die "missing value for $1"
       MODEL="$2"
@@ -207,11 +288,34 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -d "${SOURCE_DIR}" ]] || die "source directory does not exist: ${SOURCE_DIR}"
-
 check_requirements
-log "Scanning for image files in: ${SOURCE_DIR}"
-collect_images
+
+if [[ -n "${SINGLE_FILE}" && -n "${LIST_FILE}" ]]; then
+  die "--file and --list cannot be used together"
+fi
+
+if [[ -n "${SINGLE_FILE}" || -n "${LIST_FILE}" ]]; then
+  [[ "${SOURCE_DIR}" == "." ]] || die "DIRECTORY argument cannot be used with --file or --list"
+fi
+
+if [[ -n "${SINGLE_FILE}" ]]; then
+  if [[ "${RECURSIVE}" -eq 1 ]]; then
+    warn "--recursive is ignored when --file is used"
+  fi
+  log "Using single image file: ${SINGLE_FILE}"
+  collect_images_from_single_file
+elif [[ -n "${LIST_FILE}" ]]; then
+  if [[ "${RECURSIVE}" -eq 1 ]]; then
+    warn "--recursive is ignored when --list is used"
+  fi
+  log "Reading image list from: ${LIST_FILE}"
+  collect_images_from_list_file
+else
+  [[ -d "${SOURCE_DIR}" ]] || die "source directory does not exist: ${SOURCE_DIR}"
+  log "Scanning for image files in: ${SOURCE_DIR}"
+  collect_images_from_directory
+fi
+
 log "Found ${#IMAGE_FILES[@]} image(s)"
 log "Model: ${MODEL}"
 
