@@ -9,6 +9,131 @@ And in case you like photography, here are some of mine: https://fieldexposure.c
 
 ![](https://github.com/igoros777/photoshell/blob/main/images/d41k59go09e2ntacd5r2jzjoecg.png?raw=true)
 
+## Example Workflow: Back From A Trip (Mixed GPS + Non-GPS Cameras)
+Scenario:
+- Cameras used: iPhone + DJI drone + GoPro (GPS-capable), Fujifilm X-T3 + Nikon D750 (limited/no GPS).
+- Goal: keep untouched originals, build a working set, fill GPS gaps, cull, annotate, rename, and prepare exports.
+
+```bash
+# repo checkout location
+PHOTOSHELL="$HOME/src/photoshell"
+
+# project location
+PROJECT="2026-02_iceland_ring_road"
+ROOT="$HOME/Pictures/Photography"
+PROJECT_DIR="$ROOT/$PROJECT"
+```
+
+1. Create the project folder tree.
+```bash
+bash "$PHOTOSHELL/scripts/photofolders.sh" "$PROJECT" --root "$ROOT"
+# Windows alternative:
+# scripts\photofolders.bat "%PROJECT%" --root "D:\Photos"
+```
+
+2. Ingest cards into `originals/...` folders (example copy targets).
+```bash
+rsync -av /media/cards/FUJI/ "$PROJECT_DIR/originals/photo_cameras/X-T3/photos/raw/"
+rsync -av /media/cards/NIKON/ "$PROJECT_DIR/originals/photo_cameras/D750/photos/raw/"
+rsync -av /media/phone/DCIM/ "$PROJECT_DIR/originals/cell_phones/iPhone/photos/jpg/"
+rsync -av /media/dji/DCIM/ "$PROJECT_DIR/originals/drones/DJI/photos/jpg/"
+rsync -av /media/gopro/DCIM/ "$PROJECT_DIR/originals/video_cameras/GoPro/videos/original/"
+```
+
+3. Build one JPEG working timeline across cameras (so GPS-capable files can donate coordinates).
+```bash
+mkdir -p "$PROJECT_DIR/processed/photos/working/all_cameras_jpg"
+rsync -av "$PROJECT_DIR/originals/photo_cameras/X-T3/photos/jpg/" "$PROJECT_DIR/processed/photos/working/all_cameras_jpg/"
+rsync -av "$PROJECT_DIR/originals/photo_cameras/D750/photos/jpg/" "$PROJECT_DIR/processed/photos/working/all_cameras_jpg/"
+rsync -av "$PROJECT_DIR/originals/cell_phones/iPhone/photos/jpg/" "$PROJECT_DIR/processed/photos/working/all_cameras_jpg/"
+rsync -av "$PROJECT_DIR/originals/drones/DJI/photos/jpg/" "$PROJECT_DIR/processed/photos/working/all_cameras_jpg/"
+```
+
+4. Fill missing GPS from nearest-in-time donor photos.
+```bash
+cd "$PROJECT_DIR/processed/photos/working/all_cameras_jpg"
+bash "$PHOTOSHELL/scripts/gps_gap_fill.sh" --dry-run
+bash "$PHOTOSHELL/scripts/gps_gap_fill.sh"
+```
+
+5. Cull blur and keep the sharpest frame per scene.
+```bash
+bash "$PHOTOSHELL/scripts/detect_blurry_photos.sh" \
+  --mode all \
+  --input "$PROJECT_DIR/processed/photos/working/all_cameras_jpg" \
+  --analyzed-dir "$PROJECT_DIR/processed/photos/working/blur_analyzed" \
+  --scenes-dir "$PROJECT_DIR/processed/photos/working/scenes" \
+  --selected-dir "$PROJECT_DIR/processed/photos/working/selected" \
+  --time-gap 8 \
+  --visual-threshold 0.12 \
+  --clean
+```
+
+6. Write concise EXIF/IPTC summaries, then enrich with Ollama.
+```bash
+export GEOCODIO_API_KEY="YOUR_GEOCODIO_API_KEY"
+find "$PROJECT_DIR/processed/photos/working/selected" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" \) -print0 | \
+  xargs -0 -I{} bash "$PHOTOSHELL/scripts/extract_photo_summary.sh" "{}"
+
+bash "$PHOTOSHELL/scripts/annotate_photos_with_ollama.sh" \
+  -r \
+  -m gemma3:27b \
+  "$PROJECT_DIR/processed/photos/working/selected"
+```
+
+7. Generate a proof sheet and search metadata text.
+```bash
+bash "$PHOTOSHELL/scripts/contact_sheet.sh" \
+  -s "$PROJECT_DIR/processed/photos/working/selected" \
+  -t 320 \
+  --theme dark \
+  -o "$PROJECT_DIR/processed/photos/exports/web/contact_sheet_trip.jpg"
+
+bash "$PHOTOSHELL/scripts/search_exif_iptc.sh" \
+  -q "waterfall" \
+  -f "Caption-Abstract,UserComment,Keywords" \
+  -m image \
+  "$PROJECT_DIR/processed/photos/working/selected"
+```
+
+8. Rename photos and GoPro videos with timestamp/location-rich names.
+```bash
+cd "$PROJECT_DIR/processed/photos/working/selected"
+bash "$PHOTOSHELL/scripts/geo_rename_photos.sh" --structure daily --dry-run
+bash "$PHOTOSHELL/scripts/geo_rename_photos.sh" --structure daily
+
+cd "$PROJECT_DIR/originals/video_cameras/GoPro/videos/original"
+bash "$PHOTOSHELL/scripts/gopro_geo_rename.sh"
+```
+
+9. After editing exports, sync metadata from originals and rename exports to source-aligned names.
+```bash
+bash "$PHOTOSHELL/scripts/sync_exif_and_rename.sh" \
+  "$PROJECT_DIR/processed/photos/exports/full" \
+  --orig-dir "$PROJECT_DIR/originals/photo_cameras/X-T3/photos/raw" \
+  --dry-run
+
+bash "$PHOTOSHELL/scripts/sync_exif_and_rename.sh" \
+  "$PROJECT_DIR/processed/photos/exports/full" \
+  --orig-dir "$PROJECT_DIR/originals/photo_cameras/X-T3/photos/raw"
+```
+
+```mermaid
+flowchart TD
+    A[photofolders.sh / photofolders.bat<br/>Create project tree] --> B[Copy cards into originals/...]
+    B --> C[Build combined JPG working set]
+    C --> D[gps_gap_fill.sh<br/>Fill missing GPS]
+    D --> E[detect_blurry_photos.sh<br/>Analyze + scene select]
+    E --> F[extract_photo_summary.sh<br/>Write technical summary]
+    F --> G[annotate_photos_with_ollama.sh<br/>Append AI technical caption]
+    G --> H[contact_sheet.sh<br/>Build proof sheet]
+    G --> I[search_exif_iptc.sh<br/>Find images by metadata text]
+    G --> J[geo_rename_photos.sh<br/>Date/camera/location filenames]
+    B --> K[gopro_geo_rename.sh<br/>Geo-rename MP4 clips]
+    J --> L[External editing exports]
+    L --> M[sync_exif_and_rename.sh<br/>Restore original metadata + names]
+```
+
 ## Scripts
 - [`scripts/photofolders.bat`](scripts/photofolders.bat): Create a standardized photo project folder tree (originals + processed) for multi-camera workflows.
 - [`scripts/photofolders.sh`](scripts/photofolders.sh): Linux Bash version of `photofolders` with the same config-driven folder scaffold workflow.
