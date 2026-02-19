@@ -19,8 +19,11 @@ SOURCE_DIR="."
 RECURSIVE=0
 THUMB_LONG_EDGE=256
 OUTPUT_FILE="contact_sheet.jpg"
-BACKGROUND="#f5f5f5"
-TEXT_COLOR="#1c1c1c"
+THEME="light"
+SHEET_BACKGROUND=""
+TILE_BACKGROUND=""
+CAPTION_BACKGROUND=""
+TEXT_COLOR=""
 GAP=12
 TARGET_MAX_WIDTH=4096
 TARGET_ASPECT=1.6
@@ -48,6 +51,7 @@ Options:
   -r, --recursive            Include subfolders
   -n, --no-recursive         Current folder only (default)
   -t, --thumb-size PX        Thumbnail long-edge size in pixels (default: 256)
+  --theme NAME               Color theme: light | dark (default: light)
   -o, --output FILE          Output contact sheet file (default: contact_sheet.jpg)
   -h, --help                 Show this help
 
@@ -64,6 +68,27 @@ die() {
 
 log() {
   echo "$*"
+}
+
+apply_theme() {
+  THEME="$(printf '%s' "${THEME}" | tr '[:upper:]' '[:lower:]')"
+  case "${THEME}" in
+    light)
+      SHEET_BACKGROUND="#f5f5f5"
+      TILE_BACKGROUND="#ffffff"
+      CAPTION_BACKGROUND="#ffffff"
+      TEXT_COLOR="#1c1c1c"
+      ;;
+    dark)
+      SHEET_BACKGROUND="#1f2328"
+      TILE_BACKGROUND="#2b3138"
+      CAPTION_BACKGROUND="#2b3138"
+      TEXT_COLOR="#d0d6dc"
+      ;;
+    *)
+      die "unknown theme: ${THEME} (expected: light or dark)"
+      ;;
+  esac
 }
 
 normalize_text() {
@@ -253,8 +278,8 @@ build_tiles() {
 
     tile="${temp_dir}/tile_$(printf '%05d' "${index}").png"
     "${CONVERT_CMD[@]}" \
-      \( "${file}" -auto-orient -thumbnail "${THUMB_LONG_EDGE}x${THUMB_LONG_EDGE}>" -background white -gravity center -extent "${THUMB_LONG_EDGE}x${THUMB_LONG_EDGE}" \) \
-      \( -size "${THUMB_LONG_EDGE}x" -background white -fill "${TEXT_COLOR}" -gravity northwest -pointsize "${caption_point_size}" caption:"${caption}" -bordercolor white -border 0x8 \) \
+      \( "${file}" -auto-orient -thumbnail "${THUMB_LONG_EDGE}x${THUMB_LONG_EDGE}>" -background "${TILE_BACKGROUND}" -gravity center -extent "${THUMB_LONG_EDGE}x${THUMB_LONG_EDGE}" \) \
+      \( -size "${THUMB_LONG_EDGE}x" -background "${CAPTION_BACKGROUND}" -fill "${TEXT_COLOR}" -gravity northwest -pointsize "${caption_point_size}" caption:"${caption}" -bordercolor "${CAPTION_BACKGROUND}" -border 0x8 \) \
       -append "${tile}"
 
     TILE_FILES+=("${tile}")
@@ -270,7 +295,7 @@ build_contact_sheet() {
   "${MONTAGE_CMD[@]}" "${TILE_FILES[@]}" \
     -tile "${cols}x" \
     -geometry +"${GAP}"+"${GAP}" \
-    -background "${BACKGROUND}" \
+    -background "${SHEET_BACKGROUND}" \
     "${output}"
 }
 
@@ -292,6 +317,11 @@ while [[ $# -gt 0 ]]; do
     -t|--thumb-size)
       [[ $# -lt 2 ]] && die "missing value for $1"
       THUMB_LONG_EDGE="$2"
+      shift 2
+      ;;
+    --theme)
+      [[ $# -lt 2 ]] && die "missing value for $1"
+      THEME="$2"
       shift 2
       ;;
     -o|--output)
@@ -318,6 +348,7 @@ if (( THUMB_LONG_EDGE < 64 || THUMB_LONG_EDGE > 4096 )); then
   die "thumbnail size must be between 64 and 4096"
 fi
 
+apply_theme
 check_requirements
 log "Scanning source folder for images..."
 collect_images
@@ -333,6 +364,7 @@ caption_point_size="$(calc_caption_point_size)"
 log "Found ${#IMAGE_FILES[@]} image(s)"
 log "Thumbnail long edge: ${THUMB_LONG_EDGE}px"
 log "Caption font size: ${caption_point_size}pt"
+log "Theme: ${THEME}"
 log "Contact sheet geometry: ${cols} columns x ${rows} rows"
 
 build_tiles "${temp_dir}" "${caption_point_size}"
