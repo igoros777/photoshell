@@ -67,6 +67,55 @@ Use the dark low-contrast theme:
 ./scripts/contact_sheet.sh -s /photos/exports -r -t 320 --theme dark -o proof_dark.jpg
 ```
 
+## Unified Workflow Diagram
+
+```mermaid
+flowchart TD
+    A([Start]) --> B{Run annotation step first}
+    B -->|Yes| C[Run annotate_photos_with_ollama.sh]
+    B -->|No| D[Proceed with existing metadata]
+
+    C --> E[Parse options and validate input mode]
+    E --> F[Check required tools find ollama exiftool]
+    F --> G[Collect image files from file list or directory]
+    G --> H{Any images collected}
+    H -->|No| Z1([Exit annotation with error])
+    H -->|Yes| I{Next image for annotation}
+    I -->|No| D
+    I -->|Yes| J[Generate technical description with ollama]
+    J --> K{Description generated}
+    K -->|No| L[Warn and skip image]
+    K -->|Yes| M[Read current IPTC caption and EXIF user comment]
+    M --> N[Append description to both metadata fields]
+    N --> O[Write metadata with exiftool]
+    O --> P{Write success}
+    P -->|No| L
+    P -->|Yes| I
+    L --> I
+
+    D --> Q[Run contact_sheet.sh]
+    Q --> R[Parse options and validate source and thumbnail size]
+    R --> S[Apply theme and check tools exiftool imagemagick]
+    S --> T[Collect supported images from source directory]
+    T --> U{Any images found}
+    U -->|No| Z2([Exit contact sheet with error])
+    U -->|Yes| V[Compute columns rows and caption font size]
+    V --> W{Next image for tile}
+    W -->|No| X[Assemble sheet with montage]
+    W -->|Yes| Y[Build thumbnail and choose caption text]
+
+    Y --> Y1{Caption source priority}
+    Y1 -->|1| Y2[Use IPTC caption if present]
+    Y1 -->|2| Y3[Else use EXIF user comment]
+    Y1 -->|3| Y4[Else build EXIF summary fallback]
+    Y2 --> Y5[Render tile image]
+    Y3 --> Y5
+    Y4 --> Y5
+    Y5 --> W
+
+    X --> Z3([Write output file and done])
+```
+
 ## Options
 
 - `-s`, `--source DIR`: source folder (default: `.`).
