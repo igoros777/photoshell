@@ -103,6 +103,7 @@ MEDIA_TYPES_SPEC="all"
 RECURSIVE=1
 SEARCH_DIR="."
 JOBS_SPEC=""
+COPY_TO=""
 
 usage() {
   cat <<'EOF'
@@ -127,6 +128,7 @@ Options:
   -n, --no-recursive          Search current directory only.
   -r, --recursive             Search recursively (default).
   -j, --jobs <n>              Number of parallel workers (default: CPU cores).
+  -c, --copy-to <dir>         Copy matching files to this directory.
   -h, --help                  Show this help text.
 
 Arguments:
@@ -136,6 +138,7 @@ Examples:
   ./search_exif_iptc.sh -q "Yosemite"
   ./search_exif_iptc.sh -q "Canon" -f Make,Model -m image .
   ./search_exif_iptc.sh -q "wedding" -f iptc -n /photos/exports
+  ./search_exif_iptc.sh -q "Nikon" --copy-to /tmp/metadata-hits /photos
 EOF
 }
 
@@ -158,6 +161,24 @@ cpu_cores() {
 
 lower() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+relative_path_from_search_dir() {
+  local file="$1"
+  local base="$SEARCH_DIR"
+  local rel="$file"
+
+  if [[ "$base" == "." ]]; then
+    rel="${rel#./}"
+    printf '%s' "$rel"
+    return
+  fi
+
+  base="${base%/}"
+  if [[ "$rel" == "$base/"* ]]; then
+    rel="${rel#"$base/"}"
+  fi
+  printf '%s' "$rel"
 }
 
 trim() {
@@ -257,6 +278,11 @@ while [[ $# -gt 0 ]]; do
       JOBS_SPEC="$2"
       shift 2
       ;;
+    -c|--copy-to)
+      [[ $# -lt 2 ]] && { echo "Missing value for $1."; usage; exit 1; }
+      COPY_TO="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -292,6 +318,14 @@ fi
 if ! command -v exiftool >/dev/null 2>&1; then
   echo "exiftool not found. Install it and try again."
   exit 1
+fi
+
+if [[ -n "$COPY_TO" ]]; then
+  if [[ -e "$COPY_TO" && ! -d "$COPY_TO" ]]; then
+    echo "Copy destination exists and is not a directory: $COPY_TO"
+    exit 1
+  fi
+  mkdir -p "$COPY_TO"
 fi
 
 if [[ -z "$JOBS_SPEC" ]]; then
@@ -393,6 +427,7 @@ done
 
 scanned_files=0
 matched_files=0
+copied_files=0
 
 TMP_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t search_exif_iptc)"
 cleanup() {
@@ -447,11 +482,24 @@ for idx in "${!FILES[@]}"; do
   if [[ -f "$TMP_DIR/$idx.match" ]]; then
     matched_files=$((matched_files + 1))
     cat "$TMP_DIR/$idx.out"
+
+    if [[ -n "$COPY_TO" ]]; then
+      source_file="${FILES[$idx]}"
+      rel_path="$(relative_path_from_search_dir "$source_file")"
+      destination_file="$COPY_TO/$rel_path"
+      mkdir -p "$(dirname "$destination_file")"
+      cp -p -- "$source_file" "$destination_file"
+      copied_files=$((copied_files + 1))
+    fi
   fi
 done
 
 printf 'Scanned files: %d\n' "$scanned_files"
 printf 'Matched files: %d\n' "$matched_files"
+if [[ -n "$COPY_TO" ]]; then
+  printf 'Copied files: %d\n' "$copied_files"
+  printf 'Copy destination: %s\n' "$COPY_TO"
+fi
 
 if [[ $matched_files -eq 0 ]]; then
   exit 1

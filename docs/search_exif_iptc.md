@@ -18,7 +18,8 @@ The script:
 2. Reads selected EXIF/IPTC tags with `exiftool`.
 3. Performs a case-insensitive text search against tag values.
 4. Prints each matching file and matching metadata lines.
-5. Prints scan and match totals at the end.
+5. Optionally copies matching files to a destination directory.
+6. Prints scan and match totals at the end.
 
 ## Requirements
 
@@ -56,6 +57,12 @@ Search only selected media types:
 
 ```bash
 ./scripts/search_exif_iptc.sh -q "DJI" -m image,video /photos
+```
+
+Search in parallel and copy matches to another directory:
+
+```bash
+./scripts/search_exif_iptc.sh -q "Nikon" --jobs 8 --copy-to /tmp/metadata-hits /photos
 ```
 
 ## Workflow Diagram
@@ -116,6 +123,8 @@ flowchart TD
   - comma-separated custom extensions (for example: `jpg,heic,mp4`)
 - `-n`, `--no-recursive`: current directory only.
 - `-r`, `--recursive`: recursive search (default).
+- `-j`, `--jobs <n>`: number of parallel workers (default: detected CPU cores).
+- `-c`, `--copy-to <dir>`: copy matching files to this directory, preserving path relative to the search root.
 - `-h`, `--help`: help text.
 
 ## Supported Media Types
