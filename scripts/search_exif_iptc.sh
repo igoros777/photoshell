@@ -102,6 +102,7 @@ FIELDS_SPEC="all"
 MEDIA_TYPES_SPEC="all"
 RECURSIVE=1
 SEARCH_DIR="."
+JOBS_SPEC=""
 
 usage() {
   cat <<'EOF'
@@ -125,6 +126,7 @@ Options:
                                 ext1,ext2,...  (custom extensions)
   -n, --no-recursive          Search current directory only.
   -r, --recursive             Search recursively (default).
+  -j, --jobs <n>              Number of parallel workers (default: CPU cores).
   -h, --help                  Show this help text.
 
 Arguments:
@@ -135,6 +137,23 @@ Examples:
   ./search_exif_iptc.sh -q "Canon" -f Make,Model -m image .
   ./search_exif_iptc.sh -q "wedding" -f iptc -n /photos/exports
 EOF
+}
+
+cpu_cores() {
+  local n=""
+  if command -v getconf >/dev/null 2>&1; then
+    n="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+  fi
+  if [[ -z "$n" ]] && command -v nproc >/dev/null 2>&1; then
+    n="$(nproc 2>/dev/null || true)"
+  fi
+  if [[ -z "$n" ]] && command -v sysctl >/dev/null 2>&1; then
+    n="$(sysctl -n hw.ncpu 2>/dev/null || true)"
+  fi
+  if [[ -z "$n" || ! "$n" =~ ^[0-9]+$ || "$n" -lt 1 ]]; then
+    n=1
+  fi
+  printf '%s' "$n"
 }
 
 lower() {
@@ -233,6 +252,11 @@ while [[ $# -gt 0 ]]; do
       RECURSIVE=1
       shift
       ;;
+    -j|--jobs)
+      [[ $# -lt 2 ]] && { echo "Missing value for $1."; usage; exit 1; }
+      JOBS_SPEC="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -267,6 +291,14 @@ fi
 
 if ! command -v exiftool >/dev/null 2>&1; then
   echo "exiftool not found. Install it and try again."
+  exit 1
+fi
+
+if [[ -z "$JOBS_SPEC" ]]; then
+  JOBS_SPEC="$(cpu_cores)"
+fi
+if [[ ! "$JOBS_SPEC" =~ ^[0-9]+$ || "$JOBS_SPEC" -lt 1 ]]; then
+  echo "Invalid --jobs value: $JOBS_SPEC"
   exit 1
 fi
 
@@ -362,24 +394,60 @@ done
 scanned_files=0
 matched_files=0
 
-for file in "${FILES[@]}"; do
-  scanned_files=$((scanned_files + 1))
+TMP_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t search_exif_iptc)"
+cleanup() {
+  rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
 
-  safe_file="$file"
-  if [[ "$safe_file" == -* ]]; then
-    safe_file="./$safe_file"
+running_jobs_count() {
+  jobs -rp | wc -l
+}
+
+wait_for_slot() {
+  if wait -n 2>/dev/null; then
+    return
   fi
+  while [[ "$(running_jobs_count)" -ge "$JOBS_SPEC" ]]; do
+    sleep 0.05
+  done
+}
 
-  metadata="$(exiftool -charset exif=UTF8 -charset iptc=UTF8 -s -G1 -a -u "${TAG_ARGS[@]}" "$safe_file" 2>/dev/null || true)"
-  [[ -z "$metadata" ]] && continue
+scanned_files="${#FILES[@]}"
+for idx in "${!FILES[@]}"; do
+  file="${FILES[$idx]}"
+  (
+    safe_file="$file"
+    if [[ "$safe_file" == -* ]]; then
+      safe_file="./$safe_file"
+    fi
 
-  matches="$(printf '%s\n' "$metadata" | grep -iF -- "$QUERY" || true)"
-  [[ -z "$matches" ]] && continue
+    metadata="$(exiftool -charset exif=UTF8 -charset iptc=UTF8 -s -G1 -a -u "${TAG_ARGS[@]}" "$safe_file" 2>/dev/null || true)"
+    [[ -z "$metadata" ]] && exit 0
 
-  matched_files=$((matched_files + 1))
-  printf 'File: %s\n' "$file"
-  printf '%s\n' "$matches"
-  printf '\n'
+    matches="$(printf '%s\n' "$metadata" | grep -iF -- "$QUERY" || true)"
+    [[ -z "$matches" ]] && exit 0
+
+    {
+      printf 'File: %s\n' "$file"
+      printf '%s\n' "$matches"
+      printf '\n'
+    } >"$TMP_DIR/$idx.out"
+    : >"$TMP_DIR/$idx.match"
+  ) &
+
+  if [[ "$(running_jobs_count)" -ge "$JOBS_SPEC" ]]; then
+    wait_for_slot
+  fi
+done
+
+wait || true
+
+for idx in "${!FILES[@]}"; do
+  if [[ -f "$TMP_DIR/$idx.match" ]]; then
+    matched_files=$((matched_files + 1))
+    cat "$TMP_DIR/$idx.out"
+  fi
 done
 
 printf 'Scanned files: %d\n' "$scanned_files"
