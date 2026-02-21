@@ -1,4 +1,15 @@
 #!/usr/bin/env bash
+#
+#                                      |
+#                                  ___/"\___
+#                          __________/ o \__________
+#                            (I) (G) \___/ (O) (R)
+#                                Igor Oseledko
+#                               igor@igoros.com
+#                                 2026-02-21
+# ----------------------------------------------------------------------------
+# Scrub selected metadata fields from image files
+# ----------------------------------------------------------------------------
 set -euo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
