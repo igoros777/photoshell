@@ -32,6 +32,8 @@ DESCRIPTION_DEFAULT_PROMPT_TEXT="Provide a concise description about the scene a
 KEYWORDS_DEFAULT_PROMPT_TEXT="Generate 8 to 15 concise, search-friendly keywords for this photo. Focus on subject, scene type, location, lighting, weather, mood, and photographic technique. Inspect IPTC Comment and EXIF UserComment for location hints and incorporate them naturally. Return keywords only as a comma-separated list. No numbering, quotes, or commentary."
 DESCRIPTION_PROMPT_FILE_DEFAULT="${SCRIPT_DIR}/annotate_photos_with_ollama.prompts.txt"
 KEYWORDS_PROMPT_FILE_DEFAULT="${SCRIPT_DIR}/annotate_photos_with_ollama.keywords.prompts.txt"
+LOCATION_PLACEHOLDER="LOCATION"
+LOCATION_FALLBACK_TEXT="not available"
 
 WORKFLOW_LABEL="description"
 DEFAULT_PROMPT_TEXT="${DESCRIPTION_DEFAULT_PROMPT_TEXT}"
@@ -364,11 +366,55 @@ collect_images_from_list_file() {
   fi
 }
 
+read_exif_user_comment() {
+  local file="$1"
+  local value
+
+  if ! value="$(exiftool -s3 "-EXIF:UserComment" "${file}" 2>/dev/null)"; then
+    return 1
+  fi
+
+  value="$(trim_text "${value}")"
+  [[ -n "${value}" ]] || return 1
+  printf '%s' "${value}"
+}
+
+extract_location_from_user_comment() {
+  local file="$1"
+  local user_comment location_value
+
+  if ! user_comment="$(read_exif_user_comment "${file}")"; then
+    return 1
+  fi
+
+  location_value="${user_comment##*|}"
+  location_value="$(trim_edges "${location_value}")"
+  [[ -n "${location_value}" ]] || return 1
+  printf '%s' "${location_value}"
+}
+
+render_prompt_for_file() {
+  local file="$1"
+  local rendered_prompt location_value
+
+  rendered_prompt="${PROMPT_TEXT}"
+  if [[ "${rendered_prompt}" == *"${LOCATION_PLACEHOLDER}"* ]]; then
+    if ! location_value="$(extract_location_from_user_comment "${file}")"; then
+      location_value="${LOCATION_FALLBACK_TEXT}"
+    fi
+    rendered_prompt="${rendered_prompt//${LOCATION_PLACEHOLDER}/${location_value}}"
+  fi
+
+  printf '%s' "${rendered_prompt}"
+}
+
 generate_model_output() {
   local file="$1"
-  local output
+  local output rendered_prompt
 
-  if ! output="$(ollama run "${MODEL}" "${PROMPT_TEXT}" "${file}" 2>/dev/null)"; then
+  rendered_prompt="$(render_prompt_for_file "${file}")"
+
+  if ! output="$(ollama run "${MODEL}" "${rendered_prompt}" "${file}" 2>/dev/null)"; then
     return 1
   fi
 
