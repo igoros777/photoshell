@@ -565,7 +565,7 @@ for idx in "${!FILES[@]}"; do
     [[ -z "$metadata" ]] && exit 0
 
     if [[ "$USE_FZF" -eq 1 ]]; then
-      matches="$(printf '%s\n' "$metadata" | fzf --filter "$QUERY" --ignore-case --algo=v2 || true)"
+      matches="$(printf '%s\n' "$metadata" | fzf --filter "$QUERY" -i --algo=v2 || true)"
       if [[ -n "$matches" && -n "$FZF_CUTOFF" ]]; then
         matches="$(apply_fzf_cutoff "$QUERY" "$FZF_CUTOFF" "$matches" || true)"
       fi
