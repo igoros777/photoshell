@@ -15,15 +15,22 @@
 set -euo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SOURCE_DIR="."
 RECURSIVE=0
 MODEL="gemma3:27b"
 SINGLE_FILE=""
 LIST_FILE=""
+SELECTED_PROMPT_ID=""
+LIST_PROMPTS_ONLY=0
 
-PROMPT_TEXT="Provide a concise description most relevant to the technical photographic aspects. Inspect the IPTC Comment field and the EXIF UserComment field for location information. Use this location data to enhance your description with subject details. Do not mention the source of the location data. If both fields have location data, then use both to construct the most complete location. Present your response in a concise and information-dense format. Do not include any formatting or commentary."
+DEFAULT_PROMPT_TEXT="Provide a concise description most relevant to the technical photographic aspects. Inspect the IPTC Comment field and the EXIF UserComment field for location information. Use this location data to enhance your description with subject details. Do not mention the source of the location data. If both fields have location data, then use both to construct the most complete location. Present your response in a concise and information-dense format. Do not include any formatting or commentary."
+PROMPT_TEXT="${DEFAULT_PROMPT_TEXT}"
+PROMPT_FILE="${SCRIPT_DIR}/annotate_photos_with_ollama.prompts.txt"
 
 declare -a IMAGE_FILES=()
+declare -a PROMPT_IDS=()
+declare -a PROMPT_VALUES=()
 
 usage() {
   cat <<EOF
@@ -42,6 +49,9 @@ Options:
   -f, --file FILE            Process exactly one image file
   -l, --list FILE            Read image paths from a text file (one per line)
   -m, --model NAME           Ollama model (default: ${MODEL})
+  -p, --prompt-id ID         Use prompt ID from prompt file (0 = built-in fallback)
+      --list-prompts         List prompts from prompt file and exit
+      --prompt-file FILE     Prompt file path (default: ${PROMPT_FILE})
   -h, --help                 Show this help
 
 Examples:
@@ -50,6 +60,8 @@ Examples:
   ${SCRIPT_NAME} -r /photos/session42
   ${SCRIPT_NAME} -f /photos/session42/img001.cr3
   ${SCRIPT_NAME} -l /photos/batch_file_list.txt
+  ${SCRIPT_NAME} --list-prompts
+  ${SCRIPT_NAME} --prompt-id 1 -r /photos/session42
   ${SCRIPT_NAME} -m gemma3:12b /photos
 EOF
 }
@@ -71,6 +83,124 @@ trim_text() {
   local value="$1"
   value="$(printf '%s' "${value}" | tr '\r\n\t' '   ' | sed -E 's/[[:cntrl:]]//g; s/[[:space:]]+/ /g; s/^[[:space:]]+//; s/[[:space:]]+$//')"
   printf '%s' "${value}"
+}
+
+trim_edges() {
+  local value="$1"
+  value="$(printf '%s' "${value}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+  printf '%s' "${value}"
+}
+
+load_prompts_file() {
+  local file="$1"
+  local line trimmed prompt_id prompt_value idx replaced
+
+  PROMPT_IDS=()
+  PROMPT_VALUES=()
+
+  [[ -f "${file}" ]] || return 1
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%$'\r'}"
+    trimmed="$(trim_edges "${line}")"
+
+    [[ -z "${trimmed}" ]] && continue
+    [[ "${trimmed}" == \#* ]] && continue
+
+    if [[ "${trimmed}" =~ ^([0-9]+)[[:space:]]*\|[[:space:]]*(.+)$ ]]; then
+      prompt_id="${BASH_REMATCH[1]}"
+      prompt_value="$(trim_text "${BASH_REMATCH[2]}")"
+      [[ -z "${prompt_value}" ]] && continue
+
+      replaced=0
+      for idx in "${!PROMPT_IDS[@]}"; do
+        if [[ "${PROMPT_IDS[$idx]}" == "${prompt_id}" ]]; then
+          PROMPT_VALUES[$idx]="${prompt_value}"
+          replaced=1
+          break
+        fi
+      done
+
+      if [[ "${replaced}" -eq 0 ]]; then
+        PROMPT_IDS+=("${prompt_id}")
+        PROMPT_VALUES+=("${prompt_value}")
+      fi
+    else
+      warn "ignoring invalid prompt entry in ${file}: ${trimmed}"
+    fi
+  done < "${file}"
+
+  [[ "${#PROMPT_IDS[@]}" -gt 0 ]] || return 2
+}
+
+find_prompt_text_by_id() {
+  local wanted_id="$1"
+  local idx
+
+  for idx in "${!PROMPT_IDS[@]}"; do
+    if [[ "${PROMPT_IDS[$idx]}" == "${wanted_id}" ]]; then
+      printf '%s' "${PROMPT_VALUES[$idx]}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+list_available_prompts() {
+  local idx
+  log "Prompt file: ${PROMPT_FILE}"
+  for idx in "${!PROMPT_IDS[@]}"; do
+    log "  ${PROMPT_IDS[$idx]} | ${PROMPT_VALUES[$idx]}"
+  done
+  log "  0 | ${DEFAULT_PROMPT_TEXT} (built-in fallback)"
+}
+
+configure_prompt() {
+  local load_status=0
+  local selected_prompt=""
+
+  if load_prompts_file "${PROMPT_FILE}"; then
+    load_status=0
+  else
+    load_status=$?
+  fi
+
+  if [[ "${LIST_PROMPTS_ONLY}" -eq 1 ]]; then
+    if [[ "${load_status}" -ne 0 ]]; then
+      die "prompt file not found or has no valid prompts: ${PROMPT_FILE}"
+    fi
+    list_available_prompts
+    exit 0
+  fi
+
+  if [[ -z "${SELECTED_PROMPT_ID}" ]]; then
+    if [[ "${load_status}" -eq 0 ]]; then
+      log "Prompt file detected: ${PROMPT_FILE} (use --list-prompts or --prompt-id ID)"
+    fi
+    PROMPT_TEXT="${DEFAULT_PROMPT_TEXT}"
+    return 0
+  fi
+
+  if [[ "${SELECTED_PROMPT_ID}" == "0" ]]; then
+    PROMPT_TEXT="${DEFAULT_PROMPT_TEXT}"
+    log "Using built-in fallback prompt (ID 0)"
+    return 0
+  fi
+
+  if [[ "${load_status}" -ne 0 ]]; then
+    warn "prompt file not found or has no valid prompts; using built-in fallback prompt"
+    PROMPT_TEXT="${DEFAULT_PROMPT_TEXT}"
+    return 0
+  fi
+
+  if selected_prompt="$(find_prompt_text_by_id "${SELECTED_PROMPT_ID}")"; then
+    PROMPT_TEXT="${selected_prompt}"
+    log "Using prompt ID ${SELECTED_PROMPT_ID} from ${PROMPT_FILE}"
+  else
+    warn "prompt ID ${SELECTED_PROMPT_ID} not found in ${PROMPT_FILE}; using built-in fallback prompt"
+    PROMPT_TEXT="${DEFAULT_PROMPT_TEXT}"
+  fi
 }
 
 check_requirements() {
@@ -275,6 +405,20 @@ while [[ $# -gt 0 ]]; do
       MODEL="$2"
       shift 2
       ;;
+    -p|--prompt-id)
+      [[ $# -lt 2 ]] && die "missing value for $1"
+      SELECTED_PROMPT_ID="$2"
+      shift 2
+      ;;
+    --list-prompts)
+      LIST_PROMPTS_ONLY=1
+      shift
+      ;;
+    --prompt-file)
+      [[ $# -lt 2 ]] && die "missing value for $1"
+      PROMPT_FILE="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -291,6 +435,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "${SELECTED_PROMPT_ID}" && ! "${SELECTED_PROMPT_ID}" =~ ^[0-9]+$ ]]; then
+  die "prompt ID must be a non-negative integer: ${SELECTED_PROMPT_ID}"
+fi
+
+configure_prompt
 
 check_requirements
 
