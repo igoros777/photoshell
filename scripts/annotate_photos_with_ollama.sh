@@ -8,8 +8,9 @@
 #                               igor@igoros.com
 #                                 2026-02-19
 # ----------------------------------------------------------------------------
-# Generate concise technical photo descriptions with Ollama, replacing EXIF
-# ImageDescription and IPTC Caption-Abstract metadata fields.
+# Generate photo metadata with Ollama using one of two workflows:
+#   1) Description workflow: replace EXIF ImageDescription and IPTC Caption-Abstract
+#   2) Keywords workflow: populate IPTC Keywords only when currently empty
 # ----------------------------------------------------------------------------
 
 set -euo pipefail
@@ -21,16 +22,26 @@ RECURSIVE=0
 MODEL="gemma3:27b"
 SINGLE_FILE=""
 LIST_FILE=""
+WORKFLOW="description"
+WORKFLOW_EXPLICIT=0
 SELECTED_PROMPT_ID=""
 LIST_PROMPTS_ONLY=0
+PROMPT_FILE_OVERRIDE=""
 
-DEFAULT_PROMPT_TEXT="Provide a concise description most relevant to the technical photographic aspects. Inspect the IPTC Comment field and the EXIF UserComment field for location information. Use this location data to enhance your description with subject details. Do not mention the source of the location data. If both fields have location data, then use both to construct the most complete location. Present your response in a concise and information-dense format. Do not include any formatting or commentary."
+DESCRIPTION_DEFAULT_PROMPT_TEXT="Provide a concise description most relevant to the technical photographic aspects. Inspect the IPTC Comment field and the EXIF UserComment field for location information. Use this location data to enhance your description with subject details. Do not mention the source of the location data. If both fields have location data, then use both to construct the most complete location. Present your response in a concise and information-dense format. Do not include any formatting or commentary."
+KEYWORDS_DEFAULT_PROMPT_TEXT="Generate 8 to 15 concise, search-friendly keywords for this photo. Focus on subject, scene type, location, lighting, weather, mood, and photographic technique. Inspect IPTC Comment and EXIF UserComment for location hints and incorporate them naturally. Return keywords only as a comma-separated list. No numbering, quotes, or commentary."
+DESCRIPTION_PROMPT_FILE_DEFAULT="${SCRIPT_DIR}/annotate_photos_with_ollama.prompts.txt"
+KEYWORDS_PROMPT_FILE_DEFAULT="${SCRIPT_DIR}/annotate_photos_with_ollama.keywords.prompts.txt"
+
+WORKFLOW_LABEL="description"
+DEFAULT_PROMPT_TEXT="${DESCRIPTION_DEFAULT_PROMPT_TEXT}"
 PROMPT_TEXT="${DEFAULT_PROMPT_TEXT}"
-PROMPT_FILE="${SCRIPT_DIR}/annotate_photos_with_ollama.prompts.txt"
+PROMPT_FILE="${DESCRIPTION_PROMPT_FILE_DEFAULT}"
 
 declare -a IMAGE_FILES=()
 declare -a PROMPT_IDS=()
 declare -a PROMPT_VALUES=()
+declare -a GENERATED_KEYWORDS=()
 
 usage() {
   cat <<EOF
@@ -39,10 +50,15 @@ Usage:
 
 Purpose:
   Find image files (directory scan, single file, or list file) and, for each file:
-    1) Run Ollama to generate a concise technical description
-    2) Replace EXIF ImageDescription with that description
-    3) Replace IPTC Caption-Abstract with that description
-    4) Leave EXIF UserComment unchanged
+    1) Run one workflow at a time (description or keywords)
+    2) Description workflow (default):
+       - Generate concise technical description with Ollama
+       - Replace EXIF ImageDescription and IPTC Caption-Abstract
+       - Leave EXIF UserComment unchanged
+    3) Keywords workflow (--keywords):
+       - Skip files with populated IPTC Keywords
+       - Generate keywords with Ollama
+       - Populate IPTC Keywords when empty
 
 Options:
   -r, --recursive            Include subfolders
@@ -50,9 +66,14 @@ Options:
   -f, --file FILE            Process exactly one image file
   -l, --list FILE            Read image paths from a text file (one per line)
   -m, --model NAME           Ollama model (default: ${MODEL})
-  -p, --prompt-id ID         Use prompt ID from prompt file (0 = built-in fallback)
-      --list-prompts         List prompts from prompt file and exit
-      --prompt-file FILE     Prompt file path (default: ${PROMPT_FILE})
+      --description          Use description workflow (default)
+      --keywords             Use keywords workflow
+  -p, --prompt-id ID         Use prompt ID from active workflow prompt file
+                             (0 = built-in fallback)
+      --list-prompts         List prompts from active workflow prompt file and exit
+      --prompt-file FILE     Prompt file path for active workflow
+                             (default description: ${DESCRIPTION_PROMPT_FILE_DEFAULT})
+                             (default keywords:    ${KEYWORDS_PROMPT_FILE_DEFAULT})
   -h, --help                 Show this help
 
 Prompt file format:
@@ -67,6 +88,7 @@ Examples:
   ${SCRIPT_NAME} -l /photos/batch_file_list.txt
   ${SCRIPT_NAME} --list-prompts
   ${SCRIPT_NAME} --prompt-id 1 -r /photos/session42
+  ${SCRIPT_NAME} --keywords --prompt-id 1 -r /photos/session42
   ${SCRIPT_NAME} -m gemma3:12b /photos
 EOF
 }
@@ -94,6 +116,39 @@ trim_edges() {
   local value="$1"
   value="$(printf '%s' "${value}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
   printf '%s' "${value}"
+}
+
+set_workflow_from_flag() {
+  local requested="$1"
+  if [[ "${WORKFLOW_EXPLICIT}" -eq 1 && "${WORKFLOW}" != "${requested}" ]]; then
+    die "--description and --keywords cannot be used together"
+  fi
+  WORKFLOW="${requested}"
+  WORKFLOW_EXPLICIT=1
+}
+
+select_workflow_settings() {
+  case "${WORKFLOW}" in
+    description)
+      WORKFLOW_LABEL="description"
+      DEFAULT_PROMPT_TEXT="${DESCRIPTION_DEFAULT_PROMPT_TEXT}"
+      PROMPT_FILE="${DESCRIPTION_PROMPT_FILE_DEFAULT}"
+      ;;
+    keywords)
+      WORKFLOW_LABEL="keywords"
+      DEFAULT_PROMPT_TEXT="${KEYWORDS_DEFAULT_PROMPT_TEXT}"
+      PROMPT_FILE="${KEYWORDS_PROMPT_FILE_DEFAULT}"
+      ;;
+    *)
+      die "unsupported workflow: ${WORKFLOW}"
+      ;;
+  esac
+
+  if [[ -n "${PROMPT_FILE_OVERRIDE}" ]]; then
+    PROMPT_FILE="${PROMPT_FILE_OVERRIDE}"
+  fi
+
+  PROMPT_TEXT="${DEFAULT_PROMPT_TEXT}"
 }
 
 load_prompts_file() {
@@ -154,7 +209,7 @@ find_prompt_text_by_id() {
 
 list_available_prompts() {
   local idx
-  log "Prompt file: ${PROMPT_FILE}"
+  log "Prompt file (${WORKFLOW_LABEL} workflow): ${PROMPT_FILE}"
   for idx in "${!PROMPT_IDS[@]}"; do
     log "  ${PROMPT_IDS[$idx]} | ${PROMPT_VALUES[$idx]}"
   done
@@ -181,7 +236,7 @@ configure_prompt() {
 
   if [[ -z "${SELECTED_PROMPT_ID}" ]]; then
     if [[ "${load_status}" -eq 0 ]]; then
-      log "Prompt file detected: ${PROMPT_FILE} (use --list-prompts or --prompt-id ID)"
+      log "Prompt file detected for ${WORKFLOW_LABEL} workflow: ${PROMPT_FILE} (use --list-prompts or --prompt-id ID)"
     fi
     PROMPT_TEXT="${DEFAULT_PROMPT_TEXT}"
     return 0
@@ -189,7 +244,7 @@ configure_prompt() {
 
   if [[ "${SELECTED_PROMPT_ID}" == "0" ]]; then
     PROMPT_TEXT="${DEFAULT_PROMPT_TEXT}"
-    log "Using built-in fallback prompt (ID 0)"
+    log "Using built-in fallback prompt (ID 0) for ${WORKFLOW_LABEL} workflow"
     return 0
   fi
 
@@ -322,7 +377,7 @@ generate_description() {
   printf '%s' "${output}"
 }
 
-append_metadata() {
+append_description_metadata() {
   local file="$1"
   local description="$2"
 
@@ -332,7 +387,69 @@ append_metadata() {
     "${file}" >/dev/null
 }
 
-process_images() {
+read_existing_iptc_keywords() {
+  local file="$1"
+  local value
+
+  if ! value="$(exiftool -s3 -sep ', ' "-IPTC:Keywords" "${file}" 2>/dev/null)"; then
+    return 1
+  fi
+
+  value="$(trim_text "${value}")"
+  printf '%s' "${value}"
+}
+
+split_keywords_from_output() {
+  local output="$1"
+  local token cleaned normalized seen
+
+  GENERATED_KEYWORDS=()
+  seen="|"
+
+  while IFS= read -r token || [[ -n "${token}" ]]; do
+    cleaned="$(trim_edges "${token}")"
+    cleaned="$(printf '%s' "${cleaned}" | sed -E 's/^[-*]+[[:space:]]*//; s/^[0-9]+[.)][[:space:]]*//')"
+    cleaned="${cleaned#\"}"
+    cleaned="${cleaned%\"}"
+    cleaned="$(trim_edges "${cleaned}")"
+    [[ -z "${cleaned}" ]] && continue
+
+    normalized="$(printf '%s' "${cleaned}" | tr '[:upper:]' '[:lower:]')"
+    if [[ "${seen}" == *"|${normalized}|"* ]]; then
+      continue
+    fi
+
+    seen="${seen}${normalized}|"
+    GENERATED_KEYWORDS+=("${cleaned}")
+  done < <(
+    printf '%s' "${output}" \
+      | tr '\r' '\n' \
+      | sed -E 's/[|;]/,/g' \
+      | tr ',' '\n'
+  )
+
+  [[ "${#GENERATED_KEYWORDS[@]}" -gt 0 ]]
+}
+
+append_keywords_metadata() {
+  local file="$1"
+  shift
+  local -a keywords=("$@")
+  local -a exif_args=()
+  local keyword
+
+  [[ "${#keywords[@]}" -gt 0 ]] || return 1
+
+  exif_args=(-overwrite_original "-IPTC:Keywords=")
+  for keyword in "${keywords[@]}"; do
+    exif_args+=("-IPTC:Keywords+=${keyword}")
+  done
+  exif_args+=("${file}")
+
+  exiftool "${exif_args[@]}" >/dev/null
+}
+
+process_description_workflow() {
   local file total idx base description
   total="${#IMAGE_FILES[@]}"
   idx=0
@@ -347,13 +464,66 @@ process_images() {
       continue
     fi
 
-    if ! append_metadata "${file}" "${description}"; then
+    if ! append_description_metadata "${file}" "${description}"; then
       warn "failed to write metadata for ${file}"
       continue
     fi
 
     log "  replaced EXIF ImageDescription and IPTC Caption-Abstract"
   done
+}
+
+process_keywords_workflow() {
+  local file total idx base output existing_keywords
+  total="${#IMAGE_FILES[@]}"
+  idx=0
+
+  for file in "${IMAGE_FILES[@]}"; do
+    idx=$((idx + 1))
+    base="$(basename "${file}")"
+    log "[${idx}/${total}] ${base}"
+
+    if ! existing_keywords="$(read_existing_iptc_keywords "${file}")"; then
+      warn "skipping ${file}: failed to read IPTC Keywords"
+      continue
+    fi
+
+    if [[ -n "${existing_keywords}" ]]; then
+      log "  skipped: IPTC Keywords already populated"
+      continue
+    fi
+
+    if ! output="$(generate_description "${file}")"; then
+      warn "skipping ${file}: failed to get keywords from ollama"
+      continue
+    fi
+
+    if ! split_keywords_from_output "${output}"; then
+      warn "skipping ${file}: ollama returned no valid keywords"
+      continue
+    fi
+
+    if ! append_keywords_metadata "${file}" "${GENERATED_KEYWORDS[@]}"; then
+      warn "failed to write IPTC Keywords for ${file}"
+      continue
+    fi
+
+    log "  populated IPTC Keywords with ${#GENERATED_KEYWORDS[@]} keyword(s)"
+  done
+}
+
+process_images() {
+  case "${WORKFLOW}" in
+    description)
+      process_description_workflow
+      ;;
+    keywords)
+      process_keywords_workflow
+      ;;
+    *)
+      die "unsupported workflow: ${WORKFLOW}"
+      ;;
+  esac
 }
 
 while [[ $# -gt 0 ]]; do
@@ -381,6 +551,14 @@ while [[ $# -gt 0 ]]; do
       MODEL="$2"
       shift 2
       ;;
+    --description)
+      set_workflow_from_flag "description"
+      shift
+      ;;
+    --keywords)
+      set_workflow_from_flag "keywords"
+      shift
+      ;;
     -p|--prompt-id)
       [[ $# -lt 2 ]] && die "missing value for $1"
       SELECTED_PROMPT_ID="$2"
@@ -392,7 +570,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --prompt-file)
       [[ $# -lt 2 ]] && die "missing value for $1"
-      PROMPT_FILE="$2"
+      PROMPT_FILE_OVERRIDE="$2"
       shift 2
       ;;
     -h|--help)
@@ -415,6 +593,8 @@ done
 if [[ -n "${SELECTED_PROMPT_ID}" && ! "${SELECTED_PROMPT_ID}" =~ ^[0-9]+$ ]]; then
   die "prompt ID must be a non-negative integer: ${SELECTED_PROMPT_ID}"
 fi
+
+select_workflow_settings
 
 configure_prompt
 
@@ -448,6 +628,7 @@ fi
 
 log "Found ${#IMAGE_FILES[@]} image(s)"
 log "Model: ${MODEL}"
+log "Workflow: ${WORKFLOW_LABEL}"
 
 process_images
 
