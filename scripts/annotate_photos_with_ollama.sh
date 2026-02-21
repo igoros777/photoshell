@@ -29,7 +29,7 @@ LIST_PROMPTS_ONLY=0
 PROMPT_FILE_OVERRIDE=""
 
 DESCRIPTION_DEFAULT_PROMPT_TEXT="Provide a concise description about the scene and photographic aspects. Include some details about the photo's location: LOCATION. Do not include any formatting or commentary."
-KEYWORDS_DEFAULT_PROMPT_TEXT="Generate 8 to 15 concise, search-friendly keywords for this photo. Focus on subject, scene type, location, lighting, weather, mood, and photographic technique. Incorporate the location nnaturally: LOCATION. Return keywords only as a comma-separated list. No numbering, quotes, or commentary."
+KEYWORDS_DEFAULT_PROMPT_TEXT="Generate 8 to 15 concise, search-friendly keywords for this photo. Focus on subject, scene type, location, lighting, weather, mood, and photographic technique. Incorporate the location naturally: LOCATION. Return keywords only as a comma-separated list. No numbering, quotes, or commentary."
 DESCRIPTION_PROMPT_FILE_DEFAULT="${SCRIPT_DIR}/annotate_photos_with_ollama.prompts.txt"
 KEYWORDS_PROMPT_FILE_DEFAULT="${SCRIPT_DIR}/annotate_photos_with_ollama.keywords.prompts.txt"
 LOCATION_PLACEHOLDER="LOCATION"
@@ -398,11 +398,16 @@ render_prompt_for_file() {
   local rendered_prompt location_value
 
   rendered_prompt="${PROMPT_TEXT}"
-  if [[ "${rendered_prompt}" == *"${LOCATION_PLACEHOLDER}"* ]]; then
+  if [[ "${rendered_prompt}" == *"${LOCATION_PLACEHOLDER}"* || "${WORKFLOW}" == "keywords" ]]; then
     if ! location_value="$(extract_location_from_user_comment "${file}")"; then
       location_value="${LOCATION_FALLBACK_TEXT}"
     fi
-    rendered_prompt="${rendered_prompt//${LOCATION_PLACEHOLDER}/${location_value}}"
+
+    if [[ "${rendered_prompt}" == *"${LOCATION_PLACEHOLDER}"* ]]; then
+      rendered_prompt="${rendered_prompt//${LOCATION_PLACEHOLDER}/${location_value}}"
+    elif [[ "${WORKFLOW}" == "keywords" ]]; then
+      rendered_prompt="${rendered_prompt} Use this location context: ${location_value}."
+    fi
   fi
 
   printf '%s' "${rendered_prompt}"

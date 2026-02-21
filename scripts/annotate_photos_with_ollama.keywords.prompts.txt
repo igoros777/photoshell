@@ -1,2 +1,2 @@
 # Format: <integer>|<prompt text>
-1|Generate 8 to 15 concise, search-friendly keywords for this photo. Focus on subject, scene type, location, lighting, weather, mood, and photographic technique. Incorporate the location nnaturally: LOCATION. Return keywords only as a comma-separated list. No numbering, quotes, or commentary.
+1|Generate 8 to 15 concise, search-friendly keywords for this photo. Focus on subject, scene type, location, lighting, weather, mood, and photographic technique. Incorporate the location naturally: LOCATION. Return keywords only as a comma-separated list. No numbering, quotes, or commentary.
