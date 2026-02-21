@@ -104,6 +104,8 @@ RECURSIVE=1
 SEARCH_DIR="."
 JOBS_SPEC=""
 COPY_TO=""
+USE_FZF=0
+FZF_CUTOFF=""
 
 usage() {
   cat <<'EOF'
@@ -115,7 +117,7 @@ Description:
   Recursive search is enabled by default.
 
 Options:
-  -q, --query <text>          Search text (case-insensitive substring match).
+  -q, --query <text>          Search text (required).
   -f, --fields <spec>         Metadata fields to search:
                                 all            (default; EXIF + IPTC)
                                 exif
@@ -129,6 +131,8 @@ Options:
   -r, --recursive             Search recursively (default).
   -j, --jobs <n>              Number of parallel workers (default: CPU cores).
   -c, --copy-to <dir>         Copy matching files to this directory.
+      --fzf                   Use fzf approximate matching instead of grep substring match.
+      --fzf-cutoff <n>        Max fuzzy gap for --fzf matches (0 = contiguous chars).
   -h, --help                  Show this help text.
 
 Arguments:
@@ -139,6 +143,7 @@ Examples:
   ./search_exif_iptc.sh -q "Canon" -f Make,Model -m image .
   ./search_exif_iptc.sh -q "wedding" -f iptc -n /photos/exports
   ./search_exif_iptc.sh -q "Nikon" --copy-to /tmp/metadata-hits /photos
+  ./search_exif_iptc.sh -q "Ysmte" --fzf --fzf-cutoff 4 /photos/archive
 EOF
 }
 
@@ -248,6 +253,80 @@ normalize_field_tag() {
   esac
 }
 
+subsequence_gap_score() {
+  local needle="$1"
+  local haystack="$2"
+  local nlen=0
+  local hlen=0
+  local i=0
+  local pos=0
+  local start=0
+  local prev_idx=-1
+  local idx=-1
+  local total_gap=0
+  local ch=""
+
+  needle="$(lower "$needle")"
+  haystack="$(lower "$haystack")"
+  needle="$(printf '%s' "$needle" | tr -d '[:space:]')"
+
+  nlen="${#needle}"
+  hlen="${#haystack}"
+
+  if [[ "$nlen" -eq 0 ]]; then
+    printf '0'
+    return 0
+  fi
+
+  for ((i = 0; i < nlen; i++)); do
+    ch="${needle:i:1}"
+    idx=-1
+
+    for ((pos = start; pos < hlen; pos++)); do
+      if [[ "${haystack:pos:1}" == "$ch" ]]; then
+        idx="$pos"
+        break
+      fi
+    done
+
+    if [[ "$idx" -lt 0 ]]; then
+      printf '%s' "-1"
+      return 1
+    fi
+
+    if [[ "$prev_idx" -ge 0 ]]; then
+      total_gap=$((total_gap + idx - prev_idx - 1))
+    fi
+    prev_idx="$idx"
+    start=$((idx + 1))
+  done
+
+  printf '%s' "$total_gap"
+}
+
+apply_fzf_cutoff() {
+  local query="$1"
+  local cutoff="$2"
+  local lines="$3"
+  local line=""
+  local gap=""
+  local -a kept=()
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    gap="$(subsequence_gap_score "$query" "$line" || true)"
+    if [[ "$gap" =~ ^[0-9]+$ ]] && [[ "$gap" -le "$cutoff" ]]; then
+      kept+=("$line")
+    fi
+  done <<< "$lines"
+
+  if [[ ${#kept[@]} -eq 0 ]]; then
+    return 1
+  fi
+
+  printf '%s\n' "${kept[@]}"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -q|--query)
@@ -281,6 +360,15 @@ while [[ $# -gt 0 ]]; do
     -c|--copy-to)
       [[ $# -lt 2 ]] && { echo "Missing value for $1."; usage; exit 1; }
       COPY_TO="$2"
+      shift 2
+      ;;
+    --fzf)
+      USE_FZF=1
+      shift
+      ;;
+    --fzf-cutoff)
+      [[ $# -lt 2 ]] && { echo "Missing value for $1."; usage; exit 1; }
+      FZF_CUTOFF="$2"
       shift 2
       ;;
     -h|--help)
@@ -318,6 +406,22 @@ fi
 if ! command -v exiftool >/dev/null 2>&1; then
   echo "exiftool not found. Install it and try again."
   exit 1
+fi
+
+if [[ "$USE_FZF" -eq 1 ]] && ! command -v fzf >/dev/null 2>&1; then
+  echo "fzf not found. Install it or remove --fzf."
+  exit 1
+fi
+
+if [[ -n "$FZF_CUTOFF" ]]; then
+  if [[ ! "$FZF_CUTOFF" =~ ^[0-9]+$ ]]; then
+    echo "Invalid --fzf-cutoff value: $FZF_CUTOFF (expected non-negative integer)"
+    exit 1
+  fi
+  if [[ "$USE_FZF" -ne 1 ]]; then
+    echo "--fzf-cutoff requires --fzf."
+    exit 1
+  fi
 fi
 
 if [[ -n "$COPY_TO" ]]; then
@@ -460,7 +564,14 @@ for idx in "${!FILES[@]}"; do
     metadata="$(exiftool -charset exif=UTF8 -charset iptc=UTF8 -s -G1 -a -u "${TAG_ARGS[@]}" "$safe_file" 2>/dev/null || true)"
     [[ -z "$metadata" ]] && exit 0
 
-    matches="$(printf '%s\n' "$metadata" | grep -iF -- "$QUERY" || true)"
+    if [[ "$USE_FZF" -eq 1 ]]; then
+      matches="$(printf '%s\n' "$metadata" | fzf --filter "$QUERY" --ignore-case --algo=v2 || true)"
+      if [[ -n "$matches" && -n "$FZF_CUTOFF" ]]; then
+        matches="$(apply_fzf_cutoff "$QUERY" "$FZF_CUTOFF" "$matches" || true)"
+      fi
+    else
+      matches="$(printf '%s\n' "$metadata" | grep -iF -- "$QUERY" || true)"
+    fi
     [[ -z "$matches" ]] && exit 0
 
     {

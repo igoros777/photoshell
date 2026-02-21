@@ -94,6 +94,13 @@ bash "$PHOTOSHELL/scripts/search_exif_iptc.sh" \
   -f "Caption-Abstract,UserComment,Keywords" \
   -m image \
   "$PROJECT_DIR/processed/photos/working/selected"
+
+# Optional fuzzy matching with fzf:
+bash "$PHOTOSHELL/scripts/search_exif_iptc.sh" \
+  -q "watrfal" \
+  --fzf \
+  --fzf-cutoff 3 \
+  "$PROJECT_DIR/processed/photos/working/selected"
 ```
 
 8. Rename photos and GoPro videos with timestamp/location-rich names.

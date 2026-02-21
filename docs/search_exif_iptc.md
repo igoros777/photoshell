@@ -26,6 +26,7 @@ The script:
 - Bash
 - `exiftool`
 - Standard shell utilities: `find`, `grep`, `sed`
+- Optional for fuzzy matching: `fzf`
 
 ## Usage
 
@@ -63,6 +64,12 @@ Search in parallel and copy matches to another directory:
 
 ```bash
 ./scripts/search_exif_iptc.sh -q "Nikon" --jobs 8 --copy-to /tmp/metadata-hits /photos
+```
+
+Search with `fzf` approximate matching and a strict fuzzy cutoff:
+
+```bash
+./scripts/search_exif_iptc.sh -q "Ysmte" --fzf --fzf-cutoff 4 /photos/archive
 ```
 
 ## Workflow Diagram
@@ -125,6 +132,8 @@ flowchart TD
 - `-r`, `--recursive`: recursive search (default).
 - `-j`, `--jobs <n>`: number of parallel workers (default: detected CPU cores).
 - `-c`, `--copy-to <dir>`: copy matching files to this directory, preserving path relative to the search root.
+- `--fzf`: use `fzf` approximate matching instead of `grep` substring matching.
+- `--fzf-cutoff <n>`: maximum fuzzy gap allowed when `--fzf` is used (`0` requires contiguous matched characters; lower values are stricter).
 - `-h`, `--help`: help text.
 
 ## Supported Media Types
