@@ -8,8 +8,8 @@
 #                               igor@igoros.com
 #                                 2026-02-19
 # ----------------------------------------------------------------------------
-# Generate concise technical photo descriptions with Ollama and append them to
-# IPTC Caption-Abstract and EXIF UserComment metadata fields.
+# Generate concise technical photo descriptions with Ollama, replacing IPTC
+# Caption-Abstract and appending to EXIF UserComment metadata fields.
 # ----------------------------------------------------------------------------
 
 set -euo pipefail
@@ -33,7 +33,7 @@ Usage:
 Purpose:
   Find image files (directory scan, single file, or list file) and, for each file:
     1) Run Ollama to generate a concise technical description
-    2) Append that description to IPTC Caption-Abstract
+    2) Replace IPTC Caption-Abstract with that description
     3) Append that description to EXIF UserComment
 
 Options:
@@ -213,12 +213,11 @@ generate_description() {
 append_metadata() {
   local file="$1"
   local description="$2"
-  local current_iptc current_user updated_iptc updated_user
+  local current_user updated_iptc updated_user
 
-  current_iptc="$(read_tag "IPTC:Caption-Abstract" "${file}")"
   current_user="$(read_tag "EXIF:UserComment" "${file}")"
 
-  updated_iptc="$(append_text "${current_iptc}" "${description}")"
+  updated_iptc="${description}"
   updated_user="$(append_text "${current_user}" "${description}")"
 
   exiftool -overwrite_original \
@@ -247,7 +246,7 @@ process_images() {
       continue
     fi
 
-    log "  appended description to IPTC + EXIF"
+    log "  replaced IPTC description and appended EXIF comment"
   done
 }
 
