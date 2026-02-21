@@ -364,7 +364,7 @@ collect_images_from_list_file() {
   fi
 }
 
-generate_description() {
+generate_model_output() {
   local file="$1"
   local output
 
@@ -459,7 +459,7 @@ process_description_workflow() {
     base="$(basename "${file}")"
     log "[${idx}/${total}] ${base}"
 
-    if ! description="$(generate_description "${file}")"; then
+    if ! description="$(generate_model_output "${file}")"; then
       warn "skipping ${file}: failed to get description from ollama"
       continue
     fi
@@ -493,7 +493,7 @@ process_keywords_workflow() {
       continue
     fi
 
-    if ! output="$(generate_description "${file}")"; then
+    if ! output="$(generate_model_output "${file}")"; then
       warn "skipping ${file}: failed to get keywords from ollama"
       continue
     fi
