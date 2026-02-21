@@ -16,7 +16,7 @@ The script:
 
 1. Scans media files in the target directory (recursive by default).
 2. Reads selected EXIF/IPTC tags with `exiftool`.
-3. Performs a case-insensitive text search against tag values.
+3. Performs metadata text matching with `grep` (substring) or optional `fzf` (approximate).
 4. Prints each matching file and matching metadata lines.
 5. Optionally copies matching files to a destination directory.
 6. Prints scan and match totals at the end.
@@ -104,7 +104,7 @@ flowchart TD
     Q -->|Yes| S[Read selected metadata via exiftool]
     S --> T{Metadata returned}
     T -->|No| Q
-    T -->|Yes| U[Search metadata lines with case insensitive match]
+    T -->|Yes| U[Search metadata lines with selected matcher grep or fzf]
     U --> V{Any lines matched query}
     V -->|No| Q
     V -->|Yes| W[Print file and matching lines and increment matched]
