@@ -1,12 +1,12 @@
 # annotate_photos_with_ollama.sh
 
-`annotate_photos_with_ollama.sh` generates concise technical photo descriptions with Ollama and appends the result to both IPTC and EXIF comment fields.
+`annotate_photos_with_ollama.sh` generates concise technical photo descriptions with Ollama and replaces specific metadata fields with the generated text.
 
 ## Why This Script Exists
 
 Photo collections often have partial or inconsistent descriptive metadata.
 
-This script automates dense, photography-focused annotation by combining model output with existing per-file metadata context, then writing the generated description back into standard tags used by many photo tools.
+This script automates dense, photography-focused annotation by generating a concise description per file and writing it into standard tags used by many photo tools.
 
 ## What The Script Does
 
@@ -14,10 +14,10 @@ For each selected image, it:
 
 1. Runs `ollama run` with a prompt focused on technical photographic description and location-aware subject context.
 2. Captures and normalizes the model output.
-3. Reads existing values from:
+3. Replaces:
+   - `EXIF:ImageDescription`
    - `IPTC:Caption-Abstract`
-   - `EXIF:UserComment`
-4. Appends the new description to both fields (preserving existing text).
+4. Does not modify `EXIF:UserComment`.
 5. Writes metadata using `exiftool -overwrite_original`.
 
 ## Input Modes
@@ -33,6 +33,24 @@ Rules:
 - `--file` and `--list` cannot be used together.
 - `DIRECTORY` cannot be combined with `--file` or `--list`.
 - `--recursive` is relevant only for directory mode.
+
+## Prompt Selection
+
+The script keeps a built-in fallback prompt and can also load prompts from:
+
+- `scripts/annotate_photos_with_ollama.prompts.txt`
+
+Prompt file format:
+
+- One prompt per line: `<integer>|<prompt text>`
+- Example: `1|Describe the image...`
+
+Options:
+
+- `--list-prompts`: list prompts from the prompt file and exit.
+- `--prompt-id <id>`: choose a prompt by integer ID.
+- `--prompt-id 0`: force built-in fallback prompt.
+- `--prompt-file <path>`: use a custom prompt file.
 
 ## Requirements
 
@@ -67,6 +85,18 @@ List file:
 ./scripts/annotate_photos_with_ollama.sh --list /photos/archive/file_list.txt
 ```
 
+List prompts:
+
+```bash
+./scripts/annotate_photos_with_ollama.sh --list-prompts
+```
+
+Use prompt ID 1:
+
+```bash
+./scripts/annotate_photos_with_ollama.sh --prompt-id 1 -r /photos/archive
+```
+
 Custom model:
 
 ```bash
@@ -86,40 +116,44 @@ flowchart TD
     A([Start]) --> B[Parse command line arguments]
     B --> C{Help requested}
     C -->|Yes| D[Print usage and exit]
-    C -->|No| E[Check required commands find ollama exiftool]
-    E --> F{Requirements available}
-    F -->|No| Z1([Exit with error])
-    F -->|Yes| G{Both file and list options set}
-    G -->|Yes| Z2([Exit with error])
-    G -->|No| H{Directory argument used with file or list}
-    H -->|Yes| Z3([Exit with error])
-    H -->|No| I{Input mode}
+    C -->|No| E{Prompt ID integer if provided}
+    E -->|No| Z1([Exit with error])
+    E -->|Yes| F[Configure prompt source]
+    F --> G{List prompts only}
+    G -->|Yes| H[List prompts and exit]
+    G -->|No| I[Check required commands find ollama exiftool]
+    I --> J{Requirements available}
+    J -->|No| Z2([Exit with error])
+    J -->|Yes| K{Both file and list options set}
+    K -->|Yes| Z3([Exit with error])
+    K -->|No| L{Directory argument used with file or list}
+    L -->|Yes| Z4([Exit with error])
+    L -->|No| M{Input mode}
 
-    I -->|Single file| J[Validate file exists and supported extension]
-    I -->|List file| K[Read list file and collect valid image paths]
-    I -->|Directory scan| L[Validate source directory and scan image files]
+    M -->|Single file| N[Validate file exists and supported extension]
+    M -->|List file| O[Read list file and collect valid image paths]
+    M -->|Directory scan| P[Validate source directory and scan image files]
 
-    J --> M{Images collected}
-    K --> M
-    L --> M
-    M -->|No| Z4([Exit with error])
-    M -->|Yes| N[Log file count and selected model]
+    N --> Q{Images collected}
+    O --> Q
+    P --> Q
+    Q -->|No| Z5([Exit with error])
+    Q -->|Yes| R[Log file count and selected model]
 
-    N --> O{Next image}
-    O -->|No| Z5([Done])
-    O -->|Yes| P[Run ollama to generate description]
-    P --> Q{Description generated}
-    Q -->|No| R[Warn and skip file]
-    Q -->|Yes| S[Read IPTC caption and EXIF user comment]
-    S --> T[Append new description to both fields]
-    T --> U[Write metadata with exiftool overwrite original]
-    U --> V{Write succeeded}
-    V -->|No| W[Warn and continue]
-    V -->|Yes| X[Log successful append]
+    R --> S{Next image}
+    S -->|No| Z6([Done])
+    S -->|Yes| T[Run ollama to generate description]
+    T --> U{Description generated}
+    U -->|No| V[Warn and skip file]
+    U -->|Yes| W[Replace EXIF ImageDescription and IPTC Caption-Abstract]
+    W --> X[Write metadata with exiftool overwrite original]
+    X --> Y{Write succeeded}
+    Y -->|No| AA[Warn and continue]
+    Y -->|Yes| AB[Log successful write]
 
-    R --> O
-    W --> O
-    X --> O
+    V --> S
+    AA --> S
+    AB --> S
 ```
 
 ## List File Format
@@ -137,5 +171,6 @@ flowchart TD
 ## Safety Notes
 
 - Metadata writes use `exiftool -overwrite_original` (the original file is replaced).
-- Because text is appended, repeated runs add additional entries to both metadata fields.
+- Repeated runs overwrite `EXIF:ImageDescription` and `IPTC:Caption-Abstract` with the latest generated text.
+- `EXIF:UserComment` is intentionally left unchanged by this script.
 - Test on a copy first if you need a reversible workflow.
