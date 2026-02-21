@@ -8,8 +8,8 @@
 #                               igor@igoros.com
 #                                 2026-02-19
 # ----------------------------------------------------------------------------
-# Generate concise technical photo descriptions with Ollama, replacing IPTC
-# Caption-Abstract and appending to EXIF UserComment metadata fields.
+# Generate concise technical photo descriptions with Ollama, replacing EXIF
+# ImageDescription and IPTC Caption-Abstract metadata fields.
 # ----------------------------------------------------------------------------
 
 set -euo pipefail
@@ -40,8 +40,9 @@ Usage:
 Purpose:
   Find image files (directory scan, single file, or list file) and, for each file:
     1) Run Ollama to generate a concise technical description
-    2) Replace IPTC Caption-Abstract with that description
-    3) Append that description to EXIF UserComment
+    2) Replace EXIF ImageDescription with that description
+    3) Replace IPTC Caption-Abstract with that description
+    4) Leave EXIF UserComment unchanged
 
 Options:
   -r, --recursive            Include subfolders
@@ -308,29 +309,6 @@ collect_images_from_list_file() {
   fi
 }
 
-append_text() {
-  local existing="$1"
-  local addition="$2"
-  local existing_clean
-  local addition_clean
-
-  existing_clean="$(printf '%s' "${existing}" | sed -E 's/[[:space:]]+$//')"
-  addition_clean="$(printf '%s' "${addition}" | sed -E 's/^[[:space:]]+//')"
-
-  if [[ -z "${existing_clean}" ]]; then
-    printf '%s' "${addition_clean}"
-    return
-  fi
-
-  printf '%s %s' "${existing_clean}" "${addition_clean}"
-}
-
-read_tag() {
-  local tag="$1"
-  local file="$2"
-  exiftool -s3 "-${tag}" "${file}" 2>/dev/null || true
-}
-
 generate_description() {
   local file="$1"
   local output
@@ -347,16 +325,10 @@ generate_description() {
 append_metadata() {
   local file="$1"
   local description="$2"
-  local current_user updated_iptc updated_user
-
-  current_user="$(read_tag "EXIF:UserComment" "${file}")"
-
-  updated_iptc="${description}"
-  updated_user="$(append_text "${current_user}" "${description}")"
 
   exiftool -overwrite_original \
-    "-IPTC:Caption-Abstract=${updated_iptc}" \
-    "-EXIF:UserComment=${updated_user}" \
+    "-EXIF:ImageDescription=${description}" \
+    "-IPTC:Caption-Abstract=${description}" \
     "${file}" >/dev/null
 }
 
@@ -380,7 +352,7 @@ process_images() {
       continue
     fi
 
-    log "  replaced IPTC description and appended EXIF comment"
+    log "  replaced EXIF ImageDescription and IPTC Caption-Abstract"
   done
 }
 
