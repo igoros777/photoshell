@@ -30,7 +30,7 @@ usage() {
 Usage:
   ${SCRIPT_NAME} [options] [DIRECTORY]
 
-Scrubs these metadata fields:
+By default, scrubs these metadata fields:
   - EXIF UserComment
   - EXIF ImageDescription
   - IPTC Caption (Caption-Abstract)
