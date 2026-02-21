@@ -54,6 +54,10 @@ Options:
       --prompt-file FILE     Prompt file path (default: ${PROMPT_FILE})
   -h, --help                 Show this help
 
+Prompt file format:
+  One prompt per line: <integer>|<prompt text>
+  Example: 1|Describe the image...
+
 Examples:
   ${SCRIPT_NAME}
   ${SCRIPT_NAME} -r
