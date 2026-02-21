@@ -18,6 +18,10 @@ TARGET_DIR_SET=0
 DRY_RUN=0
 FULL_RECURSION=0
 RECURSION_LEVEL=0
+EXIF_FIELDS_RAW=""
+IPTC_FIELDS_RAW=""
+EXIF_FIELDS_SET=0
+IPTC_FIELDS_SET=0
 
 declare -a FILES=()
 
@@ -34,6 +38,10 @@ Scrubs these metadata fields:
 
 Options:
   -n, --dry-run          Print what would be changed without writing
+      --exif TAGS        Comma-separated EXIF tags/patterns to scrub
+                         Example: --exif "UserComment,ImageDescription"
+      --iptc TAGS        Comma-separated IPTC tags/patterns to scrub
+                         Example: --iptc "Caption*"
   -r, --recursive [N]    Recursion control:
                          -r 0     no recursion (default)
                          -r N     recurse N levels deep
@@ -46,6 +54,7 @@ Examples:
   ${SCRIPT_NAME} -r 0 /photos
   ${SCRIPT_NAME} -r 2 /photos
   ${SCRIPT_NAME} -r /photos
+  ${SCRIPT_NAME} --exif "UserComment,ImageDescription" --iptc "Caption*"
 EOF
 }
 
@@ -54,11 +63,44 @@ die() {
   exit 1
 }
 
+trim() {
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  printf '%s' "${s}"
+}
+
+parse_csv_into_array() {
+  local raw="$1"
+  local -n out_ref="$2"
+  out_ref=()
+
+  local part
+  IFS=',' read -r -a _parts <<< "${raw}"
+  for part in "${_parts[@]}"; do
+    part="$(trim "${part}")"
+    [[ -z "${part}" ]] && continue
+    out_ref+=("${part}")
+  done
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -n|--dry-run)
       DRY_RUN=1
       shift
+      ;;
+    --exif)
+      [[ $# -gt 1 ]] || die "Missing value for --exif"
+      EXIF_FIELDS_RAW="$2"
+      EXIF_FIELDS_SET=1
+      shift 2
+      ;;
+    --iptc)
+      [[ $# -gt 1 ]] || die "Missing value for --iptc"
+      IPTC_FIELDS_RAW="$2"
+      IPTC_FIELDS_SET=1
+      shift 2
       ;;
     -r|--recursive)
       if [[ $# -gt 1 && "$2" =~ ^[0-9]+$ ]]; then
@@ -152,17 +194,42 @@ if [[ "${#FILES[@]}" -eq 0 ]]; then
 fi
 
 declare -a TAG_ARGS
-TAG_ARGS=(
-  -overwrite_original
-  "-EXIF:UserComment="
-  "-EXIF:ImageDescription="
-  "-IPTC:Caption="
-  "-IPTC:Caption-Abstract="
-  "-IPTC:Keywords="
-)
+declare -a SELECTED_EXIF_FIELDS
+declare -a SELECTED_IPTC_FIELDS
+
+if [[ "${EXIF_FIELDS_SET}" -eq 0 && "${IPTC_FIELDS_SET}" -eq 0 ]]; then
+  SELECTED_EXIF_FIELDS=("UserComment" "ImageDescription")
+  SELECTED_IPTC_FIELDS=("Caption" "Caption-Abstract" "Keywords")
+else
+  if [[ "${EXIF_FIELDS_SET}" -eq 1 ]]; then
+    parse_csv_into_array "${EXIF_FIELDS_RAW}" SELECTED_EXIF_FIELDS
+  else
+    SELECTED_EXIF_FIELDS=()
+  fi
+
+  if [[ "${IPTC_FIELDS_SET}" -eq 1 ]]; then
+    parse_csv_into_array "${IPTC_FIELDS_RAW}" SELECTED_IPTC_FIELDS
+  else
+    SELECTED_IPTC_FIELDS=()
+  fi
+fi
+
+TAG_ARGS=(-overwrite_original)
+for tag in "${SELECTED_EXIF_FIELDS[@]}"; do
+  TAG_ARGS+=("-EXIF:${tag}=")
+done
+for tag in "${SELECTED_IPTC_FIELDS[@]}"; do
+  TAG_ARGS+=("-IPTC:${tag}=")
+done
+
+if [[ "${#TAG_ARGS[@]}" -le 1 ]]; then
+  die "No tags selected to scrub. Use --exif and/or --iptc with at least one tag."
+fi
 
 if [[ "${DRY_RUN}" -eq 1 ]]; then
   echo "[DRY-RUN] Files to scrub: ${#FILES[@]}"
+  echo "[DRY-RUN] EXIF tags: ${SELECTED_EXIF_FIELDS[*]:-(none)}"
+  echo "[DRY-RUN] IPTC tags: ${SELECTED_IPTC_FIELDS[*]:-(none)}"
   for file in "${FILES[@]}"; do
     echo "[DRY-RUN] ${file}"
   done
