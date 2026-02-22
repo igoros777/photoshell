@@ -164,6 +164,7 @@ flowchart TD
 - [`scripts/geo_rename_photos.sh`](scripts/geo_rename_photos.sh): Rename photos using capture timestamp, camera model, and reverse-geocoded location, with optional date-based folder structure.
 - [`scripts/gopro_geo_rename.sh`](scripts/gopro_geo_rename.sh): Rename GoPro MP4 clips with capture time, reverse-geocoded location, duration, and original filename.
 - [`scripts/search_exif_iptc.sh`](scripts/search_exif_iptc.sh): Search EXIF/IPTC metadata text across supported image/raw/video files with field, type, and recursion filters.
+- [`scripts/scrub_selected_metadata.sh`](scripts/scrub_selected_metadata.sh): Clear selected EXIF/IPTC fields with optional exact tag selectors (`--exif`, `--iptc`) and recursion control.
 
 ## Documentation
 - [`docs/photofolders.md`](docs/photofolders.md): `photofolders` behavior, rationale, usage, and workflow integration for Windows and Linux variants.
@@ -177,3 +178,4 @@ flowchart TD
 - [`docs/geo_rename_photos.md`](docs/geo_rename_photos.md): Why this script exists, how naming and folder structure work, requirements, usage, and limitations.
 - [`docs/gopro_geo_rename.md`](docs/gopro_geo_rename.md): Why this script exists, how filename construction works, requirements, usage, and limitations.
 - [`docs/search_exif_iptc.md`](docs/search_exif_iptc.md): EXIF/IPTC metadata search behavior, field/media filters, recursive control, and examples.
+- [`docs/scrub_selected_metadata.md`](docs/scrub_selected_metadata.md): Metadata scrub behavior, default tags, exact EXIF/IPTC selector usage, recursion modes, and safety notes.
