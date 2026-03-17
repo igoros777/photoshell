@@ -132,17 +132,28 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // ---- Step sequencing and order validation ----
 
-    // Recommended order based on typical photo workflow logic.
-    // Lower number = should run earlier.
+    // Recommended workflow order. The core pipeline is:
+    //   1. Sync EXIF from originals to exports
+    //   2. Fill GPS gaps (everything downstream depends on GPS)
+    //   3. Extract photo summary (uses GPS for reverse geocoding)
+    //   4. Annotate descriptions (uses summary + GPS context)
+    //   5. Annotate keywords (uses description + GPS context)
+    // Then renaming, output, and cleanup:
+    //   6. Geo rename (uses GPS for location-based filenames)
+    //   7. GoPro geo rename (same GPS dependency)
+    //   8. Detect blurry (independent of metadata content)
+    //   9. Contact sheet (benefits from all metadata being final)
+    //  10. Scrub metadata (destructive - must be after all writes)
+    //  11. Search EXIF/IPTC (read-only query, always last)
     var STEP_RECOMMENDED_ORDER = {
         "enable_sync_exif":        1,
         "enable_gps_gap_fill":     2,
         "enable_extract_summary":  3,
         "enable_annotate_desc":    4,
         "enable_annotate_kw":      5,
-        "enable_blur":             6,
-        "enable_geo_rename":       7,
-        "enable_gopro":            8,
+        "enable_geo_rename":       6,
+        "enable_gopro":            7,
+        "enable_blur":             8,
         "enable_contact_sheet":    9,
         "enable_scrub":           10,
         "enable_search":          11
@@ -162,42 +173,94 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_search":          "Search EXIF / IPTC"
     };
 
-    // Why each dependency matters
+    // Dependency rules. "before" must run before "after".
+    // Organized by the key dependency chain:
+    //   GPS data -> summary -> descriptions -> keywords -> outputs -> cleanup
     var ORDER_RULES = [
+        // --- Sync EXIF is the foundation ---
         {
             before: "enable_sync_exif",
             after: "enable_gps_gap_fill",
-            reason: "Sync EXIF first so exported files have correct metadata before GPS gap filling reads timestamps."
+            reason: "Sync EXIF copies metadata from originals to exports. GPS Gap Fill needs the synced timestamps to find donor photos."
         },
+        {
+            before: "enable_sync_exif",
+            after: "enable_extract_summary",
+            reason: "Sync EXIF must run first so exports have the original camera/lens/exposure data that Extract Summary reads."
+        },
+
+        // --- GPS Gap Fill is the critical gate ---
+        // Everything that uses location (summary, annotations, renaming)
+        // must wait until GPS coordinates are filled in.
         {
             before: "enable_gps_gap_fill",
             after: "enable_extract_summary",
-            reason: "GPS Gap Fill should run before Extract Summary so the summary includes the filled-in location data."
+            reason: "Extract Summary uses GPS for reverse geocoding. Without GPS Gap Fill, photos missing coordinates will have no location in their summary."
         },
         {
             before: "enable_gps_gap_fill",
             after: "enable_annotate_desc",
-            reason: "GPS Gap Fill should run before annotation so descriptions can reference accurate location information."
+            reason: "Descriptions reference location context. GPS must be filled first so the LLM prompt includes accurate location data."
         },
         {
             before: "enable_gps_gap_fill",
             after: "enable_annotate_kw",
-            reason: "GPS Gap Fill should run before keyword generation so location-based keywords are accurate."
+            reason: "Keywords include location-based tags. GPS must be filled first so location keywords are accurate."
         },
+        {
+            before: "enable_gps_gap_fill",
+            after: "enable_geo_rename",
+            reason: "Geo Rename builds filenames from GPS coordinates. Without GPS Gap Fill, photos missing coordinates will not get location-based names."
+        },
+        {
+            before: "enable_gps_gap_fill",
+            after: "enable_gopro",
+            reason: "GoPro Geo Rename builds clip names from GPS coordinates. GPS must be filled first."
+        },
+
+        // --- Extract Summary feeds into annotations ---
         {
             before: "enable_extract_summary",
             after: "enable_annotate_desc",
-            reason: "Extract Summary writes technical metadata to comments first; Annotate Description can then build on that context."
+            reason: "Extract Summary writes technical metadata (camera, exposure, location) to comment fields. The description prompt reads these fields for context."
         },
+        {
+            before: "enable_extract_summary",
+            after: "enable_annotate_kw",
+            reason: "Extract Summary writes technical metadata that the keyword prompt uses for context (location name, camera model, etc.)."
+        },
+
+        // --- Description before keywords ---
         {
             before: "enable_annotate_desc",
             after: "enable_annotate_kw",
-            reason: "Description annotation should run before keywords so the keyword prompt can leverage the generated description."
+            reason: "The keyword prompt reads the generated description to produce more relevant keywords. Descriptions must be written first."
+        },
+
+        // --- Renaming should happen after metadata is written ---
+        // (Geo rename changes filenames; scripts that process by filename
+        //  should either run before renaming, or not care about names.)
+        {
+            before: "enable_extract_summary",
+            after: "enable_geo_rename",
+            reason: "Extract Summary should run before renaming so the summary is written while files still have their original names."
         },
         {
             before: "enable_annotate_desc",
+            after: "enable_geo_rename",
+            reason: "Annotations should complete before geo-renaming files, so metadata is fully written under the original filenames."
+        },
+        {
+            before: "enable_annotate_kw",
+            after: "enable_geo_rename",
+            reason: "Keywords should be written before geo-renaming files."
+        },
+
+        // --- Contact sheet should capture final metadata ---
+        {
+            before: "enable_annotate_desc",
             after: "enable_contact_sheet",
-            reason: "Annotate descriptions before generating the contact sheet so captions include the generated text."
+            reason: "Contact sheet captions use IPTC/EXIF descriptions. Annotate first so captions include the generated text."
         },
         {
             before: "enable_annotate_kw",
@@ -205,29 +268,36 @@ document.addEventListener("DOMContentLoaded", function() {
             reason: "Generate keywords before the contact sheet so keyword metadata is available for captions."
         },
         {
-            before: "enable_gps_gap_fill",
-            after: "enable_geo_rename",
-            reason: "GPS Gap Fill should run before Geo Rename so filenames include the filled-in location."
+            before: "enable_extract_summary",
+            after: "enable_contact_sheet",
+            reason: "Extract Summary should run before Contact Sheet so the summary text is available for captions."
         },
+
+        // --- Scrub is destructive - must be after all metadata writes ---
         {
-            before: "enable_gps_gap_fill",
-            after: "enable_gopro",
-            reason: "GPS Gap Fill should run before GoPro Geo Rename so clip names include accurate locations."
+            before: "enable_extract_summary",
+            after: "enable_scrub",
+            reason: "Scrub clears metadata fields that Extract Summary writes to. Run Extract Summary first or the summary will be erased."
         },
         {
             before: "enable_annotate_desc",
             after: "enable_scrub",
-            reason: "Run annotation before scrubbing, otherwise scrub will clear the fields annotation writes to."
+            reason: "Scrub clears metadata fields that description annotation writes to. Annotate first or the descriptions will be erased."
         },
         {
             before: "enable_annotate_kw",
             after: "enable_scrub",
-            reason: "Run keyword annotation before scrubbing, otherwise scrub will clear the keyword fields."
+            reason: "Scrub clears keyword fields. Generate keywords first or they will be erased."
         },
         {
-            before: "enable_extract_summary",
+            before: "enable_contact_sheet",
             after: "enable_scrub",
-            reason: "Run Extract Summary before scrubbing, otherwise scrub will clear the summary fields."
+            reason: "Contact sheet reads metadata for captions. Generate the contact sheet before scrubbing fields."
+        },
+        {
+            before: "enable_geo_rename",
+            after: "enable_scrub",
+            reason: "Geo Rename should complete before scrubbing, as scrubbing may remove metadata that rename needs."
         }
     ];
 

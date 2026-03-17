@@ -220,12 +220,16 @@ def _build_step(key, data):
     return None
 
 
-# Default step order (used when client doesn't send step_order)
+# Default step order (used when client doesn't send step_order).
+# Mirrors the recommended workflow:
+#   sync EXIF -> GPS gap fill -> summary -> descriptions -> keywords
+#   -> geo rename -> gopro rename -> blur detect -> contact sheet
+#   -> scrub -> search
 DEFAULT_STEP_ORDER = [
     "enable_sync_exif", "enable_gps_gap_fill", "enable_extract_summary",
-    "enable_annotate_desc", "enable_annotate_kw", "enable_blur",
-    "enable_geo_rename", "enable_gopro", "enable_contact_sheet",
-    "enable_scrub", "enable_search",
+    "enable_annotate_desc", "enable_annotate_kw",
+    "enable_geo_rename", "enable_gopro", "enable_blur",
+    "enable_contact_sheet", "enable_scrub", "enable_search",
 ]
 
 
