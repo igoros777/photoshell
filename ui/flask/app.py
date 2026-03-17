@@ -444,23 +444,24 @@ def api_browse():
     except OSError as exc:
         return jsonify({"error": str(exc)}), 500
 
+    dirs = []
     try:
-        entries = sorted(os.listdir(target))
+        with os.scandir(target) as it:
+            entries = []
+            for entry in it:
+                if not show_hidden and entry.name.startswith("."):
+                    continue
+                try:
+                    # is_dir() uses cached type info if available, avoiding extra stat calls
+                    if entry.is_dir():
+                        entries.append(entry.name)
+                except (OSError, PermissionError):
+                    continue
+            dirs = sorted(entries)
     except PermissionError:
         return jsonify({"error": "Permission denied"}), 403
     except OSError as exc:
         return jsonify({"error": str(exc)}), 500
-
-    dirs = []
-    for entry in entries:
-        if not show_hidden and entry.startswith("."):
-            continue
-        full = os.path.join(target, entry)
-        try:
-            if os.path.isdir(full):
-                dirs.append(entry)
-        except (OSError, PermissionError):
-            continue
 
     parent = os.path.dirname(target) if target != "/" else None
 
