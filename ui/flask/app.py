@@ -1,0 +1,298 @@
+#!/usr/bin/env python3
+"""PhotoShell Flask UI – run photo-processing scripts as a workflow."""
+
+import json
+import os
+import subprocess
+import threading
+import time
+import uuid
+from pathlib import Path
+
+from flask import Flask, jsonify, render_template, request
+
+app = Flask(__name__)
+
+# Resolve the scripts directory relative to this file
+SCRIPTS_DIR = str(Path(__file__).resolve().parent.parent.parent / "scripts")
+
+# In-memory job store: job_id -> {status, log, current_step, steps, pid}
+jobs: dict[str, dict] = {}
+jobs_lock = threading.Lock()
+
+
+# ---------------------------------------------------------------------------
+# Helper: stream a subprocess and append to the job log
+# ---------------------------------------------------------------------------
+
+def _run_step(job_id: str, step_index: int, cmd: list[str], cwd: str):
+    """Run one pipeline step, streaming output into the job log."""
+    with jobs_lock:
+        job = jobs[job_id]
+        job["current_step"] = step_index
+        label = job["steps"][step_index]
+        job["log"] += f"\n{'='*60}\n[Step {step_index+1}] {label}\n{'='*60}\n"
+        job["log"] += f"$ {' '.join(cmd)}\n\n"
+
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            cwd=cwd,
+            bufsize=1,
+        )
+        with jobs_lock:
+            jobs[job_id]["pid"] = proc.pid
+
+        for line in proc.stdout:
+            with jobs_lock:
+                jobs[job_id]["log"] += line
+
+        proc.wait()
+        rc = proc.returncode
+    except Exception as exc:
+        rc = -1
+        with jobs_lock:
+            jobs[job_id]["log"] += f"\n[ERROR] {exc}\n"
+
+    with jobs_lock:
+        jobs[job_id]["log"] += f"\n[Exit code: {rc}]\n"
+        jobs[job_id]["pid"] = None
+
+    return rc
+
+
+def _run_pipeline(job_id: str, steps: list[dict], cwd: str):
+    """Execute a sequence of steps; stop on first failure."""
+    for i, step in enumerate(steps):
+        rc = _run_step(job_id, i, step["cmd"], cwd)
+        if rc != 0:
+            with jobs_lock:
+                jobs[job_id]["status"] = "failed"
+                jobs[job_id]["log"] += "\n*** Pipeline stopped due to error ***\n"
+            return
+
+    with jobs_lock:
+        jobs[job_id]["status"] = "done"
+        jobs[job_id]["log"] += "\n*** All steps completed successfully ***\n"
+
+
+# ---------------------------------------------------------------------------
+# Build command lists from form data
+# ---------------------------------------------------------------------------
+
+def _script(name: str) -> str:
+    return os.path.join(SCRIPTS_DIR, name)
+
+
+def build_pipeline(data: dict) -> list[dict]:
+    """Return a list of {label, cmd} dicts from the submitted form."""
+    photo_dir = data["photo_dir"]
+    steps: list[dict] = []
+
+    # 1) sync_exif_and_rename
+    if data.get("enable_sync_exif"):
+        cmd = ["bash", _script("sync_exif_and_rename.sh"), photo_dir]
+        if data.get("sync_orig_dir"):
+            cmd += ["--orig-dir", data["sync_orig_dir"]]
+        if data.get("sync_dry_run"):
+            cmd.append("--dry-run")
+        steps.append({"label": "Sync EXIF & Rename", "cmd": cmd})
+
+    # 2) gps_gap_fill
+    if data.get("enable_gps_gap_fill"):
+        cmd = ["bash", _script("gps_gap_fill.sh")]
+        if data.get("gps_dry_run"):
+            cmd.append("--dry-run")
+        steps.append({"label": "GPS Gap Fill", "cmd": cmd})
+
+    # 3) extract_photo_summary (via find + xargs)
+    if data.get("enable_extract_summary"):
+        script_path = _script("extract_photo_summary.sh")
+        cmd = [
+            "bash", "-c",
+            f'find ./ -maxdepth 1 -type f \\( -iname "*.jpg" -o -iname "*.jpeg" \\) '
+            f'-print0 | xargs -0 -I{{}} bash "{script_path}" "{{}}"',
+        ]
+        steps.append({"label": "Extract Photo Summary", "cmd": cmd})
+
+    # 4) annotate – description
+    if data.get("enable_annotate_desc"):
+        cmd = ["bash", _script("annotate_photos_with_ollama.sh"), "--description"]
+        if data.get("desc_model"):
+            cmd += ["-m", data["desc_model"]]
+        if data.get("desc_prompt_id"):
+            cmd += ["--prompt-id", data["desc_prompt_id"]]
+        if data.get("desc_recursive"):
+            cmd.append("--recursive")
+        if data.get("desc_file"):
+            cmd += ["--file", data["desc_file"]]
+        steps.append({"label": "Annotate (Description)", "cmd": cmd})
+
+    # 5) annotate – keywords
+    if data.get("enable_annotate_kw"):
+        cmd = ["bash", _script("annotate_photos_with_ollama.sh"), "--keywords"]
+        if data.get("kw_model"):
+            cmd += ["-m", data["kw_model"]]
+        if data.get("kw_prompt_id"):
+            cmd += ["--prompt-id", data["kw_prompt_id"]]
+        if data.get("kw_recursive"):
+            cmd.append("--recursive")
+        if data.get("kw_file"):
+            cmd += ["--file", data["kw_file"]]
+        steps.append({"label": "Annotate (Keywords)", "cmd": cmd})
+
+    # 6) detect_blurry_photos
+    if data.get("enable_blur"):
+        cmd = ["bash", _script("detect_blurry_photos.sh")]
+        if data.get("blur_mode"):
+            cmd += ["--mode", data["blur_mode"]]
+        if data.get("blur_time_gap"):
+            cmd += ["--time-gap", data["blur_time_gap"]]
+        if data.get("blur_no_visual"):
+            cmd.append("--no-visual")
+        if data.get("blur_visual_threshold"):
+            cmd += ["--visual-threshold", data["blur_visual_threshold"]]
+        if data.get("blur_thumb_size"):
+            cmd += ["--thumb-size", data["blur_thumb_size"]]
+        if data.get("blur_window"):
+            cmd += ["--window", data["blur_window"]]
+        if data.get("blur_clean"):
+            cmd.append("--clean")
+        if data.get("blur_dry_run"):
+            cmd.append("--dry-run")
+        steps.append({"label": "Detect Blurry Photos", "cmd": cmd})
+
+    # 7) geo_rename_photos
+    if data.get("enable_geo_rename"):
+        cmd = ["bash", _script("geo_rename_photos.sh")]
+        if data.get("geo_structure"):
+            cmd += ["--structure", data["geo_structure"]]
+        if data.get("geo_dry_run"):
+            cmd.append("--dry-run")
+        steps.append({"label": "Geo Rename Photos", "cmd": cmd})
+
+    # 8) gopro_geo_rename
+    if data.get("enable_gopro"):
+        cmd = ["bash", _script("gopro_geo_rename.sh")]
+        steps.append({"label": "GoPro Geo Rename", "cmd": cmd})
+
+    # 9) contact_sheet
+    if data.get("enable_contact_sheet"):
+        cmd = ["bash", _script("contact_sheet.sh")]
+        if data.get("cs_thumb_size"):
+            cmd += ["--thumb-size", data["cs_thumb_size"]]
+        if data.get("cs_theme"):
+            cmd += ["--theme", data["cs_theme"]]
+        if data.get("cs_output"):
+            cmd += ["--output", data["cs_output"]]
+        if data.get("cs_recursive"):
+            cmd.append("--recursive")
+        steps.append({"label": "Contact Sheet", "cmd": cmd})
+
+    # 10) scrub_selected_metadata
+    if data.get("enable_scrub"):
+        cmd = ["bash", _script("scrub_selected_metadata.sh")]
+        if data.get("scrub_exif_tags"):
+            cmd += ["--exif", data["scrub_exif_tags"]]
+        if data.get("scrub_iptc_tags"):
+            cmd += ["--iptc", data["scrub_iptc_tags"]]
+        if data.get("scrub_recursive"):
+            cmd += ["-r", data.get("scrub_recursive_depth", "0")]
+        if data.get("scrub_dry_run"):
+            cmd.append("--dry-run")
+        steps.append({"label": "Scrub Metadata", "cmd": cmd})
+
+    # 11) search_exif_iptc
+    if data.get("enable_search"):
+        query = data.get("search_query", "")
+        if query:
+            cmd = ["bash", _script("search_exif_iptc.sh"), "-q", query]
+            if data.get("search_fields"):
+                cmd += ["-f", data["search_fields"]]
+            if data.get("search_media_types"):
+                cmd += ["-m", data["search_media_types"]]
+            if data.get("search_no_recursive"):
+                cmd.append("--no-recursive")
+            if data.get("search_fzf"):
+                cmd.append("--fzf")
+            if data.get("search_copy_to"):
+                cmd += ["--copy-to", data["search_copy_to"]]
+            steps.append({"label": "Search EXIF/IPTC", "cmd": cmd})
+
+    return steps
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+@app.route("/api/run", methods=["POST"])
+def api_run():
+    data = request.get_json(force=True)
+    photo_dir = data.get("photo_dir", "").strip()
+    if not photo_dir:
+        return jsonify({"error": "photo_dir is required"}), 400
+
+    steps = build_pipeline(data)
+    if not steps:
+        return jsonify({"error": "No steps selected"}), 400
+
+    job_id = str(uuid.uuid4())[:8]
+    with jobs_lock:
+        jobs[job_id] = {
+            "status": "running",
+            "log": f"Photo directory: {photo_dir}\nSteps: {len(steps)}\n",
+            "current_step": 0,
+            "steps": [s["label"] for s in steps],
+            "pid": None,
+        }
+
+    t = threading.Thread(target=_run_pipeline, args=(job_id, steps, photo_dir), daemon=True)
+    t.start()
+
+    return jsonify({"job_id": job_id, "steps": [s["label"] for s in steps]})
+
+
+@app.route("/api/status/<job_id>")
+def api_status(job_id: str):
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "not found"}), 404
+    return jsonify({
+        "status": job["status"],
+        "current_step": job["current_step"],
+        "steps": job["steps"],
+        "log": job["log"],
+    })
+
+
+@app.route("/api/cancel/<job_id>", methods=["POST"])
+def api_cancel(job_id: str):
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if not job:
+            return jsonify({"error": "not found"}), 404
+        pid = job.get("pid")
+        job["status"] = "cancelled"
+        job["log"] += "\n*** Cancelled by user ***\n"
+
+    if pid:
+        try:
+            os.kill(pid, 9)
+        except OSError:
+            pass
+
+    return jsonify({"ok": True})
+
+
+if __name__ == "__main__":
+    app.run(debug=True, host="127.0.0.1", port=5000)
