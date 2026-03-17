@@ -6,6 +6,7 @@ import glob
 import json
 import os
 import socket
+import stat
 import subprocess
 import threading
 import time
@@ -331,6 +332,7 @@ def api_mermaid_test(doc_key):
 def api_browse():
     """Return subdirectories of a given path for the folder browser."""
     path = request.args.get("path", "/").strip()
+    show_hidden = request.args.get("hidden", "").lower() in ("1", "true", "yes")
     if not path:
         path = "/"
 
@@ -348,12 +350,31 @@ def api_browse():
 
     dirs = []
     try:
-        for entry in sorted(os.listdir(target)):
-            full = os.path.join(target, entry)
-            if os.path.isdir(full) and not entry.startswith("."):
-                dirs.append(entry)
+        entries = sorted(os.listdir(target))
     except PermissionError:
         return jsonify({"error": "Permission denied"}), 403
+    except OSError as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    for entry in entries:
+        if not show_hidden and entry.startswith("."):
+            continue
+        full = os.path.join(target, entry)
+        try:
+            # Use os.stat to follow symlinks; also catches mount points
+            # that os.path.isdir might miss under WSL/FUSE
+            st = os.stat(full)
+            if stat.S_ISDIR(st.st_mode):
+                dirs.append(entry)
+        except (OSError, PermissionError):
+            # If stat fails (broken mount, permission), still try lstat
+            # to detect symlinks that point to directories
+            try:
+                lst = os.lstat(full)
+                if stat.S_ISDIR(lst.st_mode) or stat.S_ISLNK(lst.st_mode):
+                    dirs.append(entry)
+            except (OSError, PermissionError):
+                continue
 
     parent = os.path.dirname(target) if target != "/" else None
 
