@@ -353,6 +353,37 @@ def _fs_op_with_timeout(fn, timeout=3):
     return result[0], None
 
 
+def _listdir_with_dirs(target, show_hidden):
+    """List a directory and classify entries as dirs or non-dirs.
+
+    Does all filesystem I/O in one shot so the caller can wrap it in
+    a single timeout.  Returns a list of directory entry names.
+    On network mounts (CIFS/NFS/FUSE) lstat() mode bits are unreliable,
+    so we fall back to os.path.isdir() for every entry that lstat does
+    not positively identify as a directory.
+    """
+    dirs = []
+    for entry in sorted(os.listdir(target)):
+        if not show_hidden and entry.startswith("."):
+            continue
+        full = os.path.join(target, entry)
+        try:
+            # Try lstat first (fast, no symlink follow)
+            lst = os.lstat(full)
+            if stat.S_ISDIR(lst.st_mode):
+                dirs.append(entry)
+                continue
+            # On CIFS/NFS, dirs often report as S_IFREG.
+            # Always fall back to os.path.isdir() which does a full
+            # stat call and correctly queries the server.
+            if os.path.isdir(full):
+                dirs.append(entry)
+        except (OSError, PermissionError):
+            # Silently skip entries we cannot stat
+            continue
+    return dirs
+
+
 @app.route("/api/browse")
 def api_browse():
     """Return subdirectories of a given path for the folder browser."""
@@ -362,97 +393,46 @@ def api_browse():
         path = "/"
 
     # Expand ~ but do NOT resolve symlinks (realpath can hang on network mounts)
-    target = os.path.expanduser(path)
+    target = os.path.normpath(os.path.expanduser(path))
 
-    # Normalize without resolving symlinks: collapse .. and redundant slashes
-    target = os.path.normpath(target)
-
-    # Check that the target is a directory (with timeout for network mounts)
-    is_dir, err = _fs_op_with_timeout(lambda: os.path.isdir(target))
+    # Check that the target is a directory (generous timeout for SMB/NFS)
+    is_dir, err = _fs_op_with_timeout(lambda: os.path.isdir(target), timeout=15)
     if err == "timeout":
-        return jsonify({"error": "Timed out accessing path (may be an unresponsive network mount)"}), 504
+        return jsonify({"error": "Timed out accessing path (unresponsive network mount?)"}), 504
     if err:
         return jsonify({"error": str(err)}), 500
 
     if not is_dir:
-        # Try parent
         target = os.path.dirname(target)
-        is_dir2, err2 = _fs_op_with_timeout(lambda: os.path.isdir(target))
+        is_dir2, err2 = _fs_op_with_timeout(lambda: os.path.isdir(target), timeout=10)
         if err2 or not is_dir2:
             return jsonify({"error": "Directory not found"}), 404
 
-    # List entries (with timeout)
-    entries_result, err = _fs_op_with_timeout(lambda: sorted(os.listdir(target)), timeout=5)
+    # List + classify in one call so a single timeout covers the whole
+    # operation (SMB first-access can be slow, but once the share responds
+    # all entries come back together).
+    dirs_result, err = _fs_op_with_timeout(
+        lambda: _listdir_with_dirs(target, show_hidden), timeout=30
+    )
     if err == "timeout":
         return jsonify({
             "current": target,
             "parent": os.path.dirname(target) if target != "/" else None,
             "dirs": [],
-            "warning": "Timed out listing directory (slow or unresponsive mount)",
+            "warning": "Timed out listing directory contents (slow network mount)",
         })
     if err:
-        exc = err
-        if isinstance(exc, PermissionError):
+        if isinstance(err, PermissionError):
             return jsonify({"error": "Permission denied"}), 403
-        return jsonify({"error": str(exc)}), 500
-
-    entries = entries_result
-
-    # Classify entries as directories.
-    # On network mounts (CIFS/NFS/FUSE) lstat() mode bits can be unreliable:
-    # directories may report as regular files, DT_UNKNOWN, etc.
-    # Strategy: try lstat first for speed, fall back to os.path.isdir() with
-    # a timeout for anything lstat didn't identify as a directory.
-    dirs = []
-    stale = []
-    for entry in entries:
-        if not show_hidden and entry.startswith("."):
-            continue
-        full = os.path.join(target, entry)
-
-        # Fast path: lstat (no symlink follow, usually no network roundtrip
-        # for entries already cached by the kernel from listdir)
-        is_dir_fast = False
-        is_link = False
-        try:
-            lst = os.lstat(full)
-            is_dir_fast = stat.S_ISDIR(lst.st_mode)
-            is_link = stat.S_ISLNK(lst.st_mode)
-        except (OSError, PermissionError):
-            # lstat failed entirely; still try isdir as fallback
-            pass
-
-        if is_dir_fast:
-            dirs.append(entry)
-            continue
-
-        # Slow path: lstat didn't say it's a directory.
-        # On network mounts this is common — files AND dirs can report
-        # as S_IFREG or have mangled mode bits. Use os.path.isdir()
-        # which does a proper stat+follow and checks the server.
-        check_result, check_err = _fs_op_with_timeout(
-            lambda f=full: os.path.isdir(f), timeout=2
-        )
-        if check_err == "timeout":
-            # Likely a stale sub-mount or very slow share
-            if is_link:
-                stale.append(entry)
-                dirs.append(entry)
-            continue
-        if check_result:
-            dirs.append(entry)
+        return jsonify({"error": str(err)}), 500
 
     parent = os.path.dirname(target) if target != "/" else None
 
-    resp = {
+    return jsonify({
         "current": target,
         "parent": parent,
-        "dirs": dirs,
-    }
-    if stale:
-        resp["warning"] = "Some entries may be slow/unresponsive: " + ", ".join(stale)
-
-    return jsonify(resp)
+        "dirs": dirs_result,
+    })
 
 
 @app.route("/api/validate_folder")

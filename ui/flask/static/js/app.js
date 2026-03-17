@@ -639,7 +639,7 @@ document.addEventListener("DOMContentLoaded", function() {
     var browserShowHidden = document.getElementById("browser-show-hidden");
 
     function browseToPath(path) {
-        browserList.innerHTML = '<div class="text-muted p-3"><i class="bi bi-hourglass-split"></i> Loading...</div>';
+        browserList.innerHTML = '<div class="text-muted p-3"><i class="bi bi-hourglass-split"></i> Loading (network mounts may take a moment)...</div>';
         browserPathInput.value = path;
 
         var url = "/api/browse?path=" + encodeURIComponent(path);
