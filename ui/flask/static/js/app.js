@@ -19,10 +19,92 @@ document.addEventListener("DOMContentLoaded", function() {
     var browserList      = document.getElementById("browser-list");
     var browserSelectBtn = document.getElementById("browser-select-btn");
 
+    // Docs modal elements
+    var docsModal    = new bootstrap.Modal(document.getElementById("docsModal"));
+    var docsTitle    = document.getElementById("docs-modal-title");
+    var docsLoading  = document.getElementById("docs-loading");
+    var docsContent  = document.getElementById("docs-content");
+
     var currentJobId = null;
     var pollTimer    = null;
     var folderValid  = false;
     var validateTimer = null;
+
+    // ---- Initialize Bootstrap popovers for info tooltips ----
+
+    document.querySelectorAll(".step-tooltip").forEach(function(el) {
+        new bootstrap.Popover(el, {
+            container: "body",
+            placement: "top",
+            html: false
+        });
+    });
+
+    // ---- Documentation modal links ----
+
+    document.querySelectorAll(".step-docs-link").forEach(function(el) {
+        el.addEventListener("click", function(e) {
+            e.stopPropagation();
+            var docKey = el.dataset.doc;
+            openDocsModal(docKey);
+        });
+    });
+
+    function openDocsModal(docKey) {
+        docsLoading.style.display = "block";
+        docsContent.innerHTML = "";
+        docsContent.style.display = "none";
+        docsTitle.innerHTML = '<i class="bi bi-book"></i> Loading...';
+        docsModal.show();
+
+        fetch("/api/docs/" + encodeURIComponent(docKey))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    docsLoading.style.display = "none";
+                    docsContent.style.display = "block";
+                    docsContent.innerHTML = '<div class="text-danger">Error: ' + data.error + '</div>';
+                    return;
+                }
+
+                docsTitle.innerHTML = '<i class="bi bi-book"></i> ' + data.filename;
+
+                // Use a custom renderer to handle mermaid code blocks
+                var renderer = new marked.Renderer();
+                var originalCode = renderer.code;
+                renderer.code = function(code, language) {
+                    // marked v5+ passes an object; v4 passes (code, language)
+                    var text = (typeof code === "object") ? code.text : code;
+                    var lang = (typeof code === "object") ? code.lang : language;
+                    if (lang === "mermaid") {
+                        return '<div class="mermaid">' + text + '</div>';
+                    }
+                    // Default code rendering
+                    var escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                    return '<pre><code class="language-' + (lang || "") + '">' + escaped + '</code></pre>';
+                };
+
+                var html = marked.parse(data.content, { renderer: renderer });
+                docsLoading.style.display = "none";
+                docsContent.innerHTML = html;
+                docsContent.style.display = "block";
+
+                // Render mermaid diagrams
+                var mermaidDivs = docsContent.querySelectorAll(".mermaid");
+                if (mermaidDivs.length > 0) {
+                    try {
+                        mermaid.run({ nodes: mermaidDivs });
+                    } catch(e) {
+                        console.warn("Mermaid rendering error:", e);
+                    }
+                }
+            })
+            .catch(function(err) {
+                docsLoading.style.display = "none";
+                docsContent.style.display = "block";
+                docsContent.innerHTML = '<div class="text-danger">Failed to load documentation: ' + err + '</div>';
+            });
+    }
 
     // ---- Toggle accordion sections based on checkboxes in the header ----
 
