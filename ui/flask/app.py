@@ -2,6 +2,7 @@
 """PhotoShell Flask UI - run photo-processing scripts as a workflow."""
 
 import argparse
+import glob
 import json
 import os
 import socket
@@ -233,9 +234,93 @@ def build_pipeline(data):
 # Routes
 # ---------------------------------------------------------------------------
 
+PHOTO_EXTENSIONS = {
+    ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".heic", ".heif",
+    ".webp", ".bmp", ".gif", ".dng", ".nef", ".cr2", ".cr3",
+    ".arw", ".orf", ".rw2", ".srw", ".raf", ".pef", ".x3f",
+}
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/api/browse")
+def api_browse():
+    """Return subdirectories of a given path for the folder browser."""
+    path = request.args.get("path", "/").strip()
+    if not path:
+        path = "/"
+
+    # Normalize and resolve
+    try:
+        target = os.path.realpath(os.path.expanduser(path))
+    except Exception:
+        return jsonify({"error": "Invalid path"}), 400
+
+    if not os.path.isdir(target):
+        # Try parent
+        target = os.path.dirname(target)
+        if not os.path.isdir(target):
+            return jsonify({"error": "Directory not found"}), 404
+
+    dirs = []
+    try:
+        for entry in sorted(os.listdir(target)):
+            full = os.path.join(target, entry)
+            if os.path.isdir(full) and not entry.startswith("."):
+                dirs.append(entry)
+    except PermissionError:
+        return jsonify({"error": "Permission denied"}), 403
+
+    parent = os.path.dirname(target) if target != "/" else None
+
+    return jsonify({
+        "current": target,
+        "parent": parent,
+        "dirs": dirs,
+    })
+
+
+@app.route("/api/validate_folder")
+def api_validate_folder():
+    """Check if the folder exists and contains photo files."""
+    path = request.args.get("path", "").strip()
+    if not path:
+        return jsonify({"valid": False, "reason": "No path specified"})
+
+    try:
+        target = os.path.realpath(os.path.expanduser(path))
+    except Exception:
+        return jsonify({"valid": False, "reason": "Invalid path"})
+
+    if not os.path.isdir(target):
+        return jsonify({"valid": False, "reason": "Directory does not exist"})
+
+    # Count photo files (non-recursive, first level only)
+    photo_count = 0
+    try:
+        for entry in os.listdir(target):
+            ext = os.path.splitext(entry)[1].lower()
+            if ext in PHOTO_EXTENSIONS:
+                photo_count += 1
+    except PermissionError:
+        return jsonify({"valid": False, "reason": "Permission denied"})
+
+    if photo_count == 0:
+        return jsonify({
+            "valid": True,
+            "warning": "Directory exists but contains no photo files",
+            "photo_count": 0,
+            "path": target,
+        })
+
+    return jsonify({
+        "valid": True,
+        "photo_count": photo_count,
+        "path": target,
+    })
 
 
 @app.route("/api/run", methods=["POST"])
