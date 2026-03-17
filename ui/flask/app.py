@@ -398,8 +398,11 @@ def api_browse():
 
     entries = entries_result
 
-    # Classify entries as directories. Use a short per-entry timeout
-    # to avoid hanging on individual stale mount points.
+    # Classify entries as directories.
+    # On network mounts (CIFS/NFS/FUSE) lstat() mode bits can be unreliable:
+    # directories may report as regular files, DT_UNKNOWN, etc.
+    # Strategy: try lstat first for speed, fall back to os.path.isdir() with
+    # a timeout for anything lstat didn't identify as a directory.
     dirs = []
     stale = []
     for entry in entries:
@@ -407,23 +410,37 @@ def api_browse():
             continue
         full = os.path.join(target, entry)
 
-        # Try lstat first (does not follow symlinks, fast, no network roundtrip)
+        # Fast path: lstat (no symlink follow, usually no network roundtrip
+        # for entries already cached by the kernel from listdir)
+        is_dir_fast = False
+        is_link = False
         try:
             lst = os.lstat(full)
+            is_dir_fast = stat.S_ISDIR(lst.st_mode)
+            is_link = stat.S_ISLNK(lst.st_mode)
         except (OSError, PermissionError):
+            # lstat failed entirely; still try isdir as fallback
+            pass
+
+        if is_dir_fast:
+            dirs.append(entry)
             continue
 
-        if stat.S_ISDIR(lst.st_mode):
-            dirs.append(entry)
-        elif stat.S_ISLNK(lst.st_mode):
-            # Symlink: try to resolve with a timeout (may point to network mount)
-            is_link_dir, lerr = _fs_op_with_timeout(lambda f=full: os.path.isdir(f), timeout=2)
-            if lerr == "timeout":
-                # Include it but mark as potentially stale
+        # Slow path: lstat didn't say it's a directory.
+        # On network mounts this is common — files AND dirs can report
+        # as S_IFREG or have mangled mode bits. Use os.path.isdir()
+        # which does a proper stat+follow and checks the server.
+        check_result, check_err = _fs_op_with_timeout(
+            lambda f=full: os.path.isdir(f), timeout=2
+        )
+        if check_err == "timeout":
+            # Likely a stale sub-mount or very slow share
+            if is_link:
                 stale.append(entry)
                 dirs.append(entry)
-            elif is_link_dir:
-                dirs.append(entry)
+            continue
+        if check_result:
+            dirs.append(entry)
 
     parent = os.path.dirname(target) if target != "/" else None
 
