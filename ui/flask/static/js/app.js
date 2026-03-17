@@ -265,7 +265,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 for (var i = 0; i < data.dirs.length; i++) {
                     var fullPath = data.current + (data.current.endsWith("/") ? "" : "/") + data.dirs[i];
                     html += '<div class="browser-item" data-path="' + escapeAttr(fullPath) + '">' +
-                            '<i class="bi bi-folder-fill" style="color:var(--ps-warning)"></i> ' +
+                            '<i class="bi bi-folder-fill" style="color:#aaa"></i> ' +
                             escapeHtml(data.dirs[i]) +
                             '</div>';
                 }

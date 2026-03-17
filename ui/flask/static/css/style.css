@@ -1,17 +1,17 @@
 /* PhotoShell UI */
 
 :root {
-    --ps-bg: #1a1a2e;
-    --ps-surface: #16213e;
-    --ps-surface2: #0f3460;
-    --ps-accent: #e94560;
-    --ps-accent-hover: #ff6b81;
-    --ps-text: #eaeaea;
-    --ps-text-muted: #a0a0b0;
-    --ps-border: #2a2a4a;
-    --ps-success: #2ecc71;
-    --ps-warning: #f39c12;
-    --ps-danger: #e74c3c;
+    --ps-bg: #232323;
+    --ps-surface: #2c2c2c;
+    --ps-surface2: #363636;
+    --ps-accent: #b0b0b0;
+    --ps-accent-hover: #d0d0d0;
+    --ps-text: #e8e8e8;
+    --ps-text-muted: #909090;
+    --ps-border: #444;
+    --ps-success: #7a7a7a;
+    --ps-warning: #999;
+    --ps-danger: #c45;
 }
 
 body {
@@ -102,8 +102,8 @@ body {
     font-size: .7rem;
     padding: .2em .55em;
     border-radius: 3px;
-    background: var(--ps-accent);
-    color: #fff;
+    background: #505050;
+    color: #ccc;
     margin-left: auto;
     margin-right: 1rem;
     white-space: nowrap;
@@ -144,9 +144,9 @@ body {
 
 /* Buttons */
 .btn-photoshell {
-    background: var(--ps-accent);
-    color: #fff;
-    border: none;
+    background: #505050;
+    color: #e8e8e8;
+    border: 1px solid #666;
     font-weight: 600;
     padding: .6rem 2rem;
     border-radius: 6px;
@@ -154,7 +154,7 @@ body {
 }
 
 .btn-photoshell:hover {
-    background: var(--ps-accent-hover);
+    background: #666;
     color: #fff;
 }
 
@@ -179,7 +179,7 @@ body {
 
 /* Log viewer */
 .log-panel {
-    background: #0d0d1a;
+    background: #1a1a1a;
     border: 1px solid var(--ps-border);
     border-radius: 6px;
     padding: 1rem;
@@ -190,7 +190,7 @@ body {
     overflow-y: auto;
     white-space: pre-wrap;
     word-break: break-all;
-    color: #b0b0c0;
+    color: #b0b0b0;
     display: none;
 }
 
@@ -225,19 +225,19 @@ body {
 }
 
 .pipeline-step.running {
-    background: var(--ps-warning);
-    color: #111;
+    background: #888;
+    color: #1a1a1a;
     animation: pulse 1.5s infinite;
 }
 
 .pipeline-step.done {
-    background: var(--ps-success);
-    color: #111;
+    background: #666;
+    color: #e0e0e0;
 }
 
 .pipeline-step.failed {
-    background: var(--ps-danger);
-    color: #fff;
+    background: #8a3030;
+    color: #e0e0e0;
 }
 
 @keyframes pulse {
@@ -335,7 +335,7 @@ body {
 .docs-rendered h2,
 .docs-rendered h3,
 .docs-rendered h4 {
-    color: var(--ps-accent);
+    color: #ddd;
     margin-top: 1.5rem;
     margin-bottom: .75rem;
     border-bottom: 1px solid var(--ps-border);
@@ -347,15 +347,15 @@ body {
 .docs-rendered h3 { font-size: 1.1rem; }
 
 .docs-rendered code {
-    background: var(--ps-bg);
-    color: var(--ps-accent-hover);
+    background: #1a1a1a;
+    color: #ccc;
     padding: .15em .4em;
     border-radius: 3px;
     font-size: .85em;
 }
 
 .docs-rendered pre {
-    background: #0d0d1a;
+    background: #1a1a1a;
     border: 1px solid var(--ps-border);
     border-radius: 6px;
     padding: 1rem;
@@ -365,12 +365,12 @@ body {
 
 .docs-rendered pre code {
     background: none;
-    color: #b0b0c0;
+    color: #aaa;
     padding: 0;
 }
 
 .docs-rendered blockquote {
-    border-left: 3px solid var(--ps-accent);
+    border-left: 3px solid #555;
     margin-left: 0;
     padding-left: 1rem;
     color: var(--ps-text-muted);
@@ -392,7 +392,7 @@ body {
 
 .docs-rendered th {
     background: var(--ps-surface2);
-    color: var(--ps-accent);
+    color: #ddd;
 }
 
 .docs-rendered tr:nth-child(even) {
@@ -400,7 +400,9 @@ body {
 }
 
 .docs-rendered a {
-    color: var(--ps-accent);
+    color: #bbb;
+    text-decoration: underline;
+    text-decoration-color: #666;
 }
 
 .docs-rendered .mermaid {
