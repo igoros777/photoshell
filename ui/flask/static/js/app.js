@@ -636,11 +636,17 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // ---- Folder Browser ----
 
+    var browserShowHidden = document.getElementById("browser-show-hidden");
+
     function browseToPath(path) {
         browserList.innerHTML = '<div class="text-muted p-3"><i class="bi bi-hourglass-split"></i> Loading...</div>';
         browserPathInput.value = path;
 
-        fetch("/api/browse?path=" + encodeURIComponent(path))
+        var url = "/api/browse?path=" + encodeURIComponent(path);
+        if (browserShowHidden && browserShowHidden.checked) {
+            url += "&hidden=1";
+        }
+        fetch(url)
             .then(function(res) { return res.json(); })
             .then(function(data) {
                 if (data.error) {
@@ -705,6 +711,11 @@ document.addEventListener("DOMContentLoaded", function() {
 
     browserGoBtn.addEventListener("click", function() {
         browseToPath(browserPathInput.value.trim() || "/");
+    });
+
+    browserShowHidden.addEventListener("change", function() {
+        var current = browserPathInput.value.trim() || "/";
+        browseToPath(current);
     });
 
     browserPathInput.addEventListener("keydown", function(e) {
