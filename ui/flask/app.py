@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PhotoShell Flask UI – run photo-processing scripts as a workflow."""
+"""PhotoShell Flask UI - run photo-processing scripts as a workflow."""
 
 import json
 import os
