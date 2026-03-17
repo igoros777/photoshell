@@ -25,21 +25,23 @@ jobs_lock = threading.Lock()
 # Helper: stream a subprocess and append to the job log
 # ---------------------------------------------------------------------------
 
-def _run_step(job_id: str, step_index: int, cmd: list[str], cwd: str):
+def _run_step(job_id, step_index, cmd, cwd):
     """Run one pipeline step, streaming output into the job log."""
     with jobs_lock:
         job = jobs[job_id]
         job["current_step"] = step_index
         label = job["steps"][step_index]
-        job["log"] += f"\n{'='*60}\n[Step {step_index+1}] {label}\n{'='*60}\n"
-        job["log"] += f"$ {' '.join(cmd)}\n\n"
+        job["log"] += "\n" + "=" * 60 + "\n"
+        job["log"] += "[Step %d] %s\n" % (step_index + 1, label)
+        job["log"] += "=" * 60 + "\n"
+        job["log"] += "$ %s\n\n" % " ".join(cmd)
 
     try:
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True,
+            universal_newlines=True,
             cwd=cwd,
             bufsize=1,
         )
@@ -55,16 +57,16 @@ def _run_step(job_id: str, step_index: int, cmd: list[str], cwd: str):
     except Exception as exc:
         rc = -1
         with jobs_lock:
-            jobs[job_id]["log"] += f"\n[ERROR] {exc}\n"
+            jobs[job_id]["log"] += "\n[ERROR] %s\n" % str(exc)
 
     with jobs_lock:
-        jobs[job_id]["log"] += f"\n[Exit code: {rc}]\n"
+        jobs[job_id]["log"] += "\n[Exit code: %d]\n" % rc
         jobs[job_id]["pid"] = None
 
     return rc
 
 
-def _run_pipeline(job_id: str, steps: list[dict], cwd: str):
+def _run_pipeline(job_id, steps, cwd):
     """Execute a sequence of steps; stop on first failure."""
     for i, step in enumerate(steps):
         rc = _run_step(job_id, i, step["cmd"], cwd)
@@ -83,14 +85,14 @@ def _run_pipeline(job_id: str, steps: list[dict], cwd: str):
 # Build command lists from form data
 # ---------------------------------------------------------------------------
 
-def _script(name: str) -> str:
+def _script(name):
     return os.path.join(SCRIPTS_DIR, name)
 
 
-def build_pipeline(data: dict) -> list[dict]:
+def build_pipeline(data):
     """Return a list of {label, cmd} dicts from the submitted form."""
     photo_dir = data["photo_dir"]
-    steps: list[dict] = []
+    steps = []
 
     # 1) sync_exif_and_rename
     if data.get("enable_sync_exif"):
@@ -113,12 +115,12 @@ def build_pipeline(data: dict) -> list[dict]:
         script_path = _script("extract_photo_summary.sh")
         cmd = [
             "bash", "-c",
-            f'find ./ -maxdepth 1 -type f \\( -iname "*.jpg" -o -iname "*.jpeg" \\) '
-            f'-print0 | xargs -0 -I{{}} bash "{script_path}" "{{}}"',
+            'find ./ -maxdepth 1 -type f \\( -iname "*.jpg" -o -iname "*.jpeg" \\) '
+            '-print0 | xargs -0 -I{} bash "%s" "{}"' % script_path,
         ]
         steps.append({"label": "Extract Photo Summary", "cmd": cmd})
 
-    # 4) annotate – description
+    # 4) annotate - description
     if data.get("enable_annotate_desc"):
         cmd = ["bash", _script("annotate_photos_with_ollama.sh"), "--description"]
         if data.get("desc_model"):
@@ -131,7 +133,7 @@ def build_pipeline(data: dict) -> list[dict]:
             cmd += ["--file", data["desc_file"]]
         steps.append({"label": "Annotate (Description)", "cmd": cmd})
 
-    # 5) annotate – keywords
+    # 5) annotate - keywords
     if data.get("enable_annotate_kw"):
         cmd = ["bash", _script("annotate_photos_with_ollama.sh"), "--keywords"]
         if data.get("kw_model"):
@@ -249,20 +251,21 @@ def api_run():
     with jobs_lock:
         jobs[job_id] = {
             "status": "running",
-            "log": f"Photo directory: {photo_dir}\nSteps: {len(steps)}\n",
+            "log": "Photo directory: %s\nSteps: %d\n" % (photo_dir, len(steps)),
             "current_step": 0,
             "steps": [s["label"] for s in steps],
             "pid": None,
         }
 
-    t = threading.Thread(target=_run_pipeline, args=(job_id, steps, photo_dir), daemon=True)
+    t = threading.Thread(target=_run_pipeline, args=(job_id, steps, photo_dir))
+    t.daemon = True
     t.start()
 
     return jsonify({"job_id": job_id, "steps": [s["label"] for s in steps]})
 
 
 @app.route("/api/status/<job_id>")
-def api_status(job_id: str):
+def api_status(job_id):
     with jobs_lock:
         job = jobs.get(job_id)
     if not job:
@@ -276,7 +279,7 @@ def api_status(job_id: str):
 
 
 @app.route("/api/cancel/<job_id>", methods=["POST"])
-def api_cancel(job_id: str):
+def api_cancel(job_id):
     with jobs_lock:
         job = jobs.get(job_id)
         if not job:
