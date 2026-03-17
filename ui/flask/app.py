@@ -277,6 +277,34 @@ def api_docs(doc_key):
     return jsonify({"key": doc_key, "filename": filename, "content": content})
 
 
+@app.route("/api/mermaid_test/<doc_key>")
+def api_mermaid_test(doc_key):
+    """Debug page: render just the mermaid diagrams from a doc file."""
+    import re
+    filename = DOCS_MAP.get(doc_key)
+    if not filename:
+        return "Unknown doc key", 404
+    filepath = os.path.join(DOCS_DIR, filename)
+    if not os.path.isfile(filepath):
+        return "File not found", 404
+    with open(filepath, "r") as f:
+        content = f.read()
+    blocks = re.findall(r'```mermaid\s*\n([\s\S]*?)```', content)
+    html = """<!DOCTYPE html>
+<html><head>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true, theme:'dark'});</script>
+</head><body style="background:#1a1a2e;color:#eee;font-family:monospace">
+<h2>Mermaid debug: %s</h2>
+""" % filename
+    for i, block in enumerate(blocks):
+        raw = block.strip().replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        html += '<h3>Block %d - raw source:</h3><pre style="background:#0d0d1a;padding:1em;border:1px solid #333">%s</pre>' % (i, raw)
+        html += '<h3>Block %d - rendered:</h3><div class="mermaid">\n%s\n</div><hr>' % (i, block.strip())
+    html += "</body></html>"
+    return html
+
+
 @app.route("/api/browse")
 def api_browse():
     """Return subdirectories of a given path for the folder browser."""
