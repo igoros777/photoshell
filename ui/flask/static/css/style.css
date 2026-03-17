@@ -383,6 +383,44 @@ body {
     color: #998;
 }
 
+/* Validation result panel */
+.validation-result {
+    margin-bottom: 1rem;
+    padding: .6rem .85rem;
+    border-radius: 5px;
+    font-size: .82rem;
+    line-height: 1.6;
+}
+
+.validation-result.vr-pass {
+    border: 1px solid #555;
+    background: #2a2a2a;
+    color: #aaa;
+}
+
+.validation-result.vr-fail {
+    border: 1px solid #664;
+    background: #2a2828;
+    color: #ccc;
+}
+
+.validation-result .vr-item {
+    padding-left: .25rem;
+    margin-bottom: .2rem;
+}
+
+.validation-result .vr-error {
+    color: #c88;
+}
+
+.validation-result .vr-warning {
+    color: #bb9;
+}
+
+.validation-result .vr-ok {
+    color: #999;
+}
+
 /* Step badge warning state */
 .step-badge.step-warn {
     border: 1px solid #665;

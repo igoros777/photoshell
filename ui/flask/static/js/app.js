@@ -7,6 +7,8 @@ document.addEventListener("DOMContentLoaded", function() {
     var btnCancel      = document.getElementById("btn-cancel");
     var btnBrowse      = document.getElementById("btn-browse");
     var btnValidate    = document.getElementById("btn-validate");
+    var btnValidateWf  = document.getElementById("btn-validate-workflow");
+    var validationResult = document.getElementById("validation-result");
     var folderStatus   = document.getElementById("folder-status");
     var logPanel       = document.getElementById("log-panel");
     var progressBar    = document.getElementById("pipeline-progress");
@@ -734,6 +736,88 @@ document.addEventListener("DOMContentLoaded", function() {
         // Include the user's selection order so backend runs steps in this sequence
         data.step_order = selectionOrder.slice();
         return data;
+    }
+
+    // ---- Validate Workflow button ----
+
+    btnValidateWf.addEventListener("click", function() {
+        var path = photoDirInput.value.trim();
+
+        // If folder not yet validated, do that first then show results
+        if (path && !folderValid) {
+            fetch("/api/validate_folder?path=" + encodeURIComponent(path))
+                .then(function(res) { return res.json(); })
+                .then(function(vdata) {
+                    if (vdata.valid) {
+                        folderValid = true;
+                        photoDirInput.classList.remove("is-invalid");
+                        photoDirInput.classList.add("is-valid");
+                        if (vdata.warning) {
+                            setFolderStatus(
+                                '<i class="bi bi-exclamation-triangle-fill"></i> ' + vdata.warning,
+                                "text-warning"
+                            );
+                        } else {
+                            setFolderStatus(
+                                '<i class="bi bi-check-circle-fill"></i> ' + vdata.photo_count + ' photo file'
+                                + (vdata.photo_count !== 1 ? 's' : '') + ' found',
+                                "text-success"
+                            );
+                        }
+                    } else {
+                        photoDirInput.classList.add("is-invalid");
+                        setFolderStatus(
+                            '<i class="bi bi-x-circle-fill"></i> ' + vdata.reason,
+                            "text-danger"
+                        );
+                    }
+                    showValidationResult(validateWorkflow());
+                })
+                .catch(function() {
+                    setFolderStatus(
+                        '<i class="bi bi-x-circle-fill"></i> Validation request failed',
+                        "text-danger"
+                    );
+                    showValidationResult(validateWorkflow());
+                });
+            return;
+        }
+
+        showValidationResult(validateWorkflow());
+    });
+
+    function showValidationResult(v) {
+        var html = "";
+        var cls = "vr-pass";
+
+        if (v.errors.length > 0) {
+            cls = "vr-fail";
+            for (var i = 0; i < v.errors.length; i++) {
+                html += '<div class="vr-item vr-error"><i class="bi bi-x-circle" style="font-size:.75rem"></i> ' + v.errors[i] + '</div>';
+            }
+        }
+
+        if (v.warnings.length > 0) {
+            if (cls !== "vr-fail") cls = "vr-fail";
+            for (var j = 0; j < v.warnings.length; j++) {
+                html += '<div class="vr-item vr-warning"><i class="bi bi-exclamation-triangle" style="font-size:.75rem"></i> ' + v.warnings[j] + '</div>';
+            }
+        }
+
+        if (v.errors.length === 0 && v.warnings.length === 0) {
+            html = '<div class="vr-item vr-ok"><i class="bi bi-check-circle" style="font-size:.75rem"></i> Workflow is valid. Folder, steps, and ordering all check out.</div>';
+        }
+
+        validationResult.innerHTML = html;
+        validationResult.className = "validation-result " + cls;
+        validationResult.style.display = "block";
+
+        // Auto-hide after 10 seconds if all good
+        if (v.valid && v.warnings.length === 0) {
+            setTimeout(function() {
+                validationResult.style.display = "none";
+            }, 10000);
+        }
     }
 
     // ---- Run pipeline ----
