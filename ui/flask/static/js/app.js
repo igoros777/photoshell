@@ -50,6 +50,78 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     });
 
+    // ---- Mermaid syntax fixer ----
+    // Mermaid v11 is strict about special characters in node labels.
+    // This preprocessor quotes all node and edge labels to avoid parse errors
+    // from <br/>, !=, single quotes, slashes, etc.
+    function fixMermaidSyntax(src) {
+        var lines = src.split("\n");
+        var result = [];
+        for (var i = 0; i < lines.length; i++) {
+            result.push(fixMermaidLine(lines[i]));
+        }
+        return result.join("\n");
+    }
+
+    function quoteLabel(label) {
+        // Escape any internal double quotes, then wrap in double quotes
+        return '"' + label.replace(/"/g, "&quot;") + '"';
+    }
+
+    function fixMermaidLine(line) {
+        // Skip directive/keyword lines
+        var trimmed = line.trim();
+        if (!trimmed || /^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|gantt|pie|erDiagram|journey|gitGraph|subgraph|end|style|class|click|linkStyle|%%|direction)/.test(trimmed)) {
+            return line;
+        }
+
+        // 1) Quote edge labels:  -->|label| or ==>|label| etc.
+        line = line.replace(/(-->|==>|-.->|---->)\|([^|]+)\|/g, function(m, arrow, label) {
+            if (label.charAt(0) === '"') return m;
+            return arrow + "|" + quoteLabel(label) + "|";
+        });
+
+        // 2) Quote stadium-shaped nodes: ([label])
+        line = line.replace(/\(\[([^\]]+)\]\)/g, function(m, label) {
+            if (label.charAt(0) === '"') return m;
+            return '([' + quoteLabel(label) + '])';
+        });
+
+        // 3) Quote subroutine nodes: [[label]]
+        line = line.replace(/\[\[([^\]]+)\]\]/g, function(m, label) {
+            if (label.charAt(0) === '"') return m;
+            return '[[' + quoteLabel(label) + ']]';
+        });
+
+        // 4) Quote hexagon nodes: {{label}}
+        line = line.replace(/\{\{([^}]+)\}\}/g, function(m, label) {
+            if (label.charAt(0) === '"') return m;
+            return '{{' + quoteLabel(label) + '}}';
+        });
+
+        // 5) Quote diamond/decision nodes: {label}
+        //    Match: nodeId{label} but not {{label}} (already handled)
+        line = line.replace(/(\w+)\{([^}"]+)\}/g, function(m, id, label) {
+            return id + '{' + quoteLabel(label) + '}';
+        });
+
+        // 6) Quote square bracket nodes: [label]
+        //    Match: nodeId[label] but not ([ (already handled) or [[ (already handled)
+        //    Negative lookbehind not available, so match carefully
+        line = line.replace(/(\w+)\[([^\]"]+)\]/g, function(m, id, label) {
+            return id + '[' + quoteLabel(label) + ']';
+        });
+
+        // 7) Quote round paren nodes: (label)
+        //    Match: nodeId(label) but not ([ (already handled)
+        line = line.replace(/(\w+)\(([^)"[]+)\)/g, function(m, id, label) {
+            if (id === "subgraph" || id === "style" || id === "class" || id === "click") return m;
+            return id + '(' + quoteLabel(label) + ')';
+        });
+
+        return line;
+    }
+
     function openDocsModal(docKey) {
         docsLoading.style.display = "block";
         docsContent.innerHTML = "";
@@ -69,14 +141,13 @@ document.addEventListener("DOMContentLoaded", function() {
 
                 docsTitle.innerHTML = '<i class="bi bi-book"></i> ' + data.filename;
 
-                // Extract mermaid blocks BEFORE marked processes them,
-                // to preserve raw text (marked would HTML-escape <br/> etc.)
+                // Extract mermaid blocks BEFORE marked processes them
                 var mermaidBlocks = [];
                 var mdContent = data.content.replace(
                     /```mermaid\s*\n([\s\S]*?)```/g,
                     function(match, diagram) {
                         var idx = mermaidBlocks.length;
-                        mermaidBlocks.push(diagram.trim());
+                        mermaidBlocks.push(fixMermaidSyntax(diagram.trim()));
                         return '<div class="mermaid" data-mermaid-idx="' + idx + '"></div>';
                     }
                 );
