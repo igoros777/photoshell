@@ -1,50 +1,228 @@
-/* PhotoShell UI – frontend logic */
+/* PhotoShell UI - frontend logic */
 
-document.addEventListener("DOMContentLoaded", () => {
-    const form        = document.getElementById("workflow-form");
-    const btnRun      = document.getElementById("btn-run");
-    const btnCancel   = document.getElementById("btn-cancel");
-    const logPanel    = document.getElementById("log-panel");
-    const progressBar = document.getElementById("pipeline-progress");
-    const stepsContainer = document.getElementById("pipeline-steps");
+document.addEventListener("DOMContentLoaded", function() {
+    var form           = document.getElementById("workflow-form");
+    var photoDirInput  = document.getElementById("photo_dir");
+    var btnRun         = document.getElementById("btn-run");
+    var btnCancel      = document.getElementById("btn-cancel");
+    var btnBrowse      = document.getElementById("btn-browse");
+    var btnValidate    = document.getElementById("btn-validate");
+    var folderStatus   = document.getElementById("folder-status");
+    var logPanel       = document.getElementById("log-panel");
+    var progressBar    = document.getElementById("pipeline-progress");
+    var stepsContainer = document.getElementById("pipeline-steps");
 
-    let currentJobId = null;
-    let pollTimer    = null;
+    // Folder browser modal elements
+    var browserModal     = new bootstrap.Modal(document.getElementById("folderBrowserModal"));
+    var browserPathInput = document.getElementById("browser-path-input");
+    var browserGoBtn     = document.getElementById("browser-go-btn");
+    var browserList      = document.getElementById("browser-list");
+    var browserSelectBtn = document.getElementById("browser-select-btn");
+
+    var currentJobId = null;
+    var pollTimer    = null;
+    var folderValid  = false;
+    var validateTimer = null;
 
     // ---- Toggle accordion sections based on checkboxes in the header ----
 
-    document.querySelectorAll(".section-toggle").forEach(cb => {
-        const target = cb.dataset.section;
-        const item   = document.getElementById(target)?.closest(".accordion-item");
+    document.querySelectorAll(".section-toggle").forEach(function(cb) {
+        var target = cb.dataset.section;
+        var sec = document.getElementById(target);
+        var item = sec ? sec.closest(".accordion-item") : null;
         if (!item) return;
 
-        const syncState = () => {
+        function syncState() {
             if (cb.checked) {
                 item.classList.remove("disabled");
             } else {
                 item.classList.add("disabled");
-                // collapse if open
-                const collapse = item.querySelector(".accordion-collapse");
-                if (collapse?.classList.contains("show")) {
+                var collapse = item.querySelector(".accordion-collapse");
+                if (collapse && collapse.classList.contains("show")) {
                     bootstrap.Collapse.getOrCreateInstance(collapse).hide();
                 }
             }
-        };
+        }
 
         cb.addEventListener("change", syncState);
         syncState();
     });
 
+    // ---- Folder Validation ----
+
+    function setFolderStatus(html, cls) {
+        folderStatus.innerHTML = html;
+        folderStatus.className = "mt-1 " + (cls || "");
+    }
+
+    function validateFolder(path) {
+        if (!path) {
+            setFolderStatus("");
+            photoDirInput.classList.remove("is-valid", "is-invalid");
+            folderValid = false;
+            return;
+        }
+
+        setFolderStatus('<i class="bi bi-hourglass-split"></i> Checking...', "text-secondary");
+
+        fetch("/api/validate_folder?path=" + encodeURIComponent(path))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (!data.valid) {
+                    setFolderStatus(
+                        '<i class="bi bi-x-circle-fill"></i> ' + data.reason,
+                        "text-danger"
+                    );
+                    photoDirInput.classList.remove("is-valid");
+                    photoDirInput.classList.add("is-invalid");
+                    folderValid = false;
+                } else if (data.warning) {
+                    setFolderStatus(
+                        '<i class="bi bi-exclamation-triangle-fill"></i> ' + data.warning +
+                        ' <span class="text-muted">(resolved: ' + data.path + ')</span>',
+                        "text-warning"
+                    );
+                    photoDirInput.classList.remove("is-invalid");
+                    photoDirInput.classList.add("is-valid");
+                    folderValid = true;
+                } else {
+                    setFolderStatus(
+                        '<i class="bi bi-check-circle-fill"></i> ' +
+                        data.photo_count + ' photo file' + (data.photo_count !== 1 ? 's' : '') +
+                        ' found <span class="text-muted">(resolved: ' + data.path + ')</span>',
+                        "text-success"
+                    );
+                    photoDirInput.classList.remove("is-invalid");
+                    photoDirInput.classList.add("is-valid");
+                    folderValid = true;
+                }
+            })
+            .catch(function() {
+                setFolderStatus(
+                    '<i class="bi bi-x-circle-fill"></i> Validation request failed',
+                    "text-danger"
+                );
+                folderValid = false;
+            });
+    }
+
+    // Validate on button click
+    btnValidate.addEventListener("click", function() {
+        validateFolder(photoDirInput.value.trim());
+    });
+
+    // Auto-validate after typing stops (debounced 600ms)
+    photoDirInput.addEventListener("input", function() {
+        clearTimeout(validateTimer);
+        var val = photoDirInput.value.trim();
+        if (!val) {
+            setFolderStatus("");
+            photoDirInput.classList.remove("is-valid", "is-invalid");
+            folderValid = false;
+            return;
+        }
+        validateTimer = setTimeout(function() {
+            validateFolder(val);
+        }, 600);
+    });
+
+    // ---- Folder Browser ----
+
+    function browseToPath(path) {
+        browserList.innerHTML = '<div class="text-muted p-3"><i class="bi bi-hourglass-split"></i> Loading...</div>';
+        browserPathInput.value = path;
+
+        fetch("/api/browse?path=" + encodeURIComponent(path))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    browserList.innerHTML = '<div class="text-danger p-3">' + data.error + '</div>';
+                    return;
+                }
+
+                browserPathInput.value = data.current;
+                var html = "";
+
+                // Parent directory link
+                if (data.parent) {
+                    html += '<div class="browser-item browser-parent" data-path="' +
+                            escapeAttr(data.parent) + '">' +
+                            '<i class="bi bi-arrow-up-circle"></i> ..' +
+                            '</div>';
+                }
+
+                // Subdirectories
+                if (data.dirs.length === 0 && !data.parent) {
+                    html += '<div class="text-muted p-3">No subdirectories</div>';
+                }
+
+                for (var i = 0; i < data.dirs.length; i++) {
+                    var fullPath = data.current + (data.current.endsWith("/") ? "" : "/") + data.dirs[i];
+                    html += '<div class="browser-item" data-path="' + escapeAttr(fullPath) + '">' +
+                            '<i class="bi bi-folder-fill" style="color:var(--ps-warning)"></i> ' +
+                            escapeHtml(data.dirs[i]) +
+                            '</div>';
+                }
+
+                browserList.innerHTML = html;
+
+                // Click handlers for directory items
+                browserList.querySelectorAll(".browser-item").forEach(function(el) {
+                    el.addEventListener("click", function() {
+                        browseToPath(el.dataset.path);
+                    });
+                });
+            })
+            .catch(function() {
+                browserList.innerHTML = '<div class="text-danger p-3">Failed to load directory</div>';
+            });
+    }
+
+    function escapeHtml(str) {
+        var div = document.createElement("div");
+        div.appendChild(document.createTextNode(str));
+        return div.innerHTML;
+    }
+
+    function escapeAttr(str) {
+        return str.replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+                  .replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    btnBrowse.addEventListener("click", function() {
+        var startPath = photoDirInput.value.trim() || "/";
+        browseToPath(startPath);
+        browserModal.show();
+    });
+
+    browserGoBtn.addEventListener("click", function() {
+        browseToPath(browserPathInput.value.trim() || "/");
+    });
+
+    browserPathInput.addEventListener("keydown", function(e) {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            browseToPath(browserPathInput.value.trim() || "/");
+        }
+    });
+
+    browserSelectBtn.addEventListener("click", function() {
+        var selected = browserPathInput.value.trim();
+        if (selected) {
+            photoDirInput.value = selected;
+            validateFolder(selected);
+        }
+        browserModal.hide();
+    });
+
     // ---- Collect form data ----
 
     function collectFormData() {
-        const data = {};
-        // text / select inputs
-        form.querySelectorAll("input[type=text], input[type=number], select").forEach(el => {
+        var data = {};
+        form.querySelectorAll("input[type=text], input[type=number], select").forEach(function(el) {
             if (el.name) data[el.name] = el.value.trim();
         });
-        // checkboxes
-        form.querySelectorAll("input[type=checkbox]").forEach(el => {
+        form.querySelectorAll("input[type=checkbox]").forEach(function(el) {
             if (el.name) data[el.name] = el.checked;
         });
         return data;
@@ -52,15 +230,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // ---- Run pipeline ----
 
-    btnRun.addEventListener("click", async () => {
-        const data = collectFormData();
+    btnRun.addEventListener("click", function() {
+        var data = collectFormData();
         if (!data.photo_dir) {
             alert("Please specify a photo directory.");
             return;
         }
 
-        // Check at least one step enabled
-        const anyStep = Object.keys(data).some(k => k.startsWith("enable_") && data[k]);
+        // Validate folder before running
+        if (!folderValid) {
+            // Trigger a synchronous-style validation
+            fetch("/api/validate_folder?path=" + encodeURIComponent(data.photo_dir))
+                .then(function(res) { return res.json(); })
+                .then(function(vdata) {
+                    if (!vdata.valid) {
+                        alert("Invalid photo directory: " + vdata.reason);
+                        return;
+                    }
+                    folderValid = true;
+                    startPipeline(data);
+                })
+                .catch(function() {
+                    alert("Could not validate folder.");
+                });
+            return;
+        }
+
+        startPipeline(data);
+    });
+
+    function startPipeline(data) {
+        var anyStep = Object.keys(data).some(function(k) {
+            return k.indexOf("enable_") === 0 && data[k];
+        });
         if (!anyStep) {
             alert("Please enable at least one workflow step.");
             return;
@@ -72,59 +274,57 @@ document.addEventListener("DOMContentLoaded", () => {
         logPanel.textContent = "Starting pipeline...\n";
         progressBar.classList.add("active");
 
-        try {
-            const res  = await fetch("/api/run", {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify(data),
-            });
-            const body = await res.json();
-
+        fetch("/api/run", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(data),
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(body) {
             if (body.error) {
                 logPanel.textContent = "Error: " + body.error;
                 btnRun.disabled = false;
                 btnCancel.style.display = "none";
                 return;
             }
-
             currentJobId = body.job_id;
             renderStepBadges(body.steps);
             startPolling();
-
-        } catch (err) {
+        })
+        .catch(function(err) {
             logPanel.textContent = "Request failed: " + err;
             btnRun.disabled = false;
             btnCancel.style.display = "none";
-        }
-    });
+        });
+    }
 
     // ---- Cancel ----
 
-    btnCancel.addEventListener("click", async () => {
+    btnCancel.addEventListener("click", function() {
         if (!currentJobId) return;
-        await fetch(`/api/cancel/${currentJobId}`, {method: "POST"});
+        fetch("/api/cancel/" + currentJobId, {method: "POST"});
     });
 
     // ---- Polling ----
 
     function startPolling() {
-        pollTimer = setInterval(async () => {
+        pollTimer = setInterval(function() {
             if (!currentJobId) return;
-            try {
-                const res  = await fetch(`/api/status/${currentJobId}`);
-                const data = await res.json();
+            fetch("/api/status/" + currentJobId)
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    logPanel.textContent = data.log;
+                    logPanel.scrollTop = logPanel.scrollHeight;
+                    updateStepBadges(data);
 
-                logPanel.textContent = data.log;
-                logPanel.scrollTop = logPanel.scrollHeight;
-                updateStepBadges(data);
-
-                if (data.status !== "running") {
-                    clearInterval(pollTimer);
-                    btnRun.disabled = false;
-                    btnCancel.style.display = "none";
-                    currentJobId = null;
-                }
-            } catch { /* ignore transient errors */ }
+                    if (data.status !== "running") {
+                        clearInterval(pollTimer);
+                        btnRun.disabled = false;
+                        btnCancel.style.display = "none";
+                        currentJobId = null;
+                    }
+                })
+                .catch(function() { /* ignore transient errors */ });
         }, 1000);
     }
 
@@ -132,8 +332,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function renderStepBadges(steps) {
         stepsContainer.innerHTML = "";
-        steps.forEach((label, i) => {
-            const span = document.createElement("span");
+        steps.forEach(function(label, i) {
+            var span = document.createElement("span");
             span.className = "pipeline-step";
             span.textContent = label;
             span.dataset.index = i;
@@ -142,19 +342,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function updateStepBadges(data) {
-        const badges = stepsContainer.querySelectorAll(".pipeline-step");
-        badges.forEach((badge, i) => {
+        var badges = stepsContainer.querySelectorAll(".pipeline-step");
+        badges.forEach(function(badge, i) {
             badge.classList.remove("running", "done", "failed");
             if (data.status === "done") {
                 badge.classList.add("done");
-            } else if (data.status === "failed") {
-                if (i < data.current_step)       badge.classList.add("done");
-                else if (i === data.current_step) badge.classList.add("failed");
-            } else if (data.status === "cancelled") {
+            } else if (data.status === "failed" || data.status === "cancelled") {
                 if (i < data.current_step)       badge.classList.add("done");
                 else if (i === data.current_step) badge.classList.add("failed");
             } else {
-                // running
                 if (i < data.current_step)       badge.classList.add("done");
                 else if (i === data.current_step) badge.classList.add("running");
             }
