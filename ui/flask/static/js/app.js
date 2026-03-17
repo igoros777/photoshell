@@ -50,78 +50,6 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     });
 
-    // ---- Mermaid syntax fixer ----
-    // Mermaid v11 is strict about special characters in node labels.
-    // This preprocessor quotes all node and edge labels to avoid parse errors
-    // from <br/>, !=, single quotes, slashes, etc.
-    function fixMermaidSyntax(src) {
-        var lines = src.split("\n");
-        var result = [];
-        for (var i = 0; i < lines.length; i++) {
-            result.push(fixMermaidLine(lines[i]));
-        }
-        return result.join("\n");
-    }
-
-    function quoteLabel(label) {
-        // Escape any internal double quotes, then wrap in double quotes
-        return '"' + label.replace(/"/g, "&quot;") + '"';
-    }
-
-    function fixMermaidLine(line) {
-        // Skip directive/keyword lines
-        var trimmed = line.trim();
-        if (!trimmed || /^(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram|gantt|pie|erDiagram|journey|gitGraph|subgraph|end|style|class|click|linkStyle|%%|direction)/.test(trimmed)) {
-            return line;
-        }
-
-        // 1) Quote edge labels:  -->|label| or ==>|label| etc.
-        line = line.replace(/(-->|==>|-.->|---->)\|([^|]+)\|/g, function(m, arrow, label) {
-            if (label.charAt(0) === '"') return m;
-            return arrow + "|" + quoteLabel(label) + "|";
-        });
-
-        // 2) Quote stadium-shaped nodes: ([label])
-        line = line.replace(/\(\[([^\]]+)\]\)/g, function(m, label) {
-            if (label.charAt(0) === '"') return m;
-            return '([' + quoteLabel(label) + '])';
-        });
-
-        // 3) Quote subroutine nodes: [[label]]
-        line = line.replace(/\[\[([^\]]+)\]\]/g, function(m, label) {
-            if (label.charAt(0) === '"') return m;
-            return '[[' + quoteLabel(label) + ']]';
-        });
-
-        // 4) Quote hexagon nodes: {{label}}
-        line = line.replace(/\{\{([^}]+)\}\}/g, function(m, label) {
-            if (label.charAt(0) === '"') return m;
-            return '{{' + quoteLabel(label) + '}}';
-        });
-
-        // 5) Quote diamond/decision nodes: {label}
-        //    Match: nodeId{label} but not {{label}} (already handled)
-        line = line.replace(/(\w+)\{([^}"]+)\}/g, function(m, id, label) {
-            return id + '{' + quoteLabel(label) + '}';
-        });
-
-        // 6) Quote square bracket nodes: [label]
-        //    Match: nodeId[label] but not ([ (already handled) or [[ (already handled)
-        //    Negative lookbehind not available, so match carefully
-        line = line.replace(/(\w+)\[([^\]"]+)\]/g, function(m, id, label) {
-            return id + '[' + quoteLabel(label) + ']';
-        });
-
-        // 7) Quote round paren nodes: (label)
-        //    Match: nodeId(label) but not ([ (already handled)
-        line = line.replace(/(\w+)\(([^)"[]+)\)/g, function(m, id, label) {
-            if (id === "subgraph" || id === "style" || id === "class" || id === "click") return m;
-            return id + '(' + quoteLabel(label) + ')';
-        });
-
-        return line;
-    }
-
     function openDocsModal(docKey) {
         docsLoading.style.display = "block";
         docsContent.innerHTML = "";
@@ -141,29 +69,28 @@ document.addEventListener("DOMContentLoaded", function() {
 
                 docsTitle.innerHTML = '<i class="bi bi-book"></i> ' + data.filename;
 
-                // Extract mermaid blocks BEFORE marked processes them
-                var mermaidBlocks = [];
-                var mdContent = data.content.replace(
-                    /```mermaid\s*\n([\s\S]*?)```/g,
-                    function(match, diagram) {
-                        var idx = mermaidBlocks.length;
-                        mermaidBlocks.push(fixMermaidSyntax(diagram.trim()));
-                        return '<div class="mermaid" data-mermaid-idx="' + idx + '"></div>';
-                    }
-                );
-
-                var html = marked.parse(mdContent);
+                // Let marked parse everything normally (mermaid blocks become
+                // <pre><code class="language-mermaid">...</code></pre>)
+                var html = marked.parse(data.content);
                 docsLoading.style.display = "none";
                 docsContent.innerHTML = html;
                 docsContent.style.display = "block";
 
-                // Insert raw mermaid source into placeholder divs and render
-                var mermaidDivs = docsContent.querySelectorAll(".mermaid[data-mermaid-idx]");
-                for (var i = 0; i < mermaidDivs.length; i++) {
-                    var idx = parseInt(mermaidDivs[i].getAttribute("data-mermaid-idx"), 10);
-                    if (mermaidBlocks[idx] !== undefined) {
-                        mermaidDivs[i].textContent = mermaidBlocks[idx];
-                    }
+                // Find code blocks that marked tagged as language-mermaid,
+                // replace the <pre> with a <div class="mermaid"> containing
+                // the decoded text, then let mermaid render them.
+                var codeBlocks = docsContent.querySelectorAll('code.language-mermaid');
+                var mermaidDivs = [];
+                for (var i = 0; i < codeBlocks.length; i++) {
+                    var pre = codeBlocks[i].closest("pre");
+                    if (!pre) continue;
+                    // textContent automatically decodes &lt; &gt; &amp; etc.
+                    var raw = codeBlocks[i].textContent;
+                    var div = document.createElement("div");
+                    div.className = "mermaid";
+                    div.textContent = raw;
+                    pre.parentNode.replaceChild(div, pre);
+                    mermaidDivs.push(div);
                 }
                 if (mermaidDivs.length > 0) {
                     mermaid.run({ nodes: mermaidDivs }).catch(function(e) {
