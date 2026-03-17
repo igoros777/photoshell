@@ -69,34 +69,35 @@ document.addEventListener("DOMContentLoaded", function() {
 
                 docsTitle.innerHTML = '<i class="bi bi-book"></i> ' + data.filename;
 
-                // Use a custom renderer to handle mermaid code blocks
-                var renderer = new marked.Renderer();
-                var originalCode = renderer.code;
-                renderer.code = function(code, language) {
-                    // marked v5+ passes an object; v4 passes (code, language)
-                    var text = (typeof code === "object") ? code.text : code;
-                    var lang = (typeof code === "object") ? code.lang : language;
-                    if (lang === "mermaid") {
-                        return '<div class="mermaid">' + text + '</div>';
+                // Extract mermaid blocks BEFORE marked processes them,
+                // to preserve raw text (marked would HTML-escape <br/> etc.)
+                var mermaidBlocks = [];
+                var mdContent = data.content.replace(
+                    /```mermaid\s*\n([\s\S]*?)```/g,
+                    function(match, diagram) {
+                        var idx = mermaidBlocks.length;
+                        mermaidBlocks.push(diagram.trim());
+                        return '<div class="mermaid" data-mermaid-idx="' + idx + '"></div>';
                     }
-                    // Default code rendering
-                    var escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                    return '<pre><code class="language-' + (lang || "") + '">' + escaped + '</code></pre>';
-                };
+                );
 
-                var html = marked.parse(data.content, { renderer: renderer });
+                var html = marked.parse(mdContent);
                 docsLoading.style.display = "none";
                 docsContent.innerHTML = html;
                 docsContent.style.display = "block";
 
-                // Render mermaid diagrams
-                var mermaidDivs = docsContent.querySelectorAll(".mermaid");
-                if (mermaidDivs.length > 0) {
-                    try {
-                        mermaid.run({ nodes: mermaidDivs });
-                    } catch(e) {
-                        console.warn("Mermaid rendering error:", e);
+                // Insert raw mermaid source into placeholder divs and render
+                var mermaidDivs = docsContent.querySelectorAll(".mermaid[data-mermaid-idx]");
+                for (var i = 0; i < mermaidDivs.length; i++) {
+                    var idx = parseInt(mermaidDivs[i].getAttribute("data-mermaid-idx"), 10);
+                    if (mermaidBlocks[idx] !== undefined) {
+                        mermaidDivs[i].textContent = mermaidBlocks[idx];
                     }
+                }
+                if (mermaidDivs.length > 0) {
+                    mermaid.run({ nodes: mermaidDivs }).catch(function(e) {
+                        console.warn("Mermaid rendering error:", e);
+                    });
                 }
             })
             .catch(function(err) {
