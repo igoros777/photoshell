@@ -580,6 +580,16 @@ body {
     background: var(--ps-surface2);
 }
 
+.browser-warning {
+    padding: .4rem .75rem;
+    margin-bottom: .35rem;
+    font-size: .78rem;
+    color: #bb9;
+    background: rgba(80,70,40,.15);
+    border: 1px dashed #554;
+    border-radius: 4px;
+}
+
 .browser-parent {
     color: var(--ps-text-muted);
     font-style: italic;

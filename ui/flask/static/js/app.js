@@ -650,12 +650,21 @@ document.addEventListener("DOMContentLoaded", function() {
             .then(function(res) { return res.json(); })
             .then(function(data) {
                 if (data.error) {
-                    browserList.innerHTML = '<div class="text-danger p-3">' + data.error + '</div>';
+                    browserList.innerHTML = '<div class="text-danger p-3">'
+                        + '<i class="bi bi-exclamation-triangle"></i> '
+                        + escapeHtml(data.error) + '</div>';
                     return;
                 }
 
                 browserPathInput.value = data.current;
                 var html = "";
+
+                // Warning banner (timeout, stale mounts, etc.)
+                if (data.warning) {
+                    html += '<div class="browser-warning">'
+                         + '<i class="bi bi-exclamation-triangle"></i> '
+                         + escapeHtml(data.warning) + '</div>';
+                }
 
                 // Parent directory link
                 if (data.parent) {
