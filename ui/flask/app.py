@@ -328,6 +328,31 @@ def api_mermaid_test(doc_key):
     return html
 
 
+def _fs_op_with_timeout(fn, timeout=3):
+    """Run a filesystem operation in a thread with a timeout.
+
+    Returns (result, error).  On timeout returns (None, 'timeout').
+    """
+    result = [None]
+    error = [None]
+
+    def worker():
+        try:
+            result[0] = fn()
+        except Exception as exc:
+            error[0] = exc
+
+    t = threading.Thread(target=worker)
+    t.daemon = True
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        return None, "timeout"
+    if error[0]:
+        return None, error[0]
+    return result[0], None
+
+
 @app.route("/api/browse")
 def api_browse():
     """Return subdirectories of a given path for the folder browser."""
@@ -336,53 +361,81 @@ def api_browse():
     if not path:
         path = "/"
 
-    # Normalize and resolve
-    try:
-        target = os.path.realpath(os.path.expanduser(path))
-    except Exception:
-        return jsonify({"error": "Invalid path"}), 400
+    # Expand ~ but do NOT resolve symlinks (realpath can hang on network mounts)
+    target = os.path.expanduser(path)
 
-    if not os.path.isdir(target):
+    # Normalize without resolving symlinks: collapse .. and redundant slashes
+    target = os.path.normpath(target)
+
+    # Check that the target is a directory (with timeout for network mounts)
+    is_dir, err = _fs_op_with_timeout(lambda: os.path.isdir(target))
+    if err == "timeout":
+        return jsonify({"error": "Timed out accessing path (may be an unresponsive network mount)"}), 504
+    if err:
+        return jsonify({"error": str(err)}), 500
+
+    if not is_dir:
         # Try parent
         target = os.path.dirname(target)
-        if not os.path.isdir(target):
+        is_dir2, err2 = _fs_op_with_timeout(lambda: os.path.isdir(target))
+        if err2 or not is_dir2:
             return jsonify({"error": "Directory not found"}), 404
 
-    dirs = []
-    try:
-        entries = sorted(os.listdir(target))
-    except PermissionError:
-        return jsonify({"error": "Permission denied"}), 403
-    except OSError as exc:
+    # List entries (with timeout)
+    entries_result, err = _fs_op_with_timeout(lambda: sorted(os.listdir(target)), timeout=5)
+    if err == "timeout":
+        return jsonify({
+            "current": target,
+            "parent": os.path.dirname(target) if target != "/" else None,
+            "dirs": [],
+            "warning": "Timed out listing directory (slow or unresponsive mount)",
+        })
+    if err:
+        exc = err
+        if isinstance(exc, PermissionError):
+            return jsonify({"error": "Permission denied"}), 403
         return jsonify({"error": str(exc)}), 500
 
+    entries = entries_result
+
+    # Classify entries as directories. Use a short per-entry timeout
+    # to avoid hanging on individual stale mount points.
+    dirs = []
+    stale = []
     for entry in entries:
         if not show_hidden and entry.startswith("."):
             continue
         full = os.path.join(target, entry)
+
+        # Try lstat first (does not follow symlinks, fast, no network roundtrip)
         try:
-            # Use os.stat to follow symlinks; also catches mount points
-            # that os.path.isdir might miss under WSL/FUSE
-            st = os.stat(full)
-            if stat.S_ISDIR(st.st_mode):
-                dirs.append(entry)
+            lst = os.lstat(full)
         except (OSError, PermissionError):
-            # If stat fails (broken mount, permission), still try lstat
-            # to detect symlinks that point to directories
-            try:
-                lst = os.lstat(full)
-                if stat.S_ISDIR(lst.st_mode) or stat.S_ISLNK(lst.st_mode):
-                    dirs.append(entry)
-            except (OSError, PermissionError):
-                continue
+            continue
+
+        if stat.S_ISDIR(lst.st_mode):
+            dirs.append(entry)
+        elif stat.S_ISLNK(lst.st_mode):
+            # Symlink: try to resolve with a timeout (may point to network mount)
+            is_link_dir, lerr = _fs_op_with_timeout(lambda f=full: os.path.isdir(f), timeout=2)
+            if lerr == "timeout":
+                # Include it but mark as potentially stale
+                stale.append(entry)
+                dirs.append(entry)
+            elif is_link_dir:
+                dirs.append(entry)
 
     parent = os.path.dirname(target) if target != "/" else None
 
-    return jsonify({
+    resp = {
         "current": target,
         "parent": parent,
         "dirs": dirs,
-    })
+    }
+    if stale:
+        resp["warning"] = "Some entries may be slow/unresponsive: " + ", ".join(stale)
+
+    return jsonify(resp)
 
 
 @app.route("/api/validate_folder")
