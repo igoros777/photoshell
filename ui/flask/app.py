@@ -353,85 +353,59 @@ def _fs_op_with_timeout(fn, timeout=3):
     return result[0], None
 
 
-def _listdir_with_dirs(target, show_hidden):
-    """List a directory and classify entries as dirs or non-dirs.
-
-    Does all filesystem I/O in one shot so the caller can wrap it in
-    a single timeout.  Returns a list of directory entry names.
-    On network mounts (CIFS/NFS/FUSE) lstat() mode bits are unreliable,
-    so we fall back to os.path.isdir() for every entry that lstat does
-    not positively identify as a directory.
-    """
-    dirs = []
-    for entry in sorted(os.listdir(target)):
-        if not show_hidden and entry.startswith("."):
-            continue
-        full = os.path.join(target, entry)
-        try:
-            # Try lstat first (fast, no symlink follow)
-            lst = os.lstat(full)
-            if stat.S_ISDIR(lst.st_mode):
-                dirs.append(entry)
-                continue
-            # On CIFS/NFS, dirs often report as S_IFREG.
-            # Always fall back to os.path.isdir() which does a full
-            # stat call and correctly queries the server.
-            if os.path.isdir(full):
-                dirs.append(entry)
-        except (OSError, PermissionError):
-            # Silently skip entries we cannot stat
-            continue
-    return dirs
-
-
 @app.route("/api/browse")
 def api_browse():
-    """Return subdirectories of a given path for the folder browser."""
+    """Return subdirectories of a given path for the folder browser.
+
+    All filesystem calls run directly on the request thread (no background
+    threads) because WSL2 drvfs / 9P mounts do not reliably support stat
+    operations from spawned threads.
+    """
     path = request.args.get("path", "/").strip()
     show_hidden = request.args.get("hidden", "").lower() in ("1", "true", "yes")
     if not path:
         path = "/"
 
-    # Expand ~ but do NOT resolve symlinks (realpath can hang on network mounts)
     target = os.path.normpath(os.path.expanduser(path))
 
-    # Check that the target is a directory (generous timeout for SMB/NFS)
-    is_dir, err = _fs_op_with_timeout(lambda: os.path.isdir(target), timeout=15)
-    if err == "timeout":
-        return jsonify({"error": "Timed out accessing path (unresponsive network mount?)"}), 504
-    if err:
-        return jsonify({"error": str(err)}), 500
+    try:
+        if not os.path.isdir(target):
+            target = os.path.dirname(target)
+            if not os.path.isdir(target):
+                return jsonify({"error": "Directory not found"}), 404
+    except PermissionError:
+        return jsonify({"error": "Permission denied"}), 403
+    except OSError as exc:
+        return jsonify({"error": str(exc)}), 500
 
-    if not is_dir:
-        target = os.path.dirname(target)
-        is_dir2, err2 = _fs_op_with_timeout(lambda: os.path.isdir(target), timeout=10)
-        if err2 or not is_dir2:
-            return jsonify({"error": "Directory not found"}), 404
+    try:
+        entries = sorted(os.listdir(target))
+    except PermissionError:
+        return jsonify({"error": "Permission denied"}), 403
+    except OSError as exc:
+        return jsonify({"error": str(exc)}), 500
 
-    # List + classify in one call so a single timeout covers the whole
-    # operation (SMB first-access can be slow, but once the share responds
-    # all entries come back together).
-    dirs_result, err = _fs_op_with_timeout(
-        lambda: _listdir_with_dirs(target, show_hidden), timeout=30
-    )
-    if err == "timeout":
-        return jsonify({
-            "current": target,
-            "parent": os.path.dirname(target) if target != "/" else None,
-            "dirs": [],
-            "warning": "Timed out listing directory contents (slow network mount)",
-        })
-    if err:
-        if isinstance(err, PermissionError):
-            return jsonify({"error": "Permission denied"}), 403
-        return jsonify({"error": str(err)}), 500
+    # Classify entries as directories.
+    # On network/drvfs mounts lstat() mode bits can be unreliable
+    # (directories report as S_IFREG), so always fall back to
+    # os.path.isdir() which does a proper stat call.
+    dirs = []
+    for entry in entries:
+        if not show_hidden and entry.startswith("."):
+            continue
+        full = os.path.join(target, entry)
+        try:
+            if os.path.isdir(full):
+                dirs.append(entry)
+        except (OSError, PermissionError):
+            continue
 
     parent = os.path.dirname(target) if target != "/" else None
 
     return jsonify({
         "current": target,
         "parent": parent,
-        "dirs": dirs_result,
+        "dirs": dirs,
     })
 
 
