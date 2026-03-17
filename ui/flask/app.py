@@ -17,7 +17,7 @@ app = Flask(__name__)
 SCRIPTS_DIR = str(Path(__file__).resolve().parent.parent.parent / "scripts")
 
 # In-memory job store: job_id -> {status, log, current_step, steps, pid}
-jobs: dict[str, dict] = {}
+jobs = {}
 jobs_lock = threading.Lock()
 
 
