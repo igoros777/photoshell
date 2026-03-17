@@ -680,10 +680,12 @@ document.addEventListener("DOMContentLoaded", function() {
                 }
 
                 for (var i = 0; i < data.dirs.length; i++) {
-                    var fullPath = data.current + (data.current.endsWith("/") ? "" : "/") + data.dirs[i];
+                    var dirEntry = data.dirs[i];
+                    var dirName = typeof dirEntry === "string" ? dirEntry : dirEntry.name;
+                    var fullPath = typeof dirEntry === "string" ? dirEntry : dirEntry.path;
                     html += '<div class="browser-item" data-path="' + escapeAttr(fullPath) + '">' +
                             '<i class="bi bi-folder-fill" style="color:#aaa"></i> ' +
-                            escapeHtml(data.dirs[i]) +
+                            escapeHtml(dirName) +
                             '</div>';
                 }
 

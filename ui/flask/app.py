@@ -353,6 +353,115 @@ def _fs_op_with_timeout(fn, timeout=3):
     return result[0], None
 
 
+FS_TIMEOUT_SECONDS = 5
+
+
+def _normalize_browser_path(path):
+    """Normalize user input into an absolute path without resolving mounts."""
+    raw = (path or "").strip()
+    if not raw:
+        raw = os.sep
+
+    normalized = os.path.normpath(os.path.expanduser(raw))
+    if not os.path.isabs(normalized):
+        normalized = os.path.abspath(normalized)
+    return os.path.normpath(normalized)
+
+
+def _is_filesystem_root(path):
+    """Return True when the path is a filesystem root on the current platform."""
+    normalized = os.path.normpath(path)
+    drive, tail = os.path.splitdrive(normalized)
+    if drive:
+        return tail in ("", os.sep)
+    return normalized == os.sep
+
+
+def _parent_directory(path):
+    """Return the parent directory, or None when already at a root."""
+    normalized = os.path.normpath(path)
+    if _is_filesystem_root(normalized):
+        return None
+
+    parent = os.path.normpath(os.path.dirname(normalized))
+    if not parent or parent == normalized:
+        return None
+    return parent
+
+
+def _resolve_directory(path, timeout=FS_TIMEOUT_SECONDS):
+    """Normalize a path and confirm it is a directory within a bounded time."""
+    target = _normalize_browser_path(path)
+    is_dir, error = _fs_op_with_timeout(lambda: os.path.isdir(target), timeout=timeout)
+    if error:
+        return None, error
+    if not is_dir:
+        return None, FileNotFoundError(target)
+    return target, None
+
+
+def _browse_directory(target, show_hidden):
+    """Return the directory payload expected by the folder browser."""
+    dirs = []
+    skipped_entries = 0
+
+    with os.scandir(target) as it:
+        for entry in it:
+            if not show_hidden and entry.name.startswith("."):
+                continue
+            try:
+                if entry.is_dir():
+                    dirs.append({
+                        "name": entry.name,
+                        "path": os.path.normpath(os.path.join(target, entry.name)),
+                    })
+            except (OSError, PermissionError):
+                skipped_entries += 1
+
+    dirs.sort(key=lambda item: item["name"].casefold())
+
+    payload = {
+        "current": target,
+        "parent": _parent_directory(target),
+        "dirs": dirs,
+    }
+    if skipped_entries:
+        payload["warning"] = "Some entries could not be inspected."
+    return payload
+
+
+def _count_photos_in_directory(target):
+    """Count photo files in the top level of a directory."""
+    photo_count = 0
+    with os.scandir(target) as it:
+        for entry in it:
+            try:
+                if not entry.is_file():
+                    continue
+            except (OSError, PermissionError):
+                continue
+            ext = os.path.splitext(entry.name)[1].lower()
+            if ext in PHOTO_EXTENSIONS:
+                photo_count += 1
+    return photo_count
+
+
+def _filesystem_error_response(error, *, not_found_message="Directory not found"):
+    """Translate filesystem exceptions and timeouts into JSON responses."""
+    if error == "timeout":
+        return jsonify({
+            "error": "Timed out while accessing the directory. "
+                     "The mount may be slow, stale, or unavailable."
+        }), 504
+    if isinstance(error, PermissionError):
+        return jsonify({"error": "Permission denied"}), 403
+    if isinstance(error, FileNotFoundError):
+        return jsonify({"error": not_found_message}), 404
+    if isinstance(error, OSError):
+        return jsonify({"error": str(error)}), 500
+    return jsonify({"error": str(error)}), 500
+
+
 @app.route("/api/browse_debug")
 def api_browse_debug():
     """Diagnostic: show raw filesystem info for a path."""
@@ -419,57 +528,19 @@ def api_browse_debug():
 @app.route("/api/browse")
 def api_browse():
     """Return subdirectories of a given path for the folder browser."""
-    path = request.args.get("path", "/").strip()
+    path = request.args.get("path", "")
     show_hidden = request.args.get("hidden", "").lower() in ("1", "true", "yes")
-    if not path:
-        path = "/"
+    target, error = _resolve_directory(path)
+    if error:
+        return _filesystem_error_response(error)
 
-    # Try realpath first (works on drvfs/WSL mounts where normpath may not).
-    # Fall back to normpath if realpath fails (e.g. stale NFS).
-    try:
-        target = os.path.realpath(os.path.expanduser(path))
-    except (OSError, ValueError):
-        target = os.path.normpath(os.path.expanduser(path))
-
-    try:
-        if not os.path.isdir(target):
-            # realpath may have resolved to something odd; try normpath
-            target = os.path.normpath(os.path.expanduser(path))
-            if not os.path.isdir(target):
-                target = os.path.dirname(target)
-                if not os.path.isdir(target):
-                    return jsonify({"error": "Directory not found"}), 404
-    except PermissionError:
-        return jsonify({"error": "Permission denied"}), 403
-    except OSError as exc:
-        return jsonify({"error": str(exc)}), 500
-
-    dirs = []
-    try:
-        with os.scandir(target) as it:
-            entries = []
-            for entry in it:
-                if not show_hidden and entry.name.startswith("."):
-                    continue
-                try:
-                    # is_dir() uses cached type info if available, avoiding extra stat calls
-                    if entry.is_dir():
-                        entries.append(entry.name)
-                except (OSError, PermissionError):
-                    continue
-            dirs = sorted(entries)
-    except PermissionError:
-        return jsonify({"error": "Permission denied"}), 403
-    except OSError as exc:
-        return jsonify({"error": str(exc)}), 500
-
-    parent = os.path.dirname(target) if target != "/" else None
-
-    return jsonify({
-        "current": target,
-        "parent": parent,
-        "dirs": dirs,
-    })
+    payload, error = _fs_op_with_timeout(
+        lambda: _browse_directory(target, show_hidden),
+        timeout=FS_TIMEOUT_SECONDS,
+    )
+    if error:
+        return _filesystem_error_response(error)
+    return jsonify(payload)
 
 
 @app.route("/api/validate_folder")
@@ -479,23 +550,32 @@ def api_validate_folder():
     if not path:
         return jsonify({"valid": False, "reason": "No path specified"})
 
-    try:
-        target = os.path.realpath(os.path.expanduser(path))
-    except Exception:
-        return jsonify({"valid": False, "reason": "Invalid path"})
-
-    if not os.path.isdir(target):
+    target, error = _resolve_directory(path)
+    if error == "timeout":
+        return jsonify({
+            "valid": False,
+            "reason": "Timed out while accessing the directory. "
+                      "The mount may be slow, stale, or unavailable.",
+        })
+    if isinstance(error, PermissionError):
+        return jsonify({"valid": False, "reason": "Permission denied"})
+    if error:
         return jsonify({"valid": False, "reason": "Directory does not exist"})
 
-    # Count photo files (non-recursive, first level only)
-    photo_count = 0
-    try:
-        for entry in os.listdir(target):
-            ext = os.path.splitext(entry)[1].lower()
-            if ext in PHOTO_EXTENSIONS:
-                photo_count += 1
-    except PermissionError:
+    photo_count, error = _fs_op_with_timeout(
+        lambda: _count_photos_in_directory(target),
+        timeout=FS_TIMEOUT_SECONDS,
+    )
+    if error == "timeout":
+        return jsonify({
+            "valid": False,
+            "reason": "Timed out while reading the directory. "
+                      "The mount may be slow, stale, or unavailable.",
+        })
+    if isinstance(error, PermissionError):
         return jsonify({"valid": False, "reason": "Permission denied"})
+    if error:
+        return jsonify({"valid": False, "reason": str(error)})
 
     if photo_count == 0:
         return jsonify({
