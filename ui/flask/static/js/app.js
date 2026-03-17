@@ -20,7 +20,8 @@ document.addEventListener("DOMContentLoaded", function() {
     var browserSelectBtn = document.getElementById("browser-select-btn");
 
     // Docs modal elements
-    var docsModal    = new bootstrap.Modal(document.getElementById("docsModal"));
+    var docsModalEl  = document.getElementById("docsModal");
+    var docsModal    = new bootstrap.Modal(docsModalEl);
     var docsTitle    = document.getElementById("docs-modal-title");
     var docsLoading  = document.getElementById("docs-loading");
     var docsContent  = document.getElementById("docs-content");
@@ -29,6 +30,7 @@ document.addEventListener("DOMContentLoaded", function() {
     var pollTimer    = null;
     var folderValid  = false;
     var validateTimer = null;
+    var pendingMermaidDivs = null; // mermaid divs waiting for modal shown event
 
     // ---- Initialize Bootstrap popovers for info tooltips ----
 
@@ -50,7 +52,22 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     });
 
+    function renderPendingMermaid() {
+        if (!pendingMermaidDivs || pendingMermaidDivs.length === 0) return;
+        var divs = pendingMermaidDivs;
+        pendingMermaidDivs = null;
+        mermaid.run({ nodes: divs }).catch(function(e) {
+            console.warn("Mermaid rendering error:", e);
+        });
+    }
+
+    // When the modal is fully visible (animation done), render mermaid
+    docsModalEl.addEventListener("shown.bs.modal", function() {
+        renderPendingMermaid();
+    });
+
     function openDocsModal(docKey) {
+        pendingMermaidDivs = null;
         docsLoading.style.display = "block";
         docsContent.innerHTML = "";
         docsContent.style.display = "none";
@@ -92,10 +109,18 @@ document.addEventListener("DOMContentLoaded", function() {
                     pre.parentNode.replaceChild(div, pre);
                     mermaidDivs.push(div);
                 }
+
                 if (mermaidDivs.length > 0) {
-                    mermaid.run({ nodes: mermaidDivs }).catch(function(e) {
-                        console.warn("Mermaid rendering error:", e);
-                    });
+                    // Check if modal is already fully visible
+                    if (docsModalEl.classList.contains("show")) {
+                        // Modal already shown, render immediately
+                        mermaid.run({ nodes: mermaidDivs }).catch(function(e) {
+                            console.warn("Mermaid rendering error:", e);
+                        });
+                    } else {
+                        // Modal still animating, defer until shown
+                        pendingMermaidDivs = mermaidDivs;
+                    }
                 }
             })
             .catch(function(err) {
