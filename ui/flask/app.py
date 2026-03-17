@@ -16,8 +16,10 @@ from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__)
 
-# Resolve the scripts directory relative to this file
-SCRIPTS_DIR = str(Path(__file__).resolve().parent.parent.parent / "scripts")
+# Resolve directories relative to this file
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+SCRIPTS_DIR = str(REPO_ROOT / "scripts")
+DOCS_DIR = str(REPO_ROOT / "docs")
 
 # In-memory job store: job_id -> {status, log, current_step, steps, pid}
 jobs = {}
@@ -241,9 +243,38 @@ PHOTO_EXTENSIONS = {
 }
 
 
+DOCS_MAP = {
+    "sync_exif_and_rename": "sync_exif_and_rename.md",
+    "gps_gap_fill": "gps_gap_fill.md",
+    "extract_photo_summary": "extract_photo_summary.md",
+    "annotate_desc": "annotate_photos_with_ollama.md",
+    "annotate_kw": "annotate_photos_with_ollama.md",
+    "detect_blurry": "detect_blurry_photos.md",
+    "geo_rename": "geo_rename_photos.md",
+    "gopro_geo_rename": "gopro_geo_rename.md",
+    "contact_sheet": "contact_sheet.md",
+    "scrub_metadata": "scrub_selected_metadata.md",
+    "search_exif_iptc": "search_exif_iptc.md",
+}
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/api/docs/<doc_key>")
+def api_docs(doc_key):
+    """Return raw markdown content for a documentation file."""
+    filename = DOCS_MAP.get(doc_key)
+    if not filename:
+        return jsonify({"error": "Unknown doc key"}), 404
+    filepath = os.path.join(DOCS_DIR, filename)
+    if not os.path.isfile(filepath):
+        return jsonify({"error": "Doc file not found"}), 404
+    with open(filepath, "r") as f:
+        content = f.read()
+    return jsonify({"key": doc_key, "filename": filename, "content": content})
 
 
 @app.route("/api/browse")
