@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """PhotoShell Flask UI - run photo-processing scripts as a workflow."""
 
+import argparse
 import json
 import os
+import socket
 import subprocess
 import threading
 import time
@@ -297,5 +299,38 @@ def api_cancel(job_id):
     return jsonify({"ok": True})
 
 
+def get_primary_ip():
+    """Return the server's primary (non-loopback) IP address."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # Doesn't actually send anything; just resolves the route
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
+
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5050)
+    parser = argparse.ArgumentParser(description="PhotoShell Flask UI")
+    parser.add_argument(
+        "--primary-ip", action="store_true",
+        help="Bind to the server's primary IP (default port becomes 443)")
+    parser.add_argument(
+        "--host",
+        help="Bind address (default: 0.0.0.0, or primary IP with --primary-ip)")
+    parser.add_argument(
+        "--port", type=int,
+        help="Port number (default: 5050, or 443 with --primary-ip)")
+    args = parser.parse_args()
+
+    if args.primary_ip:
+        host = args.host or get_primary_ip()
+        port = args.port or 443
+    else:
+        host = args.host or "0.0.0.0"
+        port = args.port or 5050
+
+    print("Starting PhotoShell on %s:%d" % (host, port))
+    app.run(debug=True, host=host, port=port)
