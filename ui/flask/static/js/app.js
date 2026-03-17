@@ -130,6 +130,211 @@ document.addEventListener("DOMContentLoaded", function() {
             });
     }
 
+    // ---- Step sequencing and order validation ----
+
+    // Recommended order based on typical photo workflow logic.
+    // Lower number = should run earlier.
+    var STEP_RECOMMENDED_ORDER = {
+        "enable_sync_exif":        1,
+        "enable_gps_gap_fill":     2,
+        "enable_extract_summary":  3,
+        "enable_annotate_desc":    4,
+        "enable_annotate_kw":      5,
+        "enable_blur":             6,
+        "enable_geo_rename":       7,
+        "enable_gopro":            8,
+        "enable_contact_sheet":    9,
+        "enable_scrub":           10,
+        "enable_search":          11
+    };
+
+    var STEP_LABELS = {
+        "enable_sync_exif":       "Sync EXIF & Rename",
+        "enable_gps_gap_fill":    "GPS Gap Fill",
+        "enable_extract_summary": "Extract Photo Summary",
+        "enable_annotate_desc":   "Annotate - Description",
+        "enable_annotate_kw":     "Annotate - Keywords",
+        "enable_blur":            "Detect Blurry Photos",
+        "enable_geo_rename":      "Geo Rename Photos",
+        "enable_gopro":           "GoPro Geo Rename",
+        "enable_contact_sheet":   "Contact Sheet",
+        "enable_scrub":           "Scrub Metadata",
+        "enable_search":          "Search EXIF / IPTC"
+    };
+
+    // Why each dependency matters
+    var ORDER_RULES = [
+        {
+            before: "enable_sync_exif",
+            after: "enable_gps_gap_fill",
+            reason: "Sync EXIF first so exported files have correct metadata before GPS gap filling reads timestamps."
+        },
+        {
+            before: "enable_gps_gap_fill",
+            after: "enable_extract_summary",
+            reason: "GPS Gap Fill should run before Extract Summary so the summary includes the filled-in location data."
+        },
+        {
+            before: "enable_gps_gap_fill",
+            after: "enable_annotate_desc",
+            reason: "GPS Gap Fill should run before annotation so descriptions can reference accurate location information."
+        },
+        {
+            before: "enable_gps_gap_fill",
+            after: "enable_annotate_kw",
+            reason: "GPS Gap Fill should run before keyword generation so location-based keywords are accurate."
+        },
+        {
+            before: "enable_extract_summary",
+            after: "enable_annotate_desc",
+            reason: "Extract Summary writes technical metadata to comments first; Annotate Description can then build on that context."
+        },
+        {
+            before: "enable_annotate_desc",
+            after: "enable_annotate_kw",
+            reason: "Description annotation should run before keywords so the keyword prompt can leverage the generated description."
+        },
+        {
+            before: "enable_annotate_desc",
+            after: "enable_contact_sheet",
+            reason: "Annotate descriptions before generating the contact sheet so captions include the generated text."
+        },
+        {
+            before: "enable_annotate_kw",
+            after: "enable_contact_sheet",
+            reason: "Generate keywords before the contact sheet so keyword metadata is available for captions."
+        },
+        {
+            before: "enable_gps_gap_fill",
+            after: "enable_geo_rename",
+            reason: "GPS Gap Fill should run before Geo Rename so filenames include the filled-in location."
+        },
+        {
+            before: "enable_gps_gap_fill",
+            after: "enable_gopro",
+            reason: "GPS Gap Fill should run before GoPro Geo Rename so clip names include accurate locations."
+        },
+        {
+            before: "enable_annotate_desc",
+            after: "enable_scrub",
+            reason: "Run annotation before scrubbing, otherwise scrub will clear the fields annotation writes to."
+        },
+        {
+            before: "enable_annotate_kw",
+            after: "enable_scrub",
+            reason: "Run keyword annotation before scrubbing, otherwise scrub will clear the keyword fields."
+        },
+        {
+            before: "enable_extract_summary",
+            after: "enable_scrub",
+            reason: "Run Extract Summary before scrubbing, otherwise scrub will clear the summary fields."
+        }
+    ];
+
+    // Track selection order (keys in the order the user checked them)
+    var selectionOrder = [];
+    var orderWarningEl = document.getElementById("order-warning");
+
+    // All step badges indexed by key
+    var stepBadges = {};
+    document.querySelectorAll(".step-badge[data-step-key]").forEach(function(el) {
+        stepBadges[el.getAttribute("data-step-key")] = el;
+    });
+
+    function updateStepSequencing() {
+        // Build the current selection order from selectionOrder
+        // (only keep keys that are still checked)
+        var activeOrder = [];
+        for (var i = 0; i < selectionOrder.length; i++) {
+            var key = selectionOrder[i];
+            var cb = document.querySelector('input[name="' + key + '"]');
+            if (cb && cb.checked) {
+                activeOrder.push(key);
+            }
+        }
+        selectionOrder = activeOrder;
+
+        // Update all badges: show sequence number or reset
+        for (var key in stepBadges) {
+            var badge = stepBadges[key];
+            var idx = activeOrder.indexOf(key);
+            if (idx >= 0) {
+                badge.textContent = "Step " + (idx + 1);
+                badge.classList.remove("step-warn");
+            } else {
+                badge.textContent = "Step";
+                badge.classList.remove("step-warn");
+            }
+        }
+
+        // Check ordering violations
+        var issues = [];
+        for (var r = 0; r < ORDER_RULES.length; r++) {
+            var rule = ORDER_RULES[r];
+            var posB = activeOrder.indexOf(rule.before);
+            var posA = activeOrder.indexOf(rule.after);
+            // Only flag if both are selected and order is wrong
+            if (posB >= 0 && posA >= 0 && posB > posA) {
+                issues.push({
+                    before: rule.before,
+                    after: rule.after,
+                    reason: rule.reason,
+                    posB: posB,
+                    posA: posA
+                });
+                // Mark both badges
+                stepBadges[rule.before].classList.add("step-warn");
+                stepBadges[rule.after].classList.add("step-warn");
+            }
+        }
+
+        // Render the order warning
+        if (issues.length === 0) {
+            orderWarningEl.style.display = "none";
+            orderWarningEl.classList.remove("expanded");
+            return;
+        }
+
+        var html = '<div class="ow-header" onclick="this.parentElement.classList.toggle(\'expanded\')">';
+        html += '<i class="bi bi-shuffle"></i> ';
+        html += issues.length + ' step ordering ' + (issues.length === 1 ? 'concern' : 'concerns');
+        html += ' <i class="bi bi-chevron-down" style="font-size:.65rem;margin-left:.3rem"></i>';
+        html += '</div>';
+        html += '<div class="ow-detail">';
+
+        for (var j = 0; j < issues.length; j++) {
+            var iss = issues[j];
+            html += '<div class="ow-issue">';
+            html += '<i class="bi bi-shuffle" style="font-size:.7rem"></i> ';
+            html += '<strong>' + STEP_LABELS[iss.before] + '</strong>';
+            html += ' (step ' + (iss.posB + 1) + ')';
+            html += ' is typically run before ';
+            html += '<strong>' + STEP_LABELS[iss.after] + '</strong>';
+            html += ' (step ' + (iss.posA + 1) + ')';
+            html += '</div>';
+            html += '<div class="ow-issue" style="padding-left:1.1rem;color:#999;font-size:.75rem">';
+            html += iss.reason;
+            html += '</div>';
+        }
+
+        // Build suggested order
+        var suggested = activeOrder.slice().sort(function(a, b) {
+            return (STEP_RECOMMENDED_ORDER[a] || 99) - (STEP_RECOMMENDED_ORDER[b] || 99);
+        });
+        html += '<div class="ow-suggestion">';
+        html += '<i class="bi bi-lightbulb" style="font-size:.7rem"></i> Suggested order: ';
+        for (var k = 0; k < suggested.length; k++) {
+            if (k > 0) html += ' &rarr; ';
+            html += STEP_LABELS[suggested[k]];
+        }
+        html += '</div>';
+
+        html += '</div>';
+
+        orderWarningEl.innerHTML = html;
+        orderWarningEl.style.display = "block";
+    }
+
     // ---- Toggle accordion sections based on checkboxes in the header ----
 
     document.querySelectorAll(".section-toggle").forEach(function(cb) {
@@ -141,13 +346,21 @@ document.addEventListener("DOMContentLoaded", function() {
         function syncState() {
             if (cb.checked) {
                 item.classList.remove("disabled");
+                // Track selection order: append if not already present
+                if (selectionOrder.indexOf(cb.name) === -1) {
+                    selectionOrder.push(cb.name);
+                }
             } else {
                 item.classList.add("disabled");
                 var collapse = item.querySelector(".accordion-collapse");
                 if (collapse && collapse.classList.contains("show")) {
                     bootstrap.Collapse.getOrCreateInstance(collapse).hide();
                 }
+                // Remove from selection order
+                var idx = selectionOrder.indexOf(cb.name);
+                if (idx >= 0) selectionOrder.splice(idx, 1);
             }
+            updateStepSequencing();
         }
 
         cb.addEventListener("change", syncState);
@@ -331,6 +544,8 @@ document.addEventListener("DOMContentLoaded", function() {
         form.querySelectorAll("input[type=checkbox]").forEach(function(el) {
             if (el.name) data[el.name] = el.checked;
         });
+        // Include the user's selection order so backend runs steps in this sequence
+        data.step_order = selectionOrder.slice();
         return data;
     }
 

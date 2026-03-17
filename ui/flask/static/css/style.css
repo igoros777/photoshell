@@ -283,6 +283,61 @@ body {
     margin-top: .15rem;
 }
 
+/* Order warning panel */
+.order-warning {
+    margin-top: .75rem;
+    padding: .6rem .85rem;
+    border: 1px solid #555;
+    border-radius: 5px;
+    background: #2a2a2a;
+    font-size: .8rem;
+    color: #bbb;
+    line-height: 1.5;
+}
+
+.order-warning .ow-header {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.order-warning .ow-header i {
+    color: #999;
+}
+
+.order-warning .ow-detail {
+    margin-top: .5rem;
+    padding-top: .5rem;
+    border-top: 1px solid #444;
+    display: none;
+}
+
+.order-warning.expanded .ow-detail {
+    display: block;
+}
+
+.order-warning .ow-issue {
+    margin-bottom: .35rem;
+    padding-left: .25rem;
+}
+
+.order-warning .ow-suggestion {
+    color: #999;
+    font-size: .75rem;
+    margin-top: .5rem;
+    padding-top: .4rem;
+    border-top: 1px dashed #444;
+}
+
+/* Step badge warning state */
+.step-badge.step-warn {
+    border: 1px solid #886;
+    color: #cc9;
+    background: transparent;
+}
+
 /* Step row with info + docs actions */
 .step-row {
     display: flex;

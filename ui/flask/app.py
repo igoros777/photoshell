@@ -94,39 +94,34 @@ def _script(name):
     return os.path.join(SCRIPTS_DIR, name)
 
 
-def build_pipeline(data):
-    """Return a list of {label, cmd} dicts from the submitted form."""
+def _build_step(key, data):
+    """Build a single {label, cmd} dict for a given step key, or None."""
     photo_dir = data["photo_dir"]
-    steps = []
 
-    # 1) sync_exif_and_rename
-    if data.get("enable_sync_exif"):
+    if key == "enable_sync_exif" and data.get(key):
         cmd = ["bash", _script("sync_exif_and_rename.sh"), photo_dir]
         if data.get("sync_orig_dir"):
             cmd += ["--orig-dir", data["sync_orig_dir"]]
         if data.get("sync_dry_run"):
             cmd.append("--dry-run")
-        steps.append({"label": "Sync EXIF & Rename", "cmd": cmd})
+        return {"label": "Sync EXIF & Rename", "cmd": cmd}
 
-    # 2) gps_gap_fill
-    if data.get("enable_gps_gap_fill"):
+    if key == "enable_gps_gap_fill" and data.get(key):
         cmd = ["bash", _script("gps_gap_fill.sh")]
         if data.get("gps_dry_run"):
             cmd.append("--dry-run")
-        steps.append({"label": "GPS Gap Fill", "cmd": cmd})
+        return {"label": "GPS Gap Fill", "cmd": cmd}
 
-    # 3) extract_photo_summary (via find + xargs)
-    if data.get("enable_extract_summary"):
+    if key == "enable_extract_summary" and data.get(key):
         script_path = _script("extract_photo_summary.sh")
         cmd = [
             "bash", "-c",
             'find ./ -maxdepth 1 -type f \\( -iname "*.jpg" -o -iname "*.jpeg" \\) '
             '-print0 | xargs -0 -I{} bash "%s" "{}"' % script_path,
         ]
-        steps.append({"label": "Extract Photo Summary", "cmd": cmd})
+        return {"label": "Extract Photo Summary", "cmd": cmd}
 
-    # 4) annotate - description
-    if data.get("enable_annotate_desc"):
+    if key == "enable_annotate_desc" and data.get(key):
         cmd = ["bash", _script("annotate_photos_with_ollama.sh"), "--description"]
         if data.get("desc_model"):
             cmd += ["-m", data["desc_model"]]
@@ -136,10 +131,9 @@ def build_pipeline(data):
             cmd.append("--recursive")
         if data.get("desc_file"):
             cmd += ["--file", data["desc_file"]]
-        steps.append({"label": "Annotate (Description)", "cmd": cmd})
+        return {"label": "Annotate (Description)", "cmd": cmd}
 
-    # 5) annotate - keywords
-    if data.get("enable_annotate_kw"):
+    if key == "enable_annotate_kw" and data.get(key):
         cmd = ["bash", _script("annotate_photos_with_ollama.sh"), "--keywords"]
         if data.get("kw_model"):
             cmd += ["-m", data["kw_model"]]
@@ -149,10 +143,9 @@ def build_pipeline(data):
             cmd.append("--recursive")
         if data.get("kw_file"):
             cmd += ["--file", data["kw_file"]]
-        steps.append({"label": "Annotate (Keywords)", "cmd": cmd})
+        return {"label": "Annotate (Keywords)", "cmd": cmd}
 
-    # 6) detect_blurry_photos
-    if data.get("enable_blur"):
+    if key == "enable_blur" and data.get(key):
         cmd = ["bash", _script("detect_blurry_photos.sh")]
         if data.get("blur_mode"):
             cmd += ["--mode", data["blur_mode"]]
@@ -170,24 +163,21 @@ def build_pipeline(data):
             cmd.append("--clean")
         if data.get("blur_dry_run"):
             cmd.append("--dry-run")
-        steps.append({"label": "Detect Blurry Photos", "cmd": cmd})
+        return {"label": "Detect Blurry Photos", "cmd": cmd}
 
-    # 7) geo_rename_photos
-    if data.get("enable_geo_rename"):
+    if key == "enable_geo_rename" and data.get(key):
         cmd = ["bash", _script("geo_rename_photos.sh")]
         if data.get("geo_structure"):
             cmd += ["--structure", data["geo_structure"]]
         if data.get("geo_dry_run"):
             cmd.append("--dry-run")
-        steps.append({"label": "Geo Rename Photos", "cmd": cmd})
+        return {"label": "Geo Rename Photos", "cmd": cmd}
 
-    # 8) gopro_geo_rename
-    if data.get("enable_gopro"):
+    if key == "enable_gopro" and data.get(key):
         cmd = ["bash", _script("gopro_geo_rename.sh")]
-        steps.append({"label": "GoPro Geo Rename", "cmd": cmd})
+        return {"label": "GoPro Geo Rename", "cmd": cmd}
 
-    # 9) contact_sheet
-    if data.get("enable_contact_sheet"):
+    if key == "enable_contact_sheet" and data.get(key):
         cmd = ["bash", _script("contact_sheet.sh")]
         if data.get("cs_thumb_size"):
             cmd += ["--thumb-size", data["cs_thumb_size"]]
@@ -197,10 +187,9 @@ def build_pipeline(data):
             cmd += ["--output", data["cs_output"]]
         if data.get("cs_recursive"):
             cmd.append("--recursive")
-        steps.append({"label": "Contact Sheet", "cmd": cmd})
+        return {"label": "Contact Sheet", "cmd": cmd}
 
-    # 10) scrub_selected_metadata
-    if data.get("enable_scrub"):
+    if key == "enable_scrub" and data.get(key):
         cmd = ["bash", _script("scrub_selected_metadata.sh")]
         if data.get("scrub_exif_tags"):
             cmd += ["--exif", data["scrub_exif_tags"]]
@@ -210,10 +199,9 @@ def build_pipeline(data):
             cmd += ["-r", data.get("scrub_recursive_depth", "0")]
         if data.get("scrub_dry_run"):
             cmd.append("--dry-run")
-        steps.append({"label": "Scrub Metadata", "cmd": cmd})
+        return {"label": "Scrub Metadata", "cmd": cmd}
 
-    # 11) search_exif_iptc
-    if data.get("enable_search"):
+    if key == "enable_search" and data.get(key):
         query = data.get("search_query", "")
         if query:
             cmd = ["bash", _script("search_exif_iptc.sh"), "-q", query]
@@ -227,8 +215,38 @@ def build_pipeline(data):
                 cmd.append("--fzf")
             if data.get("search_copy_to"):
                 cmd += ["--copy-to", data["search_copy_to"]]
-            steps.append({"label": "Search EXIF/IPTC", "cmd": cmd})
+            return {"label": "Search EXIF/IPTC", "cmd": cmd}
 
+    return None
+
+
+# Default step order (used when client doesn't send step_order)
+DEFAULT_STEP_ORDER = [
+    "enable_sync_exif", "enable_gps_gap_fill", "enable_extract_summary",
+    "enable_annotate_desc", "enable_annotate_kw", "enable_blur",
+    "enable_geo_rename", "enable_gopro", "enable_contact_sheet",
+    "enable_scrub", "enable_search",
+]
+
+
+def build_pipeline(data):
+    """Return a list of {label, cmd} dicts in the user's selection order."""
+    step_order = data.get("step_order", DEFAULT_STEP_ORDER)
+    steps = []
+    seen = set()
+    for key in step_order:
+        if key in seen:
+            continue
+        seen.add(key)
+        step = _build_step(key, data)
+        if step:
+            steps.append(step)
+    # Catch any enabled steps not in step_order (safety fallback)
+    for key in DEFAULT_STEP_ORDER:
+        if key not in seen:
+            step = _build_step(key, data)
+            if step:
+                steps.append(step)
     return steps
 
 

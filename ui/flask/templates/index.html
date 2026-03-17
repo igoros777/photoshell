@@ -267,6 +267,8 @@
                 </div>
 
             </div>
+
+            <div id="order-warning" class="order-warning" style="display:none"></div>
         </div>
     </div>
 </div>
@@ -332,7 +334,7 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-summary">
             <span class="step-header">
-                <span class="step-badge">Step</span>
+                <span class="step-badge" data-step-key="enable_extract_summary">Step</span>
                 <span class="step-label"><i class="bi bi-card-text"></i> Extract Photo Summary</span>
             </span>
         </button>
@@ -354,7 +356,7 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-desc">
             <span class="step-header">
-                <span class="step-badge">Step</span>
+                <span class="step-badge" data-step-key="enable_annotate_desc">Step</span>
                 <span class="step-label"><i class="bi bi-chat-left-text"></i> Annotate – Description (Ollama)</span>
             </span>
         </button>
@@ -396,7 +398,7 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-kw">
             <span class="step-header">
-                <span class="step-badge">Step</span>
+                <span class="step-badge" data-step-key="enable_annotate_kw">Step</span>
                 <span class="step-label"><i class="bi bi-tags"></i> Annotate – Keywords (Ollama)</span>
             </span>
         </button>
@@ -437,7 +439,7 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-blur">
             <span class="step-header">
-                <span class="step-badge">Step</span>
+                <span class="step-badge" data-step-key="enable_blur">Step</span>
                 <span class="step-label"><i class="bi bi-eye"></i> Detect Blurry Photos</span>
             </span>
         </button>
@@ -500,7 +502,7 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-geo">
             <span class="step-header">
-                <span class="step-badge">Step</span>
+                <span class="step-badge" data-step-key="enable_geo_rename">Step</span>
                 <span class="step-label"><i class="bi bi-signpost-2"></i> Geo Rename Photos</span>
             </span>
         </button>
@@ -535,7 +537,7 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-gopro">
             <span class="step-header">
-                <span class="step-badge">Step</span>
+                <span class="step-badge" data-step-key="enable_gopro">Step</span>
                 <span class="step-label"><i class="bi bi-camera-video"></i> GoPro Geo Rename</span>
             </span>
         </button>
@@ -557,7 +559,7 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-cs">
             <span class="step-header">
-                <span class="step-badge">Step</span>
+                <span class="step-badge" data-step-key="enable_contact_sheet">Step</span>
                 <span class="step-label"><i class="bi bi-grid-3x3"></i> Contact Sheet</span>
             </span>
         </button>
@@ -599,7 +601,7 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-scrub">
             <span class="step-header">
-                <span class="step-badge">Step</span>
+                <span class="step-badge" data-step-key="enable_scrub">Step</span>
                 <span class="step-label"><i class="bi bi-eraser"></i> Scrub Metadata</span>
             </span>
         </button>
@@ -649,7 +651,7 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-search">
             <span class="step-header">
-                <span class="step-badge">Step</span>
+                <span class="step-badge" data-step-key="enable_search">Step</span>
                 <span class="step-label"><i class="bi bi-search"></i> Search EXIF / IPTC</span>
             </span>
         </button>
