@@ -353,26 +353,92 @@ def _fs_op_with_timeout(fn, timeout=3):
     return result[0], None
 
 
+@app.route("/api/browse_debug")
+def api_browse_debug():
+    """Diagnostic: show raw filesystem info for a path."""
+    path = request.args.get("path", "/").strip()
+    target = os.path.normpath(os.path.expanduser(path))
+    target_real = None
+    try:
+        target_real = os.path.realpath(path)
+    except Exception as exc:
+        target_real = "realpath error: %s" % exc
+
+    info = {
+        "input": path,
+        "normpath": target,
+        "realpath": target_real,
+        "isdir_normpath": None,
+        "isdir_realpath": None,
+        "listdir": None,
+        "entries": [],
+    }
+
+    try:
+        info["isdir_normpath"] = os.path.isdir(target)
+    except Exception as exc:
+        info["isdir_normpath"] = "error: %s" % exc
+
+    if target_real and not str(target_real).startswith("realpath error"):
+        try:
+            info["isdir_realpath"] = os.path.isdir(target_real)
+        except Exception as exc:
+            info["isdir_realpath"] = "error: %s" % exc
+
+    # Try listdir on both paths
+    listdir_target = target_real if (
+        target_real and not str(target_real).startswith("realpath error")
+        and info.get("isdir_realpath")
+    ) else target
+
+    try:
+        raw_entries = sorted(os.listdir(listdir_target))
+        info["listdir"] = {"path_used": listdir_target, "count": len(raw_entries)}
+        for entry in raw_entries[:50]:  # cap at 50
+            full = os.path.join(listdir_target, entry)
+            entry_info = {"name": entry}
+            try:
+                lst = os.lstat(full)
+                entry_info["lstat_mode"] = oct(lst.st_mode)
+                entry_info["lstat_isdir"] = stat.S_ISDIR(lst.st_mode)
+                entry_info["lstat_islink"] = stat.S_ISLNK(lst.st_mode)
+                entry_info["lstat_isreg"] = stat.S_ISREG(lst.st_mode)
+            except Exception as exc:
+                entry_info["lstat_error"] = str(exc)
+            try:
+                entry_info["isdir"] = os.path.isdir(full)
+            except Exception as exc:
+                entry_info["isdir_error"] = str(exc)
+            info["entries"].append(entry_info)
+    except Exception as exc:
+        info["listdir"] = {"error": str(exc)}
+
+    return jsonify(info)
+
+
 @app.route("/api/browse")
 def api_browse():
-    """Return subdirectories of a given path for the folder browser.
-
-    All filesystem calls run directly on the request thread (no background
-    threads) because WSL2 drvfs / 9P mounts do not reliably support stat
-    operations from spawned threads.
-    """
+    """Return subdirectories of a given path for the folder browser."""
     path = request.args.get("path", "/").strip()
     show_hidden = request.args.get("hidden", "").lower() in ("1", "true", "yes")
     if not path:
         path = "/"
 
-    target = os.path.normpath(os.path.expanduser(path))
+    # Try realpath first (works on drvfs/WSL mounts where normpath may not).
+    # Fall back to normpath if realpath fails (e.g. stale NFS).
+    try:
+        target = os.path.realpath(os.path.expanduser(path))
+    except (OSError, ValueError):
+        target = os.path.normpath(os.path.expanduser(path))
 
     try:
         if not os.path.isdir(target):
-            target = os.path.dirname(target)
+            # realpath may have resolved to something odd; try normpath
+            target = os.path.normpath(os.path.expanduser(path))
             if not os.path.isdir(target):
-                return jsonify({"error": "Directory not found"}), 404
+                target = os.path.dirname(target)
+                if not os.path.isdir(target):
+                    return jsonify({"error": "Directory not found"}), 404
     except PermissionError:
         return jsonify({"error": "Permission denied"}), 403
     except OSError as exc:
@@ -385,10 +451,6 @@ def api_browse():
     except OSError as exc:
         return jsonify({"error": str(exc)}), 500
 
-    # Classify entries as directories.
-    # On network/drvfs mounts lstat() mode bits can be unreliable
-    # (directories report as S_IFREG), so always fall back to
-    # os.path.isdir() which does a proper stat call.
     dirs = []
     for entry in entries:
         if not show_hidden and entry.startswith("."):
