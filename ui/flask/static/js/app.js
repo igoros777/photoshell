@@ -31,6 +31,7 @@ document.addEventListener("DOMContentLoaded", function() {
     var folderValid  = false;
     var validateTimer = null;
     var pendingMermaidDivs = null; // mermaid divs waiting for modal shown event
+    var orderOverride = false; // user acknowledged ordering concerns
 
     // ---- Initialize Bootstrap popovers for info tooltips ----
 
@@ -358,12 +359,21 @@ document.addEventListener("DOMContentLoaded", function() {
             }
         }
 
+        // Compute suggested order for reuse
+        var suggested = activeOrder.slice().sort(function(a, b) {
+            return (STEP_RECOMMENDED_ORDER[a] || 99) - (STEP_RECOMMENDED_ORDER[b] || 99);
+        });
+
         // Render the order warning
         if (issues.length === 0) {
             orderWarningEl.style.display = "none";
             orderWarningEl.classList.remove("expanded");
+            orderOverride = false;
             return;
         }
+
+        // Reset override when issues change
+        orderOverride = false;
 
         var html = '<div class="ow-header" onclick="this.parentElement.classList.toggle(\'expanded\')">';
         html += '<i class="bi bi-shuffle"></i> ';
@@ -387,10 +397,7 @@ document.addEventListener("DOMContentLoaded", function() {
             html += '</div>';
         }
 
-        // Build suggested order
-        var suggested = activeOrder.slice().sort(function(a, b) {
-            return (STEP_RECOMMENDED_ORDER[a] || 99) - (STEP_RECOMMENDED_ORDER[b] || 99);
-        });
+        // Suggested order
         html += '<div class="ow-suggestion">';
         html += '<i class="bi bi-lightbulb" style="font-size:.7rem"></i> Suggested order: ';
         for (var k = 0; k < suggested.length; k++) {
@@ -399,10 +406,120 @@ document.addEventListener("DOMContentLoaded", function() {
         }
         html += '</div>';
 
+        // Action buttons
+        html += '<div class="ow-actions">';
+        html += '<button type="button" class="btn btn-sm ow-btn-reorder" id="btn-use-suggested">';
+        html += '<i class="bi bi-arrow-repeat"></i> Use suggested order</button>';
+        html += '<button type="button" class="btn btn-sm ow-btn-override" id="btn-override-order">';
+        html += '<i class="bi bi-unlock"></i> Keep my order</button>';
+        html += '</div>';
+
         html += '</div>';
 
         orderWarningEl.innerHTML = html;
         orderWarningEl.style.display = "block";
+
+        // Wire up the "Use suggested order" button
+        document.getElementById("btn-use-suggested").addEventListener("click", function() {
+            selectionOrder = suggested.slice();
+            updateStepSequencing();
+        });
+
+        // Wire up the "Keep my order" override button
+        document.getElementById("btn-override-order").addEventListener("click", function() {
+            orderOverride = true;
+            orderWarningEl.classList.add("ow-overridden");
+            var overMsg = orderWarningEl.querySelector(".ow-override-msg");
+            if (!overMsg) {
+                var div = document.createElement("div");
+                div.className = "ow-override-msg";
+                div.innerHTML = '<i class="bi bi-exclamation-triangle"></i> '
+                    + 'Order override active. The selected step sequence may produce '
+                    + 'unexpected results if dependencies are not met.';
+                orderWarningEl.querySelector(".ow-detail").appendChild(div);
+            }
+            // Hide action buttons after override
+            var actions = orderWarningEl.querySelector(".ow-actions");
+            if (actions) actions.style.display = "none";
+        });
+    }
+
+    // Returns an object with validation results for pre-run check
+    function validateWorkflow() {
+        var result = { valid: true, errors: [], warnings: [] };
+        var data = collectFormData();
+
+        // 1) Folder check
+        if (!data.photo_dir) {
+            result.valid = false;
+            result.errors.push("No photo directory specified.");
+        } else if (!folderValid) {
+            result.valid = false;
+            result.errors.push("Photo directory has not been validated. Click the check button or type a valid path.");
+        }
+
+        // 2) At least one step
+        var activeSteps = selectionOrder.filter(function(key) {
+            return data[key];
+        });
+        if (activeSteps.length === 0) {
+            result.valid = false;
+            result.errors.push("No workflow steps are enabled.");
+            return result;
+        }
+
+        // 3) Step-specific validation
+        if (data.enable_search && !data.search_query) {
+            result.valid = false;
+            result.errors.push("Search EXIF/IPTC is enabled but no search query is specified.");
+        }
+
+        // 4) Ordering issues
+        var issues = [];
+        for (var r = 0; r < ORDER_RULES.length; r++) {
+            var rule = ORDER_RULES[r];
+            var posB = activeSteps.indexOf(rule.before);
+            var posA = activeSteps.indexOf(rule.after);
+            if (posB >= 0 && posA >= 0 && posB > posA) {
+                issues.push(rule);
+            }
+        }
+
+        if (issues.length > 0 && !orderOverride) {
+            result.valid = false;
+            result.errors.push(
+                issues.length + " step ordering " + (issues.length === 1 ? "concern" : "concerns")
+                + " detected. Use the suggested order or click \"Keep my order\" to override."
+            );
+        } else if (issues.length > 0 && orderOverride) {
+            result.warnings.push(
+                "Running with " + issues.length + " order " + (issues.length === 1 ? "override" : "overrides")
+                + ". Results may differ from expected behavior."
+            );
+        }
+
+        // 5) Logical warnings (non-blocking)
+        if (data.enable_scrub && (data.enable_annotate_desc || data.enable_annotate_kw || data.enable_extract_summary)) {
+            var scrubPos = activeSteps.indexOf("enable_scrub");
+            var writeSteps = ["enable_annotate_desc", "enable_annotate_kw", "enable_extract_summary"];
+            var anyWriteAfter = writeSteps.some(function(ws) {
+                var p = activeSteps.indexOf(ws);
+                return p >= 0 && p > scrubPos;
+            });
+            if (anyWriteAfter) {
+                result.warnings.push("Scrub Metadata is scheduled before a step that writes metadata. The scrubbed fields will be overwritten.");
+            }
+        }
+
+        if (data.enable_geo_rename && data.enable_extract_summary) {
+            var renPos = activeSteps.indexOf("enable_geo_rename");
+            var sumPos = activeSteps.indexOf("enable_extract_summary");
+            if (renPos >= 0 && sumPos >= 0 && renPos < sumPos) {
+                result.warnings.push("Geo Rename will change filenames before Extract Summary runs. Summary log output will reference the new filenames.");
+            }
+        }
+
+        return result;
     }
 
     // ---- Toggle accordion sections based on checkboxes in the header ----
@@ -623,47 +740,110 @@ document.addEventListener("DOMContentLoaded", function() {
 
     btnRun.addEventListener("click", function() {
         var data = collectFormData();
-        if (!data.photo_dir) {
-            alert("Please specify a photo directory.");
-            return;
-        }
 
-        // Validate folder before running
-        if (!folderValid) {
-            // Trigger a synchronous-style validation
+        // If folder hasn't been validated yet, do it first then re-check
+        if (data.photo_dir && !folderValid) {
             fetch("/api/validate_folder?path=" + encodeURIComponent(data.photo_dir))
                 .then(function(res) { return res.json(); })
                 .then(function(vdata) {
-                    if (!vdata.valid) {
-                        alert("Invalid photo directory: " + vdata.reason);
-                        return;
+                    if (vdata.valid) {
+                        folderValid = true;
+                        photoDirInput.classList.remove("is-invalid");
+                        photoDirInput.classList.add("is-valid");
+                        if (vdata.warning) {
+                            setFolderStatus(
+                                '<i class="bi bi-exclamation-triangle-fill"></i> ' + vdata.warning,
+                                "text-warning"
+                            );
+                        } else {
+                            setFolderStatus(
+                                '<i class="bi bi-check-circle-fill"></i> ' + vdata.photo_count + ' photo file'
+                                + (vdata.photo_count !== 1 ? 's' : '') + ' found',
+                                "text-success"
+                            );
+                        }
+                    } else {
+                        photoDirInput.classList.add("is-invalid");
+                        setFolderStatus(
+                            '<i class="bi bi-x-circle-fill"></i> ' + vdata.reason,
+                            "text-danger"
+                        );
                     }
-                    folderValid = true;
-                    startPipeline(data);
+                    // Now run the full validation
+                    runWithValidation();
                 })
                 .catch(function() {
-                    alert("Could not validate folder.");
+                    setFolderStatus(
+                        '<i class="bi bi-x-circle-fill"></i> Validation request failed',
+                        "text-danger"
+                    );
                 });
             return;
         }
 
-        startPipeline(data);
+        runWithValidation();
     });
 
-    function startPipeline(data) {
-        var anyStep = Object.keys(data).some(function(k) {
-            return k.indexOf("enable_") === 0 && data[k];
-        });
-        if (!anyStep) {
-            alert("Please enable at least one workflow step.");
+    function runWithValidation() {
+        var v = validateWorkflow();
+
+        // Hard errors: block execution
+        if (!v.valid) {
+            showPreRunDialog(v.errors, [], false);
             return;
         }
 
+        // Warnings: show confirmation
+        if (v.warnings.length > 0) {
+            showPreRunDialog([], v.warnings, true);
+            return;
+        }
+
+        // All clear
+        startPipeline(collectFormData());
+    }
+
+    function showPreRunDialog(errors, warnings, allowProceed) {
+        var lines = [];
+
+        if (errors.length > 0) {
+            lines.push("CANNOT RUN:");
+            for (var i = 0; i < errors.length; i++) {
+                lines.push("  - " + errors[i]);
+            }
+        }
+
+        if (warnings.length > 0) {
+            if (lines.length > 0) lines.push("");
+            lines.push("WARNINGS:");
+            for (var j = 0; j < warnings.length; j++) {
+                lines.push("  - " + warnings[j]);
+            }
+        }
+
+        if (allowProceed) {
+            lines.push("");
+            lines.push("Proceed anyway?");
+            if (confirm(lines.join("\n"))) {
+                startPipeline(collectFormData());
+            }
+        } else {
+            alert(lines.join("\n"));
+        }
+    }
+
+    function startPipeline(data) {
         btnRun.disabled = true;
         btnCancel.style.display = "inline-block";
         logPanel.classList.add("active");
-        logPanel.textContent = "Starting pipeline...\n";
         progressBar.classList.add("active");
+
+        // Show header with override notice if applicable
+        var header = "Starting pipeline...\n";
+        if (orderOverride) {
+            header += "NOTE: Running with user-overridden step order.\n";
+        }
+        logPanel.textContent = header;
 
         fetch("/api/run", {
             method: "POST",
