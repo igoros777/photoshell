@@ -35,6 +35,7 @@ configure() {
 
   DRY_RUN=0
   STRUCTURE="none"
+  OVERRIDE_LOCATION=""
 
   PHOTO_EXTS=(
     jpg jpeg jpe
@@ -49,6 +50,7 @@ configure() {
 usage() {
   cat <<'EOF'
 Usage: geo_rename_photos.sh [--dry-run] [--structure none|daily|monthly]
+                            [--location "City, State"]
 
 Options:
   --dry-run                 Print planned changes only (no writes/moves)
@@ -56,6 +58,8 @@ Options:
                             none (default)  -> keep files in current folder
                             daily           -> YYYY/YYYY-MM-DD
                             monthly         -> YYYY/YYYY-MM
+  --location <name>         Fallback location for photos without GPS
+                            (used instead of "mystery_town")
   -h, --help                Show this help
 
 Environment:
@@ -106,6 +110,15 @@ parse_args() {
             exit 1
             ;;
         esac
+        shift 2
+        ;;
+      --location)
+        if [[ $# -lt 2 ]]; then
+          echo "Error: --location requires a value" >&2
+          usage
+          exit 1
+        fi
+        OVERRIDE_LOCATION="${2}"
         shift 2
         ;;
       -h|--help)
@@ -165,13 +178,23 @@ query_location() {
 
 resolve_location() {
   local coordinates="${1}"
+
+  # No GPS coordinates — use override or fallback
   if [[ -z "${coordinates}" ]]; then
-    echo "mystery_town"
+    if [[ -n "${OVERRIDE_LOCATION}" ]]; then
+      sanitize_location "${OVERRIDE_LOCATION}"
+    else
+      echo "mystery_town"
+    fi
     return
   fi
 
   if [[ "${api_key}" == "Get your API key from https://www.geocod.io" ]]; then
-    echo "mystery_town"
+    if [[ -n "${OVERRIDE_LOCATION}" ]]; then
+      sanitize_location "${OVERRIDE_LOCATION}"
+    else
+      echo "mystery_town"
+    fi
     return
   fi
 
@@ -190,6 +213,8 @@ resolve_location() {
   location="$(query_location "${coordinates}")"
   if [[ -n "${location}" ]]; then
     echo "${location}"
+  elif [[ -n "${OVERRIDE_LOCATION}" ]]; then
+    sanitize_location "${OVERRIDE_LOCATION}"
   else
     echo "mystery_town"
   fi

@@ -15,10 +15,32 @@
 # 2026-02-05	igor@igoros.com	Added geocoding functionality
 # 2026-02-06	igor@igoros.com	Added comment writing functionality
 # ****************************************************************************
-input_file="${1}"
+OVERRIDE_LOCATION=""
+
+while [[ $# -gt 0 ]]; do
+  case "${1}" in
+    --location)
+      OVERRIDE_LOCATION="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      echo "Usage: ${0} [--location \"City, State\"] <image-file>"
+      echo ""
+      echo "Options:"
+      echo "  --location <name>  Override reverse-geocoded location for photos"
+      echo "                     missing GPS coordinates"
+      exit 0
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+input_file="${1:-}"
 if [ -z "${input_file}" ] || [ ! -f "${input_file}" ]
 then
-  echo "Usage: ${0} <image-file>"
+  echo "Usage: ${0} [--location \"City, State\"] <image-file>"
   exit 1
 fi
 
@@ -33,7 +55,16 @@ configure() {
 }
 
 convert_function() {
-  coordinates="$(exiftool -q -m -n -p '$GPSLatitude,$GPSLongitude' "${input_file}")"
+  coordinates="$(exiftool -q -m -n -p '$GPSLatitude,$GPSLongitude' "${input_file}" 2>/dev/null)"
+
+  # If GPS is missing and user provided --location, use that directly
+  if [ -z "${coordinates}" ] || [ "${coordinates}" = "," ] ; then
+    if [ -n "${OVERRIDE_LOCATION}" ]; then
+      location="${OVERRIDE_LOCATION}"
+      return
+    fi
+  fi
+
   location="$(curl -s0 -q -k "${apibase}/reverse?q=${coordinates}&api_key=${api_key}&limit=1" | \
     jq -r '.results[]|"\(.formatted_address)"' 2>/dev/null)"
   if [ -z "${location}" ]
@@ -46,7 +77,11 @@ convert_function() {
   fi
   if [ -z "${location}" ]
   then
-    location="Mystery Town, USA"
+    if [ -n "${OVERRIDE_LOCATION}" ]; then
+      location="${OVERRIDE_LOCATION}"
+    else
+      location="Mystery Town, USA"
+    fi
   fi
 }
 export -f convert_function

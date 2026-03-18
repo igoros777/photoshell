@@ -5,8 +5,12 @@ import argparse
 import glob
 import json
 import os
+import platform
+import re
+import shutil
 import socket
 import stat
+import string
 import subprocess
 import threading
 import time
@@ -14,6 +18,8 @@ import uuid
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
+
+from functions.advisory_checks import run_advisory_checks, scan_folder_metadata
 
 app = Flask(__name__)
 
@@ -115,10 +121,13 @@ def _build_step(key, data):
 
     if key == "enable_extract_summary" and data.get(key):
         script_path = _script("extract_photo_summary.sh")
+        loc_arg = ""
+        if data.get("location_override"):
+            loc_arg = '--location "%s" ' % data["location_override"].replace('"', '\\"')
         cmd = [
             "bash", "-c",
             'find ./ -maxdepth 1 -type f \\( -iname "*.jpg" -o -iname "*.jpeg" \\) '
-            '-print0 | xargs -0 -I{} bash "%s" "{}"' % script_path,
+            '-print0 | xargs -0 -I{} bash "%s" %s"{}"' % (script_path, loc_arg),
         ]
         return {"label": "Extract Photo Summary", "cmd": cmd}
 
@@ -170,12 +179,16 @@ def _build_step(key, data):
         cmd = ["bash", _script("geo_rename_photos.sh")]
         if data.get("geo_structure"):
             cmd += ["--structure", data["geo_structure"]]
+        if data.get("location_override"):
+            cmd += ["--location", data["location_override"]]
         if data.get("geo_dry_run"):
             cmd.append("--dry-run")
         return {"label": "Geo Rename Photos", "cmd": cmd}
 
     if key == "enable_gopro" and data.get(key):
         cmd = ["bash", _script("gopro_geo_rename.sh")]
+        if data.get("location_override"):
+            cmd += ["--location", data["location_override"]]
         return {"label": "GoPro Geo Rename", "cmd": cmd}
 
     if key == "enable_contact_sheet" and data.get(key):
@@ -202,22 +215,6 @@ def _build_step(key, data):
             cmd.append("--dry-run")
         return {"label": "Scrub Metadata", "cmd": cmd}
 
-    if key == "enable_search" and data.get(key):
-        query = data.get("search_query", "")
-        if query:
-            cmd = ["bash", _script("search_exif_iptc.sh"), "-q", query]
-            if data.get("search_fields"):
-                cmd += ["-f", data["search_fields"]]
-            if data.get("search_media_types"):
-                cmd += ["-m", data["search_media_types"]]
-            if data.get("search_no_recursive"):
-                cmd.append("--no-recursive")
-            if data.get("search_fzf"):
-                cmd.append("--fzf")
-            if data.get("search_copy_to"):
-                cmd += ["--copy-to", data["search_copy_to"]]
-            return {"label": "Search EXIF/IPTC", "cmd": cmd}
-
     return None
 
 
@@ -230,7 +227,7 @@ DEFAULT_STEP_ORDER = [
     "enable_sync_exif", "enable_gps_gap_fill", "enable_extract_summary",
     "enable_annotate_desc", "enable_annotate_kw",
     "enable_geo_rename", "enable_gopro", "enable_blur",
-    "enable_contact_sheet", "enable_scrub", "enable_search",
+    "enable_contact_sheet", "enable_scrub",
 ]
 
 
@@ -253,6 +250,111 @@ def build_pipeline(data):
             if step:
                 steps.append(step)
     return steps
+
+
+# ---------------------------------------------------------------------------
+# Tool dependency preflight check
+# ---------------------------------------------------------------------------
+
+# Maps each step key to the external tools it requires.
+# "imagemagick" is a virtual dependency resolved to magick (IM7) or
+# identify+convert+montage (IM6).
+STEP_TOOL_DEPS = {
+    "enable_sync_exif":       ["exiftool"],
+    "enable_gps_gap_fill":    ["exiftool"],
+    "enable_extract_summary": ["exiftool", "curl", "jq"],
+    "enable_annotate_desc":   ["exiftool", "ollama"],
+    "enable_annotate_kw":     ["exiftool", "ollama"],
+    "enable_blur":            ["exiftool", "imagemagick"],
+    "enable_geo_rename":      ["exiftool", "curl", "jq"],
+    "enable_gopro":           ["exiftool", "curl", "jq"],
+    "enable_contact_sheet":   ["exiftool", "imagemagick"],
+    "enable_scrub":           ["exiftool"],
+}
+
+# Human-readable labels for tools (used in preflight messages).
+TOOL_LABELS = {
+    "exiftool":    "ExifTool",
+    "curl":        "curl",
+    "jq":          "jq",
+    "ollama":      "Ollama",
+    "imagemagick": "ImageMagick (magick or convert/identify/montage)",
+}
+
+# Step labels for preflight messages.
+STEP_PREFLIGHT_LABELS = {
+    "enable_sync_exif":       "Sync EXIF & Rename",
+    "enable_gps_gap_fill":    "GPS Gap Fill",
+    "enable_extract_summary": "Extract Photo Summary",
+    "enable_annotate_desc":   "Annotate (Description)",
+    "enable_annotate_kw":     "Annotate (Keywords)",
+    "enable_blur":            "Detect Blurry Photos",
+    "enable_geo_rename":      "Geo Rename Photos",
+    "enable_gopro":           "GoPro Geo Rename",
+    "enable_contact_sheet":   "Contact Sheet",
+    "enable_scrub":           "Scrub Metadata",
+}
+
+
+def _check_tool(name):
+    """Check if a tool is available on the system.
+
+    Returns (available: bool, resolved_name: str).
+    For 'imagemagick', checks magick first (IM7), then falls back to
+    identify+convert (IM6).
+    """
+    if name == "imagemagick":
+        if shutil.which("magick"):
+            return True, "magick (ImageMagick 7)"
+        # IM6 fallback: need at least identify and convert
+        im6_tools = ["identify", "convert", "montage"]
+        found = [t for t in im6_tools if shutil.which(t)]
+        if len(found) == len(im6_tools):
+            return True, "identify/convert/montage (ImageMagick 6)"
+        missing = [t for t in im6_tools if t not in found]
+        return False, "missing: " + ", ".join(missing)
+    return bool(shutil.which(name)), name
+
+
+def run_preflight(enabled_steps):
+    """Check that all required tools for enabled steps are available.
+
+    Returns a dict with:
+      ok       - bool, True if all tools are present
+      tools    - dict of tool -> {available, resolved, needed_by}
+      missing  - list of {tool, label, needed_by} for unavailable tools
+    """
+    # Collect all unique tools needed and which steps need them
+    tool_steps = {}  # tool -> set of step labels
+    for key in enabled_steps:
+        deps = STEP_TOOL_DEPS.get(key, [])
+        for tool in deps:
+            if tool not in tool_steps:
+                tool_steps[tool] = set()
+            tool_steps[tool].add(STEP_PREFLIGHT_LABELS.get(key, key))
+
+    tools_result = {}
+    missing = []
+
+    for tool, step_labels in sorted(tool_steps.items()):
+        available, resolved = _check_tool(tool)
+        tools_result[tool] = {
+            "available": available,
+            "resolved": resolved,
+            "needed_by": sorted(step_labels),
+        }
+        if not available:
+            missing.append({
+                "tool": tool,
+                "label": TOOL_LABELS.get(tool, tool),
+                "needed_by": sorted(step_labels),
+            })
+
+    return {
+        "ok": len(missing) == 0,
+        "tools": tools_result,
+        "missing": missing,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -356,16 +458,116 @@ def _fs_op_with_timeout(fn, timeout=3):
 FS_TIMEOUT_SECONDS = 5
 
 
+IS_WINDOWS = os.name == "nt"
+
+# Detect WSL (Linux running under Windows Subsystem for Linux).
+# WSL exposes Windows drives under /mnt/<letter>/.
+_IS_WSL = False
+if not IS_WINDOWS:
+    try:
+        _IS_WSL = "microsoft" in platform.uname().release.lower()
+    except Exception:
+        pass
+
+# Regex for WSL-style paths: /mnt/c/... and Windows-style: C:\...
+_WSL_PATH_RE = re.compile(r"^/mnt/([a-zA-Z])(/.*)?$")
+_WIN_PATH_RE = re.compile(r"^([a-zA-Z]):[/\\]")
+
+
 def _normalize_browser_path(path):
-    """Normalize user input into an absolute path without resolving mounts."""
+    """Normalize user input into an absolute path.
+
+    Handles cross-platform path styles:
+    - On native Windows: ``/mnt/c/...`` -> ``C:\\...``, forward slashes OK
+    - On WSL (Linux under Windows): ``C:\\Photos`` -> ``/mnt/c/Photos``
+    - On plain Linux: just normalize as usual
+    """
     raw = (path or "").strip()
     if not raw:
         raw = os.sep
+
+    if IS_WINDOWS:
+        # ---- Native Windows ----
+
+        # Translate /mnt/X/... -> X:\...
+        m = _WSL_PATH_RE.match(raw)
+        if m:
+            drive = m.group(1).upper()
+            rest = (m.group(2) or "").replace("/", "\\")
+            raw = drive + ":" + (rest if rest else "\\")
+
+        # Accept bare "/" on Windows as drive root
+        if raw == "/":
+            raw = os.environ.get("SystemDrive", "C:") + "\\"
+
+        # Translate forward slashes
+        raw = raw.replace("/", "\\")
+
+        # Accept bare drive letter (e.g. "C:" -> "C:\")
+        if len(raw) == 2 and raw[1] == ":":
+            raw = raw + "\\"
+
+    elif _IS_WSL:
+        # ---- WSL (Linux under Windows) ----
+
+        # Translate C:\... or C:/... -> /mnt/c/...
+        m = _WIN_PATH_RE.match(raw)
+        if m:
+            drive = m.group(1).lower()
+            # Strip the "C:" or "C:\" prefix, convert backslashes
+            rest = raw[2:].replace("\\", "/")
+            if rest and not rest.startswith("/"):
+                rest = "/" + rest
+            raw = "/mnt/" + drive + rest
+
+        # Also translate any remaining backslashes (e.g. mixed paths)
+        raw = raw.replace("\\", "/")
+
+    else:
+        # ---- Plain Linux / macOS ----
+        # Translate backslashes just in case
+        if "\\" in raw and not raw.startswith("/"):
+            raw = raw.replace("\\", "/")
 
     normalized = os.path.normpath(os.path.expanduser(raw))
     if not os.path.isabs(normalized):
         normalized = os.path.abspath(normalized)
     return os.path.normpath(normalized)
+
+
+def _list_drives():
+    """Return available drive letters.
+
+    On native Windows returns e.g. ``['C:', 'D:']``.
+    On WSL returns drives found under ``/mnt/`` (e.g. ``['C:', 'D:']``).
+    On plain Linux returns an empty list.
+    """
+    if IS_WINDOWS:
+        drives = []
+        for letter in string.ascii_uppercase:
+            drive = letter + ":" + os.sep
+            try:
+                if os.path.isdir(drive):
+                    drives.append(letter + ":")
+            except OSError:
+                pass
+        return drives
+
+    if _IS_WSL:
+        drives = []
+        mnt = "/mnt"
+        try:
+            for entry in os.scandir(mnt):
+                if (len(entry.name) == 1
+                        and entry.name.isalpha()
+                        and entry.is_dir()):
+                    drives.append(entry.name.upper() + ":")
+        except OSError:
+            pass
+        drives.sort()
+        return drives
+
+    return []
 
 
 def _is_filesystem_root(path):
@@ -390,14 +592,57 @@ def _parent_directory(path):
 
 
 def _resolve_directory(path, timeout=FS_TIMEOUT_SECONDS):
-    """Normalize a path and confirm it is a directory within a bounded time."""
+    """Normalize a path and confirm it is a directory within a bounded time.
+
+    When the exact path does not exist, the last component is treated as a
+    case-insensitive prefix and matched against sibling directories.  For
+    example ``/mnt/c/zip/ograph`` will resolve to ``/mnt/c/zip/Photography``
+    if that is the only directory whose name starts with ``ograph`` (case-
+    insensitive).
+    """
     target = _normalize_browser_path(path)
     is_dir, error = _fs_op_with_timeout(lambda: os.path.isdir(target), timeout=timeout)
     if error:
         return None, error
-    if not is_dir:
+    if is_dir:
+        return target, None
+
+    # Exact path not found — try partial/prefix match on the last component
+    parent = os.path.dirname(target)
+    partial = os.path.basename(target)
+    if not partial or not parent:
         return None, FileNotFoundError(target)
-    return target, None
+
+    is_parent_dir, error = _fs_op_with_timeout(
+        lambda: os.path.isdir(parent), timeout=timeout)
+    if error or not is_parent_dir:
+        return None, FileNotFoundError(target)
+
+    def _find_prefix_match():
+        prefix = partial.casefold()
+        matches = []
+        with os.scandir(parent) as it:
+            for entry in it:
+                try:
+                    if entry.is_dir() and entry.name.casefold().startswith(prefix):
+                        matches.append(entry.name)
+                except (OSError, PermissionError):
+                    continue
+        return matches
+
+    matches, error = _fs_op_with_timeout(_find_prefix_match, timeout=timeout)
+    if error or not matches:
+        return None, FileNotFoundError(target)
+
+    if len(matches) == 1:
+        return os.path.normpath(os.path.join(parent, matches[0])), None
+
+    # Multiple matches — pick exact case-insensitive match first, else first
+    # alphabetical match
+    for m in sorted(matches, key=str.casefold):
+        if m.casefold() == partial.casefold():
+            return os.path.normpath(os.path.join(parent, m)), None
+    return os.path.normpath(os.path.join(parent, sorted(matches, key=str.casefold)[0])), None
 
 
 def _browse_directory(target, show_hidden):
@@ -456,7 +701,11 @@ def _filesystem_error_response(error, *, not_found_message="Directory not found"
     if isinstance(error, PermissionError):
         return jsonify({"error": "Permission denied"}), 403
     if isinstance(error, FileNotFoundError):
-        return jsonify({"error": not_found_message}), 404
+        path_info = str(error) if str(error) else ""
+        msg = not_found_message
+        if path_info:
+            msg += ": " + path_info
+        return jsonify({"error": msg}), 404
     if isinstance(error, OSError):
         return jsonify({"error": str(error)}), 500
     return jsonify({"error": str(error)}), 500
@@ -525,6 +774,32 @@ def api_browse_debug():
     return jsonify(info)
 
 
+def _build_breadcrumb(target):
+    """Build a list of path segments for breadcrumb navigation.
+
+    Each entry is {"name": str, "path": str}.  On Windows the first
+    entry is the drive (e.g. "C:").
+    """
+    segments = []
+    current = os.path.normpath(target)
+    while True:
+        parent = os.path.dirname(current)
+        name = os.path.basename(current)
+        if not name:
+            # At root
+            if IS_WINDOWS:
+                drive, _ = os.path.splitdrive(current)
+                name = drive or current
+            else:
+                name = "/"
+            segments.append({"name": name, "path": current})
+            break
+        segments.append({"name": name, "path": current})
+        current = parent
+    segments.reverse()
+    return segments
+
+
 @app.route("/api/browse")
 def api_browse():
     """Return subdirectories of a given path for the folder browser."""
@@ -540,6 +815,14 @@ def api_browse():
     )
     if error:
         return _filesystem_error_response(error)
+
+    # Enrich with platform info
+    payload["platform"] = "windows" if IS_WINDOWS else ("wsl" if _IS_WSL else "linux")
+    drives = _list_drives()
+    if drives:
+        payload["drives"] = drives
+    payload["breadcrumb"] = _build_breadcrumb(payload["current"])
+
     return jsonify(payload)
 
 
@@ -560,7 +843,15 @@ def api_validate_folder():
     if isinstance(error, PermissionError):
         return jsonify({"valid": False, "reason": "Permission denied"})
     if error:
-        return jsonify({"valid": False, "reason": "Directory does not exist"})
+        tried = _normalize_browser_path(path)
+        return jsonify({
+            "valid": False,
+            "reason": "Directory does not exist: %s" % tried,
+        })
+
+    # Detect if the path was expanded from a prefix match
+    input_normalized = _normalize_browser_path(path)
+    was_expanded = (os.path.normpath(target) != os.path.normpath(input_normalized))
 
     photo_count, error = _fs_op_with_timeout(
         lambda: _count_photos_in_directory(target),
@@ -577,11 +868,21 @@ def api_validate_folder():
     if error:
         return jsonify({"valid": False, "reason": str(error)})
 
+    warning = None
+    if was_expanded:
+        warning = "Expanded partial name to: " + os.path.basename(target)
     if photo_count == 0:
+        no_photo_msg = "Directory exists but contains no photo files"
+        if warning:
+            warning = warning + ". " + no_photo_msg
+        else:
+            warning = no_photo_msg
+
+    if warning:
         return jsonify({
             "valid": True,
-            "warning": "Directory exists but contains no photo files",
-            "photo_count": 0,
+            "warning": warning,
+            "photo_count": photo_count,
             "path": target,
         })
 
@@ -592,6 +893,60 @@ def api_validate_folder():
     })
 
 
+@app.route("/api/folder_meta")
+def api_folder_meta():
+    """Quick metadata scan: GPS, IPTC caption, UserComment coverage."""
+    path = request.args.get("path", "").strip()
+    if not path:
+        return jsonify({"error": "No path specified"}), 400
+
+    target, error = _resolve_directory(path)
+    if error:
+        return jsonify({"error": "Directory not accessible: %s" % path}), 400
+
+    try:
+        result = scan_folder_metadata(target)
+    except Exception as exc:
+        return jsonify({"error": "Metadata scan failed: %s" % exc}), 500
+
+    if result is None:
+        return jsonify({"error": "No photos found or exiftool not available"}), 400
+
+    return jsonify(result)
+
+
+@app.route("/api/preflight", methods=["POST"])
+def api_preflight():
+    """Check that all required external tools are available for enabled steps."""
+    data = request.get_json(force=True)
+    enabled = [k for k in DEFAULT_STEP_ORDER if data.get(k)]
+    if not enabled:
+        return jsonify({"ok": True, "tools": {}, "missing": []})
+    return jsonify(run_preflight(enabled))
+
+
+@app.route("/api/advisory", methods=["POST"])
+def api_advisory():
+    """Run advisory checks on the photo directory for the enabled steps.
+
+    Returns a list of advisory objects with keys: key, level, icon, title,
+    detail.  These are informational — they do not block execution.
+    """
+    data = request.get_json(force=True)
+    photo_dir = data.get("photo_dir", "").strip()
+    if not photo_dir:
+        return jsonify([])
+
+    # Resolve partial paths the same way the browser does
+    target, error = _resolve_directory(photo_dir)
+    if error:
+        return jsonify([])
+
+    enabled = [k for k in DEFAULT_STEP_ORDER if data.get(k)]
+    advisories = run_advisory_checks(target, enabled)
+    return jsonify(advisories)
+
+
 @app.route("/api/run", methods=["POST"])
 def api_run():
     data = request.get_json(force=True)
@@ -599,9 +954,23 @@ def api_run():
     if not photo_dir:
         return jsonify({"error": "photo_dir is required"}), 400
 
+    # Normalize the path for the current platform (e.g. C:\... -> /mnt/c/... on WSL)
+    photo_dir = _normalize_browser_path(photo_dir)
+    data["photo_dir"] = photo_dir
+
     steps = build_pipeline(data)
     if not steps:
         return jsonify({"error": "No steps selected"}), 400
+
+    # Preflight: abort early if required tools are missing
+    enabled = [k for k in DEFAULT_STEP_ORDER if data.get(k)]
+    preflight = run_preflight(enabled)
+    if not preflight["ok"]:
+        lines = ["Missing required tools:"]
+        for m in preflight["missing"]:
+            lines.append("  - %s (needed by: %s)" % (
+                m["label"], ", ".join(m["needed_by"])))
+        return jsonify({"error": "\n".join(lines)}), 400
 
     job_id = str(uuid.uuid4())[:8]
     with jobs_lock:
@@ -651,6 +1020,216 @@ def api_cancel(job_id):
             pass
 
     return jsonify({"ok": True})
+
+
+@app.route("/api/search", methods=["POST"])
+def api_search():
+    """Run a standalone EXIF/IPTC metadata search."""
+    data = request.get_json(force=True)
+    photo_dir = data.get("photo_dir", "").strip()
+    query = data.get("search_query", "").strip()
+    if not photo_dir:
+        return jsonify({"error": "photo_dir is required"}), 400
+    if not query:
+        return jsonify({"error": "search_query is required"}), 400
+
+    # Normalize the path for the current platform
+    photo_dir = _normalize_browser_path(photo_dir)
+
+    cmd = ["bash", _script("search_exif_iptc.sh"), "-q", query]
+    if data.get("search_fields"):
+        cmd += ["-f", data["search_fields"]]
+    if data.get("search_media_types"):
+        cmd += ["-m", data["search_media_types"]]
+    if not data.get("search_recursive", True):
+        cmd.append("--no-recursive")
+    if data.get("search_fzf"):
+        cmd.append("--fzf")
+    if data.get("search_copy_to"):
+        cmd += ["--copy-to", data["search_copy_to"]]
+
+    job_id = str(uuid.uuid4())[:8]
+    with jobs_lock:
+        jobs[job_id] = {
+            "status": "running",
+            "log": "Search directory: %s\nQuery: %s\n" % (photo_dir, query),
+            "current_step": 0,
+            "steps": ["Search EXIF/IPTC"],
+            "pid": None,
+        }
+
+    step = {"label": "Search EXIF/IPTC", "cmd": cmd}
+    t = threading.Thread(target=_run_search, args=(job_id, step, photo_dir))
+    t.daemon = True
+    t.start()
+
+    return jsonify({"job_id": job_id})
+
+
+def _run_search(job_id, step, cwd):
+    """Execute a single search step."""
+    rc = _run_step(job_id, 0, step["cmd"], cwd)
+    with jobs_lock:
+        if rc == 0:
+            jobs[job_id]["status"] = "done"
+            jobs[job_id]["log"] += "\n*** Search completed ***\n"
+        else:
+            jobs[job_id]["status"] = "failed"
+            jobs[job_id]["log"] += "\n*** Search failed ***\n"
+
+
+# ---------------------------------------------------------------------------
+# Backup folder
+# ---------------------------------------------------------------------------
+
+def _dir_size(path, recursive):
+    """Calculate total size in bytes and file/dir counts."""
+    total = 0
+    file_count = 0
+    dir_count = 0
+    try:
+        if recursive:
+            for root, dirs, files in os.walk(path):
+                dir_count += len(dirs)
+                for f in files:
+                    fp = os.path.join(root, f)
+                    try:
+                        total += os.path.getsize(fp)
+                        file_count += 1
+                    except OSError:
+                        pass
+        else:
+            with os.scandir(path) as it:
+                for entry in it:
+                    try:
+                        if entry.is_file():
+                            total += entry.stat().st_size
+                            file_count += 1
+                    except OSError:
+                        pass
+    except OSError:
+        pass
+    return total, file_count, dir_count
+
+
+def _human_size(nbytes):
+    """Format bytes into a human-readable string."""
+    for unit in ("bytes", "KB", "MB", "GB", "TB"):
+        if abs(nbytes) < 1024:
+            if unit == "bytes":
+                return "%d %s" % (nbytes, unit)
+            return "%.2f %s" % (nbytes, unit)
+        nbytes /= 1024.0
+    return "%.2f PB" % nbytes
+
+
+@app.route("/api/backup/estimate", methods=["POST"])
+def api_backup_estimate():
+    """Estimate backup size and available space at the destination."""
+    data = request.get_json(force=True)
+    source = data.get("source", "").strip()
+    dest = data.get("dest", "").strip()
+    recursive = data.get("recursive", False)
+
+    if not source:
+        return jsonify({"error": "source is required"}), 400
+
+    source = _normalize_browser_path(source)
+    if not os.path.isdir(source):
+        return jsonify({"error": "Source directory does not exist: %s" % source}), 400
+
+    if dest:
+        dest = _normalize_browser_path(dest)
+    else:
+        dest = source
+
+    if not os.path.isdir(dest):
+        return jsonify({"error": "Destination directory does not exist: %s" % dest}), 400
+
+    size_bytes, file_count, dir_count = _dir_size(source, recursive)
+
+    # Photos/media don't compress well; estimate ~85% of original
+    estimated_archive = int(size_bytes * 0.85) if size_bytes > 1024 else size_bytes
+
+    # Available space at destination
+    try:
+        usage = shutil.disk_usage(dest)
+        avail_bytes = usage.free
+    except OSError:
+        avail_bytes = 0
+
+    return jsonify({
+        "source": source,
+        "dest": dest,
+        "recursive": recursive,
+        "size_bytes": size_bytes,
+        "size_human": _human_size(size_bytes),
+        "file_count": file_count,
+        "dir_count": dir_count,
+        "estimated_archive_bytes": estimated_archive,
+        "estimated_archive_human": _human_size(estimated_archive),
+        "avail_bytes": avail_bytes,
+        "avail_human": _human_size(avail_bytes),
+        "space_ok": estimated_archive < avail_bytes,
+    })
+
+
+@app.route("/api/backup/run", methods=["POST"])
+def api_backup_run():
+    """Create a backup archive of the source folder."""
+    data = request.get_json(force=True)
+    source = data.get("source", "").strip()
+    dest = data.get("dest", "").strip()
+    recursive = data.get("recursive", False)
+
+    if not source:
+        return jsonify({"error": "source is required"}), 400
+
+    source = _normalize_browser_path(source)
+    if not os.path.isdir(source):
+        return jsonify({"error": "Source directory does not exist"}), 400
+
+    if dest:
+        dest = _normalize_browser_path(dest)
+    else:
+        dest = source
+
+    if not os.path.isdir(dest):
+        return jsonify({"error": "Destination directory does not exist"}), 400
+
+    cmd = ["bash", _script("backup_folder.sh"), "--source", source, "--dest", dest]
+    if recursive:
+        cmd.append("--recursive")
+
+    job_id = str(uuid.uuid4())[:8]
+    with jobs_lock:
+        jobs[job_id] = {
+            "status": "running",
+            "log": "Backup source: %s\nDestination: %s\nRecursive: %s\n"
+                   % (source, dest, recursive),
+            "current_step": 0,
+            "steps": ["Backup Folder"],
+            "pid": None,
+        }
+
+    step = {"label": "Backup Folder", "cmd": cmd}
+    t = threading.Thread(target=_run_backup, args=(job_id, step, source))
+    t.daemon = True
+    t.start()
+
+    return jsonify({"job_id": job_id})
+
+
+def _run_backup(job_id, step, cwd):
+    """Execute the backup step."""
+    rc = _run_step(job_id, 0, step["cmd"], cwd)
+    with jobs_lock:
+        if rc == 0:
+            jobs[job_id]["status"] = "done"
+            jobs[job_id]["log"] += "\n*** Backup completed ***\n"
+        else:
+            jobs[job_id]["status"] = "failed"
+            jobs[job_id]["log"] += "\n*** Backup failed ***\n"
 
 
 def get_primary_ip():

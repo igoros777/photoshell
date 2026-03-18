@@ -29,30 +29,69 @@
 v='v1.7'
 apibase="https://api.geocod.io/${v}"
 api_key="${GEOCODIO_API_KEY:-Get your API key from https://www.geocod.io}"
+OVERRIDE_LOCATION=""
+
+while [[ $# -gt 0 ]]; do
+  case "${1}" in
+    --location)
+      OVERRIDE_LOCATION="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      echo "Usage: ${0} [--location \"City, State\"]"
+      echo ""
+      echo "Options:"
+      echo "  --location <name>  Fallback location for clips without GPS"
+      echo "                     (used instead of \"mystery_town\")"
+      exit 0
+      ;;
+    *)
+      echo "Error: unknown argument '${1}'" >&2
+      exit 1
+      ;;
+  esac
+done
+
+sanitize_location() {
+  echo "${1}" | sed -e 's/\(.*\)/\L\1/' -e 's/[^A-Za-z0-9._-]/_/g' -e 's/__/_/g' -e 's/^_//' -e 's/_$//'
+}
 
 convert_function() {
   echo "Renaming ${1}"
   orig_name="$(basename "${1}")"
 
-  coordinates="$(exiftool -q -m -n -p '$GPSLatitude,$GPSLongitude' "${1}")"
+  coordinates="$(exiftool -q -m -n -p '$GPSLatitude,$GPSLongitude' "${1}" 2>/dev/null)"
 
-  location="$(curl -s0 -q -k "${apibase}/reverse?q=${coordinates}&api_key=${api_key}&limit=1" | \
-    jq -r '.results[]|"\(.formatted_address)"' 2>/dev/null | \
-    sed -e 's/\(.*\)/\L\1/' -e 's/[^A-Za-z0-9._-]/_/g' -e 's/__/_/g')"
-
-  if [ -z "${location}" ]
-  then
-    lat="$(echo "${coordinates}" | awk -F, '{print $1}' | sed 's/[0-9]$//')"
-    lon="$(echo "${coordinates}" | awk -F, '{print $2}' | sed 's/[0-9]$//')"
-    coordinates="${lat},${lon}"
+  # If GPS is missing, use the override location directly
+  if [ -z "${coordinates}" ] || [ "${coordinates}" = "," ]; then
+    if [ -n "${OVERRIDE_LOCATION}" ]; then
+      location="$(sanitize_location "${OVERRIDE_LOCATION}")"
+    else
+      location="mystery_town"
+    fi
+  else
     location="$(curl -s0 -q -k "${apibase}/reverse?q=${coordinates}&api_key=${api_key}&limit=1" | \
-    jq -r '.results[]|"\(.formatted_address)"' 2>/dev/null | \
-    sed -e 's/\(.*\)/\L\1/' -e 's/[^A-Za-z0-9._-]/_/g' -e 's/__/_/g')"
-  fi
+      jq -r '.results[]|"\(.formatted_address)"' 2>/dev/null | \
+      sed -e 's/\(.*\)/\L\1/' -e 's/[^A-Za-z0-9._-]/_/g' -e 's/__/_/g')"
 
-  if [ -z "${location}" ]
-  then
-    location="mystery_town"
+    if [ -z "${location}" ]
+    then
+      lat="$(echo "${coordinates}" | awk -F, '{print $1}' | sed 's/[0-9]$//')"
+      lon="$(echo "${coordinates}" | awk -F, '{print $2}' | sed 's/[0-9]$//')"
+      coordinates="${lat},${lon}"
+      location="$(curl -s0 -q -k "${apibase}/reverse?q=${coordinates}&api_key=${api_key}&limit=1" | \
+      jq -r '.results[]|"\(.formatted_address)"' 2>/dev/null | \
+      sed -e 's/\(.*\)/\L\1/' -e 's/[^A-Za-z0-9._-]/_/g' -e 's/__/_/g')"
+    fi
+
+    if [ -z "${location}" ]
+    then
+      if [ -n "${OVERRIDE_LOCATION}" ]; then
+        location="$(sanitize_location "${OVERRIDE_LOCATION}")"
+      else
+        location="mystery_town"
+      fi
+    fi
   fi
 
   dt="$(exiftool -duration "${1}" | grep -oE "([0-9]{1,}:){1,}?([0-9]{1,}){1,}([0-9]{1,}\.[0-9]{1,})?")"

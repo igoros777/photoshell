@@ -26,6 +26,7 @@
 <!-- ================================================================== -->
 <!-- ACCORDION                                                           -->
 <!-- ================================================================== -->
+<div id="order-warning" class="order-warning" style="display:none"></div>
 <div class="accordion" id="mainAccordion">
 
 <!-- ──────────────── 0. Target Photo Folder ──────────────── -->
@@ -50,7 +51,7 @@
                 <label class="form-label" for="photo_dir">Photo Directory (absolute path)</label>
                 <div class="input-group">
                     <input type="text" class="form-control" id="photo_dir" name="photo_dir"
-                           placeholder="/home/user/Pictures/2026-03-shoot">
+                           placeholder="C:\Photos\2026-03 or /home/user/Pictures">
                     <button class="btn btn-outline-secondary" type="button" id="btn-browse"
                             title="Browse folders on server">
                         <i class="bi bi-folder2-open"></i>
@@ -61,7 +62,63 @@
                     </button>
                 </div>
                 <div id="folder-status" class="mt-1" style="font-size:.85rem"></div>
-                <div id="order-warning" class="order-warning" style="display:none"></div>
+                <div id="folder-meta-stats" class="folder-meta-stats" style="display:none"></div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="location_override">
+                    <i class="bi bi-geo-alt"></i> Location Fallback (optional)
+                </label>
+                <input type="text" class="form-control" id="location_override" name="location_override"
+                       placeholder="e.g. Longwood Gardens, Kennett Square, PA">
+                <div class="field-help">
+                    Used as the location for photos missing GPS data in
+                    Extract Photo Summary, Geo Rename, and GoPro Geo Rename steps.
+                </div>
+            </div>
+
+            <hr class="border-secondary">
+
+            <!-- Backup Folder -->
+            <div class="backup-inline">
+                <div class="backup-inline-header">
+                    <i class="bi bi-archive-fill" style="color:var(--ps-accent)"></i>
+                    <span class="backup-inline-title">Backup Folder</span>
+                    <span class="backup-inline-hint">Create a timestamped .tar.gz archive</span>
+                </div>
+                <div class="field-row mt-2">
+                    <div style="flex:2">
+                        <label class="form-label">Destination Folder</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="backup-dest"
+                                   placeholder="Same as photo directory if empty">
+                            <button class="btn btn-outline-secondary" type="button" id="btn-backup-browse-dest"
+                                    title="Browse destination folder">
+                                <i class="bi bi-folder2-open"></i>
+                            </button>
+                        </div>
+                        <div class="field-help">Defaults to the photo directory above</div>
+                    </div>
+                    <div class="d-flex align-items-end pb-1">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="backup-recursive">
+                            <label class="form-check-label" for="backup-recursive">Include subdirectories</label>
+                        </div>
+                    </div>
+                </div>
+                <div id="backup-estimate" class="backup-estimate" style="display:none"></div>
+                <div class="d-flex gap-2 mt-2">
+                    <button type="button" class="btn btn-sm btn-photoshell" id="btn-backup-estimate">
+                        <i class="bi bi-calculator"></i> Estimate
+                    </button>
+                    <button type="button" class="btn btn-sm btn-photoshell" id="btn-backup-run">
+                        <i class="bi bi-archive"></i> Run Backup
+                    </button>
+                    <button type="button" class="btn btn-sm btn-cancel" id="btn-backup-cancel" style="display:none">
+                        <i class="bi bi-x-circle"></i> Cancel
+                    </button>
+                </div>
+                <pre class="log-panel backup-log" id="backup-log" style="display:none"></pre>
             </div>
 
             <hr class="border-secondary">
@@ -249,23 +306,6 @@
                     </div>
                 </div>
 
-                <div class="col-sm-6">
-                    <div class="step-row">
-                        <div class="form-check">
-                            <input class="form-check-input section-toggle" type="checkbox"
-                                   id="chk-search" name="enable_search" data-section="sec-search">
-                            <label class="form-check-label" for="chk-search">
-                                <i class="bi bi-search"></i> Search EXIF / IPTC
-                            </label>
-                        </div>
-                        <span class="step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Searches EXIF/IPTC metadata text across image, raw, and video files with parallel processing. Supports field filtering, media type selection, fuzzy matching, and copying matched files."></i>
-                            <i class="bi bi-book step-docs-link" data-doc="search_exif_iptc" title="Full documentation"></i>
-                        </span>
-                    </div>
-                </div>
 
             </div>
         </div>
@@ -278,8 +318,8 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-sync">
             <span class="step-header">
-                <span class="step-badge" data-step-key="enable_sync_exif">Step</span>
                 <span class="step-label"><i class="bi bi-arrow-repeat"></i> Sync EXIF &amp; Rename</span>
+                <span class="step-badge" data-step-key="enable_sync_exif">Step</span>
             </span>
         </button>
     </h2>
@@ -309,8 +349,8 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-gps">
             <span class="step-header">
-                <span class="step-badge" data-step-key="enable_gps_gap_fill">Step</span>
                 <span class="step-label"><i class="bi bi-geo-alt"></i> GPS Gap Fill</span>
+                <span class="step-badge" data-step-key="enable_gps_gap_fill">Step</span>
             </span>
         </button>
     </h2>
@@ -333,8 +373,8 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-summary">
             <span class="step-header">
-                <span class="step-badge" data-step-key="enable_extract_summary">Step</span>
                 <span class="step-label"><i class="bi bi-card-text"></i> Extract Photo Summary</span>
+                <span class="step-badge" data-step-key="enable_extract_summary">Step</span>
             </span>
         </button>
     </h2>
@@ -355,8 +395,8 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-desc">
             <span class="step-header">
-                <span class="step-badge" data-step-key="enable_annotate_desc">Step</span>
                 <span class="step-label"><i class="bi bi-chat-left-text"></i> Annotate – Description (Ollama)</span>
+                <span class="step-badge" data-step-key="enable_annotate_desc">Step</span>
             </span>
         </button>
     </h2>
@@ -397,8 +437,8 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-kw">
             <span class="step-header">
-                <span class="step-badge" data-step-key="enable_annotate_kw">Step</span>
                 <span class="step-label"><i class="bi bi-tags"></i> Annotate – Keywords (Ollama)</span>
+                <span class="step-badge" data-step-key="enable_annotate_kw">Step</span>
             </span>
         </button>
     </h2>
@@ -438,8 +478,8 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-blur">
             <span class="step-header">
-                <span class="step-badge" data-step-key="enable_blur">Step</span>
                 <span class="step-label"><i class="bi bi-eye"></i> Detect Blurry Photos</span>
+                <span class="step-badge" data-step-key="enable_blur">Step</span>
             </span>
         </button>
     </h2>
@@ -501,8 +541,8 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-geo">
             <span class="step-header">
-                <span class="step-badge" data-step-key="enable_geo_rename">Step</span>
                 <span class="step-label"><i class="bi bi-signpost-2"></i> Geo Rename Photos</span>
+                <span class="step-badge" data-step-key="enable_geo_rename">Step</span>
             </span>
         </button>
     </h2>
@@ -536,8 +576,8 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-gopro">
             <span class="step-header">
-                <span class="step-badge" data-step-key="enable_gopro">Step</span>
                 <span class="step-label"><i class="bi bi-camera-video"></i> GoPro Geo Rename</span>
+                <span class="step-badge" data-step-key="enable_gopro">Step</span>
             </span>
         </button>
     </h2>
@@ -558,8 +598,8 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-cs">
             <span class="step-header">
-                <span class="step-badge" data-step-key="enable_contact_sheet">Step</span>
                 <span class="step-label"><i class="bi bi-grid-3x3"></i> Contact Sheet</span>
+                <span class="step-badge" data-step-key="enable_contact_sheet">Step</span>
             </span>
         </button>
     </h2>
@@ -600,8 +640,8 @@
         <button class="accordion-button collapsed" type="button"
                 data-bs-toggle="collapse" data-bs-target="#sec-scrub">
             <span class="step-header">
-                <span class="step-badge" data-step-key="enable_scrub">Step</span>
                 <span class="step-label"><i class="bi bi-eraser"></i> Scrub Metadata</span>
+                <span class="step-badge" data-step-key="enable_scrub">Step</span>
             </span>
         </button>
     </h2>
@@ -644,65 +684,6 @@
     </div>
 </div>
 
-<!-- ──────────────── 11. Search EXIF / IPTC ──────────────── -->
-<div class="accordion-item disabled">
-    <h2 class="accordion-header">
-        <button class="accordion-button collapsed" type="button"
-                data-bs-toggle="collapse" data-bs-target="#sec-search">
-            <span class="step-header">
-                <span class="step-badge" data-step-key="enable_search">Step</span>
-                <span class="step-label"><i class="bi bi-search"></i> Search EXIF / IPTC</span>
-            </span>
-        </button>
-    </h2>
-    <div id="sec-search" class="accordion-collapse collapse" data-bs-parent="#mainAccordion">
-        <div class="accordion-body">
-            <p class="section-desc">
-                Searches EXIF/IPTC metadata text across image, raw, and video files.
-            </p>
-            <div class="field-row">
-                <div>
-                    <label class="form-label">Search Query (required)</label>
-                    <input type="text" class="form-control" name="search_query" placeholder="e.g. sunset">
-                </div>
-                <div>
-                    <label class="form-label">Fields</label>
-                    <select class="form-select" name="search_fields">
-                        <option value="">all (default)</option>
-                        <option value="exif">exif only</option>
-                        <option value="iptc">iptc only</option>
-                    </select>
-                </div>
-            </div>
-            <div class="field-row mt-2">
-                <div>
-                    <label class="form-label">Media Types</label>
-                    <select class="form-select" name="search_media_types">
-                        <option value="">all (default)</option>
-                        <option value="image">image</option>
-                        <option value="raw">raw</option>
-                        <option value="video">video</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="form-label">Copy matches to (optional)</label>
-                    <input type="text" class="form-control" name="search_copy_to"
-                           placeholder="Directory path">
-                </div>
-            </div>
-            <div class="d-flex gap-3 mt-2">
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="search_no_recursive" id="search-norec">
-                    <label class="form-check-label" for="search-norec">Current dir only (no recursion)</label>
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="search_fzf" id="search-fzf">
-                    <label class="form-check-label" for="search-fzf">Fuzzy matching</label>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
 </div><!-- /accordion -->
 
@@ -722,6 +703,7 @@
     </button>
 </div>
 <div id="validation-result" class="validation-result" style="display:none"></div>
+<div id="advisory-panel" class="advisory-panel" style="display:none"></div>
 
 <div class="pipeline-progress" id="pipeline-progress">
     <div class="pipeline-steps" id="pipeline-steps"></div>
@@ -730,6 +712,74 @@
 <pre class="log-panel" id="log-panel"></pre>
 
 </form>
+
+<!-- ================================================================== -->
+<!-- Standalone Search EXIF / IPTC                                       -->
+<!-- ================================================================== -->
+<div class="search-panel">
+    <div class="search-panel-header">
+        <h5><i class="bi bi-search"></i> Search EXIF / IPTC</h5>
+        <span class="search-panel-hint">Search metadata across image, raw, and video files</span>
+        <i class="bi bi-book step-docs-link search-docs-link" data-doc="search_exif_iptc" title="Full documentation"></i>
+    </div>
+    <div class="search-panel-body">
+        <div class="field-row">
+            <div style="flex:2">
+                <label class="form-label">Directory</label>
+                <input type="text" class="form-control" id="search-dir"
+                       placeholder="Photo directory (uses workflow dir if empty)">
+            </div>
+            <div style="flex:2">
+                <label class="form-label">Search Query</label>
+                <input type="text" class="form-control" id="search-query" placeholder="e.g. sunset">
+            </div>
+            <div>
+                <label class="form-label">Fields</label>
+                <select class="form-select" id="search-fields">
+                    <option value="">all</option>
+                    <option value="exif">exif only</option>
+                    <option value="iptc">iptc only</option>
+                </select>
+            </div>
+            <div>
+                <label class="form-label">Media Types</label>
+                <select class="form-select" id="search-media-types">
+                    <option value="">all</option>
+                    <option value="image">image</option>
+                    <option value="raw">raw</option>
+                    <option value="video">video</option>
+                </select>
+            </div>
+        </div>
+        <div class="field-row mt-2">
+            <div>
+                <label class="form-label">Copy matches to (optional)</label>
+                <input type="text" class="form-control" id="search-copy-to"
+                       placeholder="Directory path">
+            </div>
+            <div class="d-flex align-items-end gap-3 pb-1">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="search-recursive" checked>
+                    <label class="form-check-label" for="search-recursive">Recursive</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="search-fzf">
+                    <label class="form-check-label" for="search-fzf">Fuzzy matching</label>
+                </div>
+            </div>
+        </div>
+        <div class="d-flex gap-2 mt-3">
+            <button type="button" class="btn btn-photoshell" id="btn-search">
+                <i class="bi bi-search"></i> Search
+            </button>
+            <button type="button" class="btn btn-cancel" id="btn-search-cancel" style="display:none">
+                <i class="bi bi-x-circle"></i> Cancel
+            </button>
+        </div>
+        <pre class="log-panel search-log" id="search-log" style="display:none"></pre>
+    </div>
+</div>
+
 </div><!-- /main-container -->
 
 <!-- Folder Browser Modal -->
@@ -745,7 +795,7 @@
                     <span class="input-group-text" style="background:var(--ps-bg);border-color:var(--ps-border);color:var(--ps-text-muted)">
                         <i class="bi bi-geo-fill"></i>
                     </span>
-                    <input type="text" class="form-control" id="browser-path-input" placeholder="/">
+                    <input type="text" class="form-control" id="browser-path-input" placeholder="C:\Photos or /mnt/c/Photos">
                     <button class="btn btn-outline-secondary" type="button" id="browser-go-btn">Go</button>
                 </div>
                 <div id="browser-list" style="max-height:400px;overflow-y:auto"></div>

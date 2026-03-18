@@ -9,7 +9,9 @@ document.addEventListener("DOMContentLoaded", function() {
     var btnValidate    = document.getElementById("btn-validate");
     var btnValidateWf  = document.getElementById("btn-validate-workflow");
     var validationResult = document.getElementById("validation-result");
+    var advisoryPanel  = document.getElementById("advisory-panel");
     var folderStatus   = document.getElementById("folder-status");
+    var folderMetaStats = document.getElementById("folder-meta-stats");
     var logPanel       = document.getElementById("log-panel");
     var progressBar    = document.getElementById("pipeline-progress");
     var stepsContainer = document.getElementById("pipeline-steps");
@@ -147,7 +149,6 @@ document.addEventListener("DOMContentLoaded", function() {
     //   8. Detect blurry (independent of metadata content)
     //   9. Contact sheet (benefits from all metadata being final)
     //  10. Scrub metadata (destructive - must be after all writes)
-    //  11. Search EXIF/IPTC (read-only query, always last)
     var STEP_RECOMMENDED_ORDER = {
         "enable_sync_exif":        1,
         "enable_gps_gap_fill":     2,
@@ -158,8 +159,7 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_gopro":            7,
         "enable_blur":             8,
         "enable_contact_sheet":    9,
-        "enable_scrub":           10,
-        "enable_search":          11
+        "enable_scrub":           10
     };
 
     var STEP_LABELS = {
@@ -172,8 +172,7 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_geo_rename":      "Geo Rename Photos",
         "enable_gopro":           "GoPro Geo Rename",
         "enable_contact_sheet":   "Contact Sheet",
-        "enable_scrub":           "Scrub Metadata",
-        "enable_search":          "Search EXIF / IPTC"
+        "enable_scrub":           "Scrub Metadata"
     };
 
     // Dependency rules. "before" must run before "after".
@@ -470,13 +469,7 @@ document.addEventListener("DOMContentLoaded", function() {
             return result;
         }
 
-        // 3) Step-specific validation
-        if (data.enable_search && !data.search_query) {
-            result.valid = false;
-            result.errors.push("Search EXIF/IPTC is enabled but no search query is specified.");
-        }
-
-        // 4) Ordering issues
+        // 3) Ordering issues
         var issues = [];
         for (var r = 0; r < ORDER_RULES.length; r++) {
             var rule = ORDER_RULES[r];
@@ -566,12 +559,14 @@ document.addEventListener("DOMContentLoaded", function() {
     function validateFolder(path) {
         if (!path) {
             setFolderStatus("");
+            hideFolderMetaStats();
             photoDirInput.classList.remove("is-valid", "is-invalid");
             folderValid = false;
             return;
         }
 
         setFolderStatus('<i class="bi bi-hourglass-split"></i> Checking...', "text-secondary");
+        hideFolderMetaStats();
 
         fetch("/api/validate_folder?path=" + encodeURIComponent(path))
             .then(function(res) { return res.json(); })
@@ -593,6 +588,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     photoDirInput.classList.remove("is-invalid");
                     photoDirInput.classList.add("is-valid");
                     folderValid = true;
+                    fetchFolderMetaStats(data.path);
                 } else {
                     setFolderStatus(
                         '<i class="bi bi-check-circle-fill"></i> ' +
@@ -603,6 +599,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     photoDirInput.classList.remove("is-invalid");
                     photoDirInput.classList.add("is-valid");
                     folderValid = true;
+                    fetchFolderMetaStats(data.path);
                 }
             })
             .catch(function() {
@@ -612,6 +609,60 @@ document.addEventListener("DOMContentLoaded", function() {
                 );
                 folderValid = false;
             });
+    }
+
+    function hideFolderMetaStats() {
+        folderMetaStats.style.display = "none";
+        folderMetaStats.innerHTML = "";
+    }
+
+    function fetchFolderMetaStats(resolvedPath) {
+        folderMetaStats.innerHTML = '<span class="text-muted"><i class="bi bi-hourglass-split"></i> Scanning metadata...</span>';
+        folderMetaStats.style.display = "block";
+
+        fetch("/api/folder_meta?path=" + encodeURIComponent(resolvedPath))
+            .then(function(res) {
+                return res.json().then(function(data) {
+                    return {ok: res.ok, data: data};
+                });
+            })
+            .then(function(result) {
+                if (!result.ok || result.data.error) {
+                    var msg = (result.data && result.data.error) || "HTTP error";
+                    folderMetaStats.innerHTML = '<span class="text-muted"><i class="bi bi-exclamation-triangle"></i> ' + msg + '</span>';
+                    return;
+                }
+                renderFolderMetaStats(result.data);
+            })
+            .catch(function(err) {
+                folderMetaStats.innerHTML = '<span class="text-muted"><i class="bi bi-exclamation-triangle"></i> Metadata scan unavailable: ' + (err.message || err) + '</span>';
+            });
+    }
+
+    function renderFolderMetaStats(d) {
+        var sampleNote = d.sampled < d.total
+            ? " (sampled " + d.sampled + " of " + d.total + ")"
+            : "";
+
+        var html = '<span class="fms-label">Metadata coverage' + sampleNote + ':</span>';
+
+        html += renderMetaStat("bi-geo-alt-fill", "GPS", d.has_gps, d.sampled, d.pct_gps);
+        html += renderMetaStat("bi-card-text", "IPTC Caption", d.has_caption, d.sampled, d.pct_caption);
+        html += renderMetaStat("bi-chat-square-text", "UserComment", d.has_comment, d.sampled, d.pct_comment);
+
+        folderMetaStats.innerHTML = html;
+        folderMetaStats.style.display = "block";
+    }
+
+    function renderMetaStat(icon, label, count, total, pct) {
+        var cls = "fms-none";
+        if (pct >= 80) cls = "fms-good";
+        else if (pct > 0) cls = "fms-partial";
+        return '<span class="fms-stat ' + cls + '">'
+            + '<i class="bi ' + icon + '"></i> '
+            + label + ': ' + count + '/' + total
+            + ' <small>(' + pct + '%)</small>'
+            + '</span>';
     }
 
     // Validate on button click
@@ -625,6 +676,7 @@ document.addEventListener("DOMContentLoaded", function() {
         var val = photoDirInput.value.trim();
         if (!val) {
             setFolderStatus("");
+            hideFolderMetaStats();
             photoDirInput.classList.remove("is-valid", "is-invalid");
             folderValid = false;
             return;
@@ -634,11 +686,44 @@ document.addEventListener("DOMContentLoaded", function() {
         }, 600);
     });
 
+    // Validate immediately on paste (skip the 600ms debounce)
+    photoDirInput.addEventListener("paste", function() {
+        clearTimeout(validateTimer);
+        // Use setTimeout(0) so the pasted value is in the input
+        setTimeout(function() {
+            var val = photoDirInput.value.trim();
+            if (val) validateFolder(val);
+        }, 0);
+    });
+
     // ---- Folder Browser ----
 
     var browserShowHidden = document.getElementById("browser-show-hidden");
 
+    // Elements for drive bar and breadcrumb (created dynamically on first browse)
+    var browserDriveBar = null;
+    var browserBreadcrumb = null;
+
+    function ensureBrowserChrome() {
+        if (browserDriveBar) return;
+        // Insert drive bar and breadcrumb before the browser-list element
+        var container = browserList.parentElement;
+        var refNode = browserList;
+
+        browserDriveBar = document.createElement("div");
+        browserDriveBar.id = "browser-drive-bar";
+        browserDriveBar.className = "browser-drive-bar";
+        browserDriveBar.style.display = "none";
+        container.insertBefore(browserDriveBar, refNode);
+
+        browserBreadcrumb = document.createElement("div");
+        browserBreadcrumb.id = "browser-breadcrumb";
+        browserBreadcrumb.className = "browser-breadcrumb";
+        container.insertBefore(browserBreadcrumb, refNode);
+    }
+
     function browseToPath(path) {
+        ensureBrowserChrome();
         browserList.innerHTML = '<div class="text-muted p-3"><i class="bi bi-hourglass-split"></i> Loading (network mounts may take a moment)...</div>';
         browserPathInput.value = path;
 
@@ -657,6 +742,61 @@ document.addEventListener("DOMContentLoaded", function() {
                 }
 
                 browserPathInput.value = data.current;
+
+                // Drive bar (Windows / WSL)
+                if (data.drives && data.drives.length > 0) {
+                    var isWsl = data.platform === "wsl";
+                    var driveHtml = '<span class="drive-label"><i class="bi bi-hdd"></i></span>';
+                    for (var d = 0; d < data.drives.length; d++) {
+                        var drv = data.drives[d];
+                        // Check if current path is on this drive
+                        var drvLetter = drv.charAt(0).toLowerCase();
+                        var active = "";
+                        if (isWsl) {
+                            active = data.current.toLowerCase().startsWith("/mnt/" + drvLetter)
+                                ? " drive-active" : "";
+                        } else {
+                            active = data.current.toUpperCase().startsWith(drv.toUpperCase())
+                                ? " drive-active" : "";
+                        }
+                        driveHtml += '<button type="button" class="drive-btn' + active
+                            + '" data-drive="' + escapeAttr(drv) + '">'
+                            + escapeHtml(drv) + '</button>';
+                    }
+                    browserDriveBar.innerHTML = driveHtml;
+                    browserDriveBar.style.display = "flex";
+                    browserDriveBar.querySelectorAll(".drive-btn").forEach(function(btn) {
+                        btn.addEventListener("click", function() {
+                            // Send the drive letter; backend translates for the platform
+                            browseToPath(btn.dataset.drive + "/");
+                        });
+                    });
+                } else {
+                    browserDriveBar.style.display = "none";
+                }
+
+                // Breadcrumb
+                if (data.breadcrumb && data.breadcrumb.length > 0) {
+                    var bcHtml = "";
+                    for (var b = 0; b < data.breadcrumb.length; b++) {
+                        var seg = data.breadcrumb[b];
+                        if (b > 0) bcHtml += '<span class="bc-sep"><i class="bi bi-chevron-right"></i></span>';
+                        var isLast = (b === data.breadcrumb.length - 1);
+                        bcHtml += '<span class="bc-seg' + (isLast ? " bc-current" : "")
+                            + '" data-path="' + escapeAttr(seg.path) + '">'
+                            + escapeHtml(seg.name) + '</span>';
+                    }
+                    browserBreadcrumb.innerHTML = bcHtml;
+                    browserBreadcrumb.style.display = "flex";
+                    browserBreadcrumb.querySelectorAll(".bc-seg:not(.bc-current)").forEach(function(el) {
+                        el.addEventListener("click", function() {
+                            browseToPath(el.dataset.path);
+                        });
+                    });
+                } else {
+                    browserBreadcrumb.innerHTML = "";
+                }
+
                 var html = "";
 
                 // Warning banner (timeout, stale mounts, etc.)
@@ -736,12 +876,29 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     });
 
+    // Navigate immediately on paste into the browser path input
+    browserPathInput.addEventListener("paste", function() {
+        setTimeout(function() {
+            var val = browserPathInput.value.trim();
+            if (val) browseToPath(val);
+        }, 0);
+    });
+
+    // Track which input the folder browser was opened for.
+    // null = photo_dir (default), "backup-source", "backup-dest"
+    var browserTarget = null;
+
     browserSelectBtn.addEventListener("click", function() {
         var selected = browserPathInput.value.trim();
         if (selected) {
-            photoDirInput.value = selected;
-            validateFolder(selected);
+            if (browserTarget === "backup-dest") {
+                document.getElementById("backup-dest").value = selected;
+            } else {
+                photoDirInput.value = selected;
+                validateFolder(selected);
+            }
         }
+        browserTarget = null;
         browserModal.hide();
     });
 
@@ -793,20 +950,115 @@ document.addEventListener("DOMContentLoaded", function() {
                             "text-danger"
                         );
                     }
-                    showValidationResult(validateWorkflow());
+                    showValidationWithPreflight();
                 })
                 .catch(function() {
                     setFolderStatus(
                         '<i class="bi bi-x-circle-fill"></i> Validation request failed',
                         "text-danger"
                     );
-                    showValidationResult(validateWorkflow());
+                    showValidationWithPreflight();
                 });
             return;
         }
 
-        showValidationResult(validateWorkflow());
+        showValidationWithPreflight();
     });
+
+    function showValidationWithPreflight(callback) {
+        var v = validateWorkflow();
+        var data = collectFormData();
+
+        // Run preflight tool check and advisory checks in parallel
+        var preflightDone = false;
+        var advisoryDone = false;
+        var advisories = [];
+
+        function onBothDone() {
+            if (!preflightDone || !advisoryDone) return;
+            showValidationResult(v);
+            showAdvisoryPanel(advisories);
+            if (callback) callback(v);
+        }
+
+        // Preflight
+        fetch("/api/preflight", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(data)
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(pf) {
+            if (!pf.ok) {
+                v.valid = false;
+                for (var i = 0; i < pf.missing.length; i++) {
+                    var m = pf.missing[i];
+                    v.errors.push(
+                        "Missing tool: " + m.label
+                        + " (needed by: " + m.needed_by.join(", ") + ")"
+                    );
+                }
+            }
+            if (pf.ok && pf.tools && Object.keys(pf.tools).length > 0) {
+                var toolNames = [];
+                for (var t in pf.tools) {
+                    toolNames.push(pf.tools[t].resolved);
+                }
+                v.toolsOk = toolNames;
+            }
+            preflightDone = true;
+            onBothDone();
+        })
+        .catch(function() {
+            v.warnings.push("Could not run tool preflight check.");
+            preflightDone = true;
+            onBothDone();
+        });
+
+        // Advisory checks (non-blocking, informational)
+        fetch("/api/advisory", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(data)
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(result) {
+            advisories = result;
+            advisoryDone = true;
+            onBothDone();
+        })
+        .catch(function() {
+            advisoryDone = true;
+            onBothDone();
+        });
+    }
+
+    function showAdvisoryPanel(advisories) {
+        if (!advisories || advisories.length === 0) {
+            advisoryPanel.style.display = "none";
+            advisoryPanel.innerHTML = "";
+            return;
+        }
+
+        var html = '<div class="adv-header">'
+            + '<i class="bi bi-clipboard-pulse"></i> '
+            + advisories.length + ' advisory '
+            + (advisories.length === 1 ? 'note' : 'notes')
+            + '</div>';
+
+        for (var i = 0; i < advisories.length; i++) {
+            var adv = advisories[i];
+            var cls = adv.level === "warning" ? "adv-warn" : "adv-info";
+            html += '<div class="adv-item ' + cls + '">';
+            html += '<i class="bi ' + adv.icon + '"></i> ';
+            html += '<strong>' + adv.title + '</strong>';
+            html += '<div class="adv-detail">' + adv.detail + '</div>';
+            html += '</div>';
+        }
+
+        advisoryPanel.innerHTML = html;
+        advisoryPanel.style.display = "block";
+    }
 
     function showValidationResult(v) {
         var html = "";
@@ -827,7 +1079,11 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         if (v.errors.length === 0 && v.warnings.length === 0) {
-            html = '<div class="vr-item vr-ok"><i class="bi bi-check-circle" style="font-size:.75rem"></i> Workflow is valid. Folder, steps, and ordering all check out.</div>';
+            var msg = "Workflow is valid. Folder, steps, and ordering all check out.";
+            if (v.toolsOk && v.toolsOk.length > 0) {
+                msg += " Tools verified: " + v.toolsOk.join(", ") + ".";
+            }
+            html = '<div class="vr-item vr-ok"><i class="bi bi-check-circle" style="font-size:.75rem"></i> ' + msg + '</div>';
         }
 
         validationResult.innerHTML = html;
@@ -891,22 +1147,22 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 
     function runWithValidation() {
-        var v = validateWorkflow();
+        showValidationWithPreflight(function(v) {
+            // Hard errors: block execution
+            if (!v.valid) {
+                showPreRunDialog(v.errors, [], false);
+                return;
+            }
 
-        // Hard errors: block execution
-        if (!v.valid) {
-            showPreRunDialog(v.errors, [], false);
-            return;
-        }
+            // Warnings: show confirmation
+            if (v.warnings.length > 0) {
+                showPreRunDialog([], v.warnings, true);
+                return;
+            }
 
-        // Warnings: show confirmation
-        if (v.warnings.length > 0) {
-            showPreRunDialog([], v.warnings, true);
-            return;
-        }
-
-        // All clear
-        startPipeline(collectFormData());
+            // All clear
+            startPipeline(collectFormData());
+        });
     }
 
     function showPreRunDialog(errors, warnings, allowProceed) {
@@ -1032,5 +1288,239 @@ document.addEventListener("DOMContentLoaded", function() {
                 else if (i === data.current_step) badge.classList.add("running");
             }
         });
+    }
+
+    // ---- Standalone Search EXIF / IPTC ----
+
+    var btnSearch       = document.getElementById("btn-search");
+    var btnSearchCancel = document.getElementById("btn-search-cancel");
+    var searchLog       = document.getElementById("search-log");
+    var searchDirInput  = document.getElementById("search-dir");
+    var searchQueryInput = document.getElementById("search-query");
+    var searchJobId     = null;
+    var searchPollTimer = null;
+
+    // Wire up the docs link in the search panel
+    var searchDocsLink = document.querySelector(".search-docs-link");
+    if (searchDocsLink) {
+        searchDocsLink.addEventListener("click", function(e) {
+            e.stopPropagation();
+            openDocsModal(searchDocsLink.dataset.doc);
+        });
+    }
+
+    btnSearch.addEventListener("click", function() {
+        var dir = searchDirInput.value.trim() || photoDirInput.value.trim();
+        var query = searchQueryInput.value.trim();
+
+        if (!dir) {
+            alert("Please specify a directory to search in.");
+            return;
+        }
+        if (!query) {
+            alert("Please enter a search query.");
+            return;
+        }
+
+        var payload = {
+            photo_dir: dir,
+            search_query: query,
+            search_fields: document.getElementById("search-fields").value,
+            search_media_types: document.getElementById("search-media-types").value,
+            search_recursive: document.getElementById("search-recursive").checked,
+            search_fzf: document.getElementById("search-fzf").checked,
+            search_copy_to: document.getElementById("search-copy-to").value.trim()
+        };
+
+        btnSearch.disabled = true;
+        btnSearchCancel.style.display = "inline-block";
+        searchLog.style.display = "block";
+        searchLog.classList.add("active");
+        searchLog.textContent = "Searching in " + dir + " ...\n";
+
+        fetch("/api/search", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(body) {
+            if (body.error) {
+                searchLog.textContent = "Error: " + body.error;
+                btnSearch.disabled = false;
+                btnSearchCancel.style.display = "none";
+                return;
+            }
+            searchJobId = body.job_id;
+            startSearchPolling();
+        })
+        .catch(function(err) {
+            searchLog.textContent = "Request failed: " + err;
+            btnSearch.disabled = false;
+            btnSearchCancel.style.display = "none";
+        });
+    });
+
+    btnSearchCancel.addEventListener("click", function() {
+        if (!searchJobId) return;
+        fetch("/api/cancel/" + searchJobId, {method: "POST"});
+    });
+
+    function startSearchPolling() {
+        searchPollTimer = setInterval(function() {
+            if (!searchJobId) return;
+            fetch("/api/status/" + searchJobId)
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    searchLog.textContent = data.log;
+                    searchLog.scrollTop = searchLog.scrollHeight;
+                    if (data.status !== "running") {
+                        clearInterval(searchPollTimer);
+                        btnSearch.disabled = false;
+                        btnSearchCancel.style.display = "none";
+                        searchJobId = null;
+                    }
+                })
+                .catch(function() { /* ignore transient errors */ });
+        }, 1000);
+    }
+
+    // ---- Backup Folder ----
+
+    var btnBackupEstimate = document.getElementById("btn-backup-estimate");
+    var btnBackupRun      = document.getElementById("btn-backup-run");
+    var btnBackupCancel   = document.getElementById("btn-backup-cancel");
+    var backupLog         = document.getElementById("backup-log");
+    var backupEstimateEl  = document.getElementById("backup-estimate");
+    var backupDestInput   = document.getElementById("backup-dest");
+    var backupRecursive   = document.getElementById("backup-recursive");
+    var backupJobId       = null;
+    var backupPollTimer   = null;
+
+    document.getElementById("btn-backup-browse-dest").addEventListener("click", function() {
+        browserTarget = "backup-dest";
+        var startPath = backupDestInput.value.trim() || photoDirInput.value.trim() || "/";
+        browseToPath(startPath);
+        browserModal.show();
+    });
+
+    function getBackupPayload() {
+        return {
+            source: photoDirInput.value.trim(),
+            dest: backupDestInput.value.trim(),
+            recursive: backupRecursive.checked
+        };
+    }
+
+    btnBackupEstimate.addEventListener("click", function() {
+        var payload = getBackupPayload();
+        if (!payload.source) {
+            alert("Please specify a source folder or set a workflow directory.");
+            return;
+        }
+
+        backupEstimateEl.innerHTML = '<span class="text-muted"><i class="bi bi-hourglass-split"></i> Estimating...</span>';
+        backupEstimateEl.style.display = "block";
+
+        fetch("/api/backup/estimate", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.error) {
+                backupEstimateEl.innerHTML = '<span class="be-error"><i class="bi bi-x-circle"></i> ' + escapeHtml(data.error) + '</span>';
+                return;
+            }
+
+            var html = '<div class="be-grid">';
+            html += '<div class="be-item"><span class="be-label">Source</span><span class="be-value">' + escapeHtml(data.source) + '</span></div>';
+            html += '<div class="be-item"><span class="be-label">Destination</span><span class="be-value">' + escapeHtml(data.dest) + '</span></div>';
+            html += '<div class="be-item"><span class="be-label">Files</span><span class="be-value">' + data.file_count;
+            if (data.recursive && data.dir_count > 0) {
+                html += ' <small>(' + data.dir_count + ' subdirs)</small>';
+            }
+            html += '</span></div>';
+            html += '<div class="be-item"><span class="be-label">Source size</span><span class="be-value">' + escapeHtml(data.size_human) + '</span></div>';
+            html += '<div class="be-item"><span class="be-label">Est. archive</span><span class="be-value">' + escapeHtml(data.estimated_archive_human) + '</span></div>';
+
+            var spaceClass = data.space_ok ? "be-space-ok" : "be-space-warn";
+            html += '<div class="be-item"><span class="be-label">Available space</span><span class="be-value ' + spaceClass + '">' + escapeHtml(data.avail_human);
+            if (!data.space_ok) {
+                html += ' <i class="bi bi-exclamation-triangle-fill"></i> insufficient';
+            }
+            html += '</span></div>';
+            html += '</div>';
+
+            backupEstimateEl.innerHTML = html;
+        })
+        .catch(function(err) {
+            backupEstimateEl.innerHTML = '<span class="be-error"><i class="bi bi-x-circle"></i> Estimate failed: ' + escapeHtml(String(err)) + '</span>';
+        });
+    });
+
+    btnBackupRun.addEventListener("click", function() {
+        var payload = getBackupPayload();
+        if (!payload.source) {
+            alert("Please specify a source folder or set a workflow directory.");
+            return;
+        }
+
+        btnBackupRun.disabled = true;
+        btnBackupEstimate.disabled = true;
+        btnBackupCancel.style.display = "inline-block";
+        backupLog.style.display = "block";
+        backupLog.classList.add("active");
+        backupLog.textContent = "Starting backup of " + payload.source + " ...\n";
+
+        fetch("/api/backup/run", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(body) {
+            if (body.error) {
+                backupLog.textContent = "Error: " + body.error;
+                btnBackupRun.disabled = false;
+                btnBackupEstimate.disabled = false;
+                btnBackupCancel.style.display = "none";
+                return;
+            }
+            backupJobId = body.job_id;
+            startBackupPolling();
+        })
+        .catch(function(err) {
+            backupLog.textContent = "Request failed: " + err;
+            btnBackupRun.disabled = false;
+            btnBackupEstimate.disabled = false;
+            btnBackupCancel.style.display = "none";
+        });
+    });
+
+    btnBackupCancel.addEventListener("click", function() {
+        if (!backupJobId) return;
+        fetch("/api/cancel/" + backupJobId, {method: "POST"});
+    });
+
+    function startBackupPolling() {
+        backupPollTimer = setInterval(function() {
+            if (!backupJobId) return;
+            fetch("/api/status/" + backupJobId)
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    backupLog.textContent = data.log;
+                    backupLog.scrollTop = backupLog.scrollHeight;
+                    if (data.status !== "running") {
+                        clearInterval(backupPollTimer);
+                        btnBackupRun.disabled = false;
+                        btnBackupEstimate.disabled = false;
+                        btnBackupCancel.style.display = "none";
+                        backupJobId = null;
+                    }
+                })
+                .catch(function() { /* ignore transient errors */ });
+        }, 1000);
     }
 });
