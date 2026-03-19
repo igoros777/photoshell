@@ -1321,6 +1321,10 @@ body {
 
 /* ---- Modal overrides ---- */
 
+.modal-backdrop {
+    background: rgba(0, 0, 0, 0.75) !important;
+}
+
 .modal-content {
     background: var(--ps-surface) !important;
     border-color: var(--ps-border) !important;
@@ -1328,4 +1332,31 @@ body {
 
 .modal-header, .modal-footer {
     border-color: var(--ps-border) !important;
+}
+
+/* ---- Responsive ---- */
+
+@media (max-width: 768px) {
+    .app-layout {
+        flex-direction: column;
+        height: auto;
+        overflow: visible;
+    }
+
+    .app-sidebar {
+        width: 100%;
+        min-width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--ps-border);
+        max-height: none;
+        overflow-y: visible;
+    }
+
+    .app-main {
+        overflow-y: visible;
+    }
+
+    body {
+        overflow: auto;
+    }
 }
