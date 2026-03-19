@@ -53,9 +53,13 @@ def _rate_limit():
     now = time.time()
     ip = request.remote_addr or "unknown"
     times = _request_times[ip]
-    # Remove entries older than 60 seconds
-    _request_times[ip] = [t for t in times if now - t < 60]
-    if len(_request_times[ip]) >= _RATE_LIMIT_PER_MINUTE:
+    # Remove entries older than 60 seconds; clean up dead IPs
+    active = [t for t in times if now - t < 60]
+    if not active:
+        _request_times.pop(ip, None)
+        return
+    _request_times[ip] = active
+    if len(active) >= _RATE_LIMIT_PER_MINUTE:
         return jsonify({"error": "Rate limit exceeded. Try again in a moment."}), 429
     _request_times[ip].append(now)
 

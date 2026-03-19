@@ -101,7 +101,7 @@ Pulse (running)   1.5s        ease-in-out (infinite)           Pipeline running 
 │  [icon] PhotoShell │ /path/to/photos │ 247 photos │ 82% GPS │
 ├────────────┬────────────────────────────────────────────────┤
 │  SIDEBAR   │  MAIN CONTENT                                  │
-│  240px     │  (flex: 1)                                     │
+│  260px     │  (flex: 1)                                     │
 │  fixed     │                                                 │
 │  overflow-y│  Pipeline view (48px strip)                    │
 │  auto      │  Active step config (inspector panel)          │
@@ -112,7 +112,7 @@ Pulse (running)   1.5s        ease-in-out (infinite)           Pipeline running 
 
 ### Tablet (768-960px): Icon sidebar
 - Sidebar collapses to 48px icon strip
-- Hover/click expands to full 240px overlay
+- Hover/click expands to full 260px overlay
 
 ### Mobile (<768px): Full-width
 - No sidebar — bottom tab bar with [Steps] [Map] [Log]
