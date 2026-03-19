@@ -793,6 +793,12 @@ body {
 
 .folder-meta-stats .fms-stat {
     white-space: nowrap;
+    padding: 2px 8px;
+    border-right: 1px solid var(--ps-border);
+}
+
+.folder-meta-stats .fms-stat:last-of-type {
+    border-right: none;
 }
 
 .folder-meta-stats .fms-stat small {
