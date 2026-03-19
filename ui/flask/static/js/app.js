@@ -1012,6 +1012,11 @@ document.addEventListener("DOMContentLoaded", function() {
         if (selected) {
             if (browserTarget === "backup-dest") {
                 document.getElementById("backup-dest").value = selected;
+            } else if (browserTarget === "search-dir") {
+                document.getElementById("search-dir").value = selected;
+                validateSearchDir(selected);
+            } else if (browserTarget === "search-copy") {
+                document.getElementById("search-copy-to").value = selected;
             } else {
                 photoDirInput.value = selected;
                 validateFolder(selected);
@@ -1020,6 +1025,67 @@ document.addEventListener("DOMContentLoaded", function() {
         browserTarget = null;
         browserModal.hide();
     });
+
+    // ---- Search directory browse + validate ----
+
+    var searchDirBrowseBtn = document.getElementById("btn-search-browse-dir");
+    var searchDirValidateBtn = document.getElementById("btn-search-validate-dir");
+    var searchCopyBrowseBtn = document.getElementById("btn-search-browse-copy");
+    var searchDirStatus = document.getElementById("search-dir-status");
+
+    if (searchDirBrowseBtn) {
+        searchDirBrowseBtn.addEventListener("click", function() {
+            browserTarget = "search-dir";
+            var searchDir = document.getElementById("search-dir");
+            var startPath = searchDir.value.trim() || photoDirInput.value.trim() || "/";
+            browseToPath(startPath);
+            browserModal.show();
+        });
+    }
+
+    if (searchCopyBrowseBtn) {
+        searchCopyBrowseBtn.addEventListener("click", function() {
+            browserTarget = "search-copy";
+            var copyTo = document.getElementById("search-copy-to");
+            var startPath = copyTo.value.trim() || photoDirInput.value.trim() || "/";
+            browseToPath(startPath);
+            browserModal.show();
+        });
+    }
+
+    function validateSearchDir(path) {
+        if (!searchDirStatus) return;
+        if (!path) { searchDirStatus.innerHTML = ""; return; }
+        searchDirStatus.innerHTML = '<span class="text-muted"><i class="bi bi-arrow-repeat"></i> Checking...</span>';
+        fetch("/api/validate_folder?path=" + encodeURIComponent(path))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.valid) {
+                    var msg = '<span style="color:var(--ps-success)"><i class="bi bi-check-circle-fill"></i> Valid</span>';
+                    if (data.photo_count !== undefined) {
+                        msg += ' <span class="text-muted">(' + data.photo_count + ' photos)</span>';
+                    }
+                    if (data.warning) {
+                        msg += '<br><span style="color:var(--ps-warning);font-size:11px"><i class="bi bi-exclamation-triangle"></i> ' + data.warning + '</span>';
+                    }
+                    if (data.path) {
+                        msg += '<br><span class="text-muted" style="font-size:11px">(resolved: ' + data.path + ')</span>';
+                    }
+                    searchDirStatus.innerHTML = msg;
+                } else {
+                    searchDirStatus.innerHTML = '<span style="color:var(--ps-danger)"><i class="bi bi-x-circle-fill"></i> ' + (data.reason || "Invalid directory") + '</span>';
+                }
+            })
+            .catch(function() {
+                searchDirStatus.innerHTML = '<span style="color:var(--ps-danger)"><i class="bi bi-x-circle-fill"></i> Validation failed</span>';
+            });
+    }
+
+    if (searchDirValidateBtn) {
+        searchDirValidateBtn.addEventListener("click", function() {
+            validateSearchDir(document.getElementById("search-dir").value.trim());
+        });
+    }
 
     // ---- Collect form data ----
 
