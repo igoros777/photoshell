@@ -40,6 +40,48 @@ document.addEventListener("DOMContentLoaded", function() {
     var pendingMermaidDivs = null; // mermaid divs waiting for modal shown event
     var orderOverride = false; // user acknowledged ordering concerns
 
+    // ---- Notification sounds (Web Audio API — no external files) ----
+
+    function playSuccessSound() {
+        try {
+            var ctx = new (window.AudioContext || window.webkitAudioContext)();
+            // Ascending two-note chime: C5 → E5
+            [523.25, 659.25].forEach(function(freq, i) {
+                var osc = ctx.createOscillator();
+                var gain = ctx.createGain();
+                osc.type = "sine";
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.15, ctx.currentTime + i * 0.15);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.4);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + i * 0.15);
+                osc.stop(ctx.currentTime + i * 0.15 + 0.4);
+            });
+            setTimeout(function() { ctx.close(); }, 1000);
+        } catch(e) { /* Audio not available */ }
+    }
+
+    function playErrorSound() {
+        try {
+            var ctx = new (window.AudioContext || window.webkitAudioContext)();
+            // Descending two-note: E4 → C4
+            [329.63, 261.63].forEach(function(freq, i) {
+                var osc = ctx.createOscillator();
+                var gain = ctx.createGain();
+                osc.type = "triangle";
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.18, ctx.currentTime + i * 0.2);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.2 + 0.35);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + i * 0.2);
+                osc.stop(ctx.currentTime + i * 0.2 + 0.35);
+            });
+            setTimeout(function() { ctx.close(); }, 1000);
+        } catch(e) { /* Audio not available */ }
+    }
+
     // ---- Initialize Bootstrap popovers for info tooltips ----
 
     document.querySelectorAll(".step-tooltip").forEach(function(el) {
@@ -1781,6 +1823,9 @@ document.addEventListener("DOMContentLoaded", function() {
                         btnRun.disabled = false;
                         btnCancel.style.display = "none";
                         currentJobId = null;
+                        // Play completion sound
+                        if (data.status === "done") playSuccessSound();
+                        else if (data.status === "failed" || data.status === "cancelled") playErrorSound();
                     }
                 })
                 .catch(function() { /* ignore transient errors */ });
