@@ -142,6 +142,15 @@ document.addEventListener("DOMContentLoaded", function() {
                         pendingMermaidDivs = mermaidDivs;
                     }
                 }
+
+                // Wire up internal doc links (open another doc in the same modal)
+                docsContent.querySelectorAll(".docs-internal-link").forEach(function(link) {
+                    link.addEventListener("click", function(ev) {
+                        ev.preventDefault();
+                        var targetDoc = link.getAttribute("data-doc");
+                        if (targetDoc) openDocsModal(targetDoc);
+                    });
+                });
             })
             .catch(function(err) {
                 docsLoading.style.display = "none";

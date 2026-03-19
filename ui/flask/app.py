@@ -433,6 +433,7 @@ DOCS_MAP = {
     "scrub_metadata": "scrub_selected_metadata.md",
     "search_exif_iptc": "search_exif_iptc.md",
     "web_ui_help": "web_ui_help.md",
+    "design_system": "../DESIGN.md",
 }
 
 

@@ -101,4 +101,4 @@ Shortcuts are disabled when a text field is focused.
 
 ## Design
 
-The UI follows a DaVinci Resolve-inspired dark aesthetic. See [DESIGN.md](https://github.com/igoros777/photoshell/blob/main/DESIGN.md) for the full design system specification.
+The UI follows a DaVinci Resolve-inspired dark aesthetic. See <a href="#" class="docs-internal-link" data-doc="design_system">DESIGN.md</a> for the full design system specification.
