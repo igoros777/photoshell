@@ -15,6 +15,9 @@ document.addEventListener("DOMContentLoaded", function() {
     var logPanel       = document.getElementById("log-panel");
     var progressBar    = document.getElementById("pipeline-progress");
     var stepsContainer = document.getElementById("pipeline-steps");
+    var inspectorPanel = document.getElementById("inspector-panel");
+    var inspectorTitle = document.getElementById("inspector-title");
+    var inspectorContent = document.getElementById("inspector-content");
 
     // Folder browser modal elements
     var browserModal     = new bootstrap.Modal(document.getElementById("folderBrowserModal"));
@@ -153,18 +156,6 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // ---- Step sequencing and order validation ----
 
-    // Recommended workflow order. The core pipeline is:
-    //   1. Sync EXIF from originals to exports
-    //   2. Fill GPS gaps (everything downstream depends on GPS)
-    //   3. Extract photo summary (uses GPS for reverse geocoding)
-    //   4. Annotate descriptions (uses summary + GPS context)
-    //   5. Annotate keywords (uses description + GPS context)
-    // Then renaming, output, and cleanup:
-    //   6. Geo rename (uses GPS for location-based filenames)
-    //   7. GoPro geo rename (same GPS dependency)
-    //   8. Detect blurry (independent of metadata content)
-    //   9. Contact sheet (benefits from all metadata being final)
-    //  10. Scrub metadata (destructive - must be after all writes)
     var STEP_RECOMMENDED_ORDER = {
         "enable_sync_exif":        1,
         "enable_gps_gap_fill":     2,
@@ -191,11 +182,35 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_scrub":           "Scrub Metadata"
     };
 
-    // Dependency rules. "before" must run before "after".
-    // Organized by the key dependency chain:
-    //   GPS data -> summary -> descriptions -> keywords -> outputs -> cleanup
+    // Map step keys to config panel IDs
+    var STEP_CONFIG_MAP = {
+        "enable_sync_exif":       "config-sync",
+        "enable_gps_gap_fill":    "config-gps",
+        "enable_extract_summary": "config-summary",
+        "enable_annotate_desc":   "config-desc",
+        "enable_annotate_kw":     "config-kw",
+        "enable_blur":            "config-blur",
+        "enable_geo_rename":      "config-geo",
+        "enable_gopro":           "config-gopro",
+        "enable_contact_sheet":   "config-cs",
+        "enable_scrub":           "config-scrub"
+    };
+
+    // Map sidebar data-step attribute to step keys
+    var SIDEBAR_STEP_MAP = {
+        "sync":    "enable_sync_exif",
+        "gps":     "enable_gps_gap_fill",
+        "summary": "enable_extract_summary",
+        "desc":    "enable_annotate_desc",
+        "kw":      "enable_annotate_kw",
+        "blur":    "enable_blur",
+        "geo":     "enable_geo_rename",
+        "gopro":   "enable_gopro",
+        "cs":      "enable_contact_sheet",
+        "scrub":   "enable_scrub"
+    };
+
     var ORDER_RULES = [
-        // --- Sync EXIF is the foundation ---
         {
             before: "enable_sync_exif",
             after: "enable_gps_gap_fill",
@@ -206,10 +221,6 @@ document.addEventListener("DOMContentLoaded", function() {
             after: "enable_extract_summary",
             reason: "Sync EXIF must run first so exports have the original camera/lens/exposure data that Extract Summary reads."
         },
-
-        // --- GPS Gap Fill is the critical gate ---
-        // Everything that uses location (summary, annotations, renaming)
-        // must wait until GPS coordinates are filled in.
         {
             before: "enable_gps_gap_fill",
             after: "enable_extract_summary",
@@ -235,8 +246,6 @@ document.addEventListener("DOMContentLoaded", function() {
             after: "enable_gopro",
             reason: "GoPro Geo Rename builds clip names from GPS coordinates. GPS must be filled first."
         },
-
-        // --- Extract Summary feeds into annotations ---
         {
             before: "enable_extract_summary",
             after: "enable_annotate_desc",
@@ -247,17 +256,11 @@ document.addEventListener("DOMContentLoaded", function() {
             after: "enable_annotate_kw",
             reason: "Extract Summary writes technical metadata that the keyword prompt uses for context (location name, camera model, etc.)."
         },
-
-        // --- Description before keywords ---
         {
             before: "enable_annotate_desc",
             after: "enable_annotate_kw",
             reason: "The keyword prompt reads the generated description to produce more relevant keywords. Descriptions must be written first."
         },
-
-        // --- Renaming should happen after metadata is written ---
-        // (Geo rename changes filenames; scripts that process by filename
-        //  should either run before renaming, or not care about names.)
         {
             before: "enable_extract_summary",
             after: "enable_geo_rename",
@@ -273,8 +276,6 @@ document.addEventListener("DOMContentLoaded", function() {
             after: "enable_geo_rename",
             reason: "Keywords should be written before geo-renaming files."
         },
-
-        // --- Contact sheet should capture final metadata ---
         {
             before: "enable_annotate_desc",
             after: "enable_contact_sheet",
@@ -290,8 +291,6 @@ document.addEventListener("DOMContentLoaded", function() {
             after: "enable_contact_sheet",
             reason: "Extract Summary should run before Contact Sheet so the summary text is available for captions."
         },
-
-        // --- Scrub is destructive - must be after all metadata writes ---
         {
             before: "enable_extract_summary",
             after: "enable_scrub",
@@ -533,27 +532,53 @@ document.addEventListener("DOMContentLoaded", function() {
         return result;
     }
 
-    // ---- Toggle accordion sections based on checkboxes in the header ----
+    // ---- Sidebar step clicking: show config in inspector ----
+
+    document.querySelectorAll(".sidebar-step").forEach(function(el) {
+        el.addEventListener("click", function(e) {
+            // Don't navigate inspector when clicking checkbox, tooltip, or docs link
+            if (e.target.classList.contains("form-check-input") ||
+                e.target.classList.contains("step-tooltip") ||
+                e.target.classList.contains("step-docs-link")) {
+                return;
+            }
+            var stepKey = el.dataset.step;
+            var enableKey = SIDEBAR_STEP_MAP[stepKey];
+
+            // Remove active from all sidebar steps
+            document.querySelectorAll(".sidebar-step").forEach(function(s) {
+                s.classList.remove("active");
+            });
+            el.classList.add("active");
+
+            // Hide all step configs
+            document.querySelectorAll(".step-config").forEach(function(panel) {
+                panel.style.display = "none";
+            });
+
+            // Show the selected config in the inspector
+            var configId = STEP_CONFIG_MAP[enableKey];
+            var config = configId ? document.getElementById(configId) : null;
+            if (config) {
+                // Move config content into inspector
+                inspectorContent.innerHTML = "";
+                inspectorContent.appendChild(config);
+                config.style.display = "block";
+                inspectorTitle.textContent = STEP_LABELS[enableKey] || stepKey;
+            }
+        });
+    });
+
+    // ---- Toggle step enable/disable based on checkboxes ----
 
     document.querySelectorAll(".section-toggle").forEach(function(cb) {
-        var target = cb.dataset.section;
-        var sec = document.getElementById(target);
-        var item = sec ? sec.closest(".accordion-item") : null;
-        if (!item) return;
-
         function syncState() {
             if (cb.checked) {
-                item.classList.remove("disabled");
                 // Track selection order: append if not already present
                 if (selectionOrder.indexOf(cb.name) === -1) {
                     selectionOrder.push(cb.name);
                 }
             } else {
-                item.classList.add("disabled");
-                var collapse = item.querySelector(".accordion-collapse");
-                if (collapse && collapse.classList.contains("show")) {
-                    bootstrap.Collapse.getOrCreateInstance(collapse).hide();
-                }
                 // Remove from selection order
                 var idx = selectionOrder.indexOf(cb.name);
                 if (idx >= 0) selectionOrder.splice(idx, 1);
@@ -561,9 +586,73 @@ document.addEventListener("DOMContentLoaded", function() {
             updateStepSequencing();
         }
 
-        cb.addEventListener("change", syncState);
+        cb.addEventListener("change", function(e) {
+            e.stopPropagation(); // Don't trigger sidebar-step click
+            syncState();
+        });
         syncState();
     });
+
+    // ---- Header meta update ----
+
+    function updateHeaderMeta(stats) {
+        var meta = document.getElementById("header-meta");
+        if (!meta) return;
+        if (!stats) { meta.innerHTML = ''; return; }
+        meta.innerHTML = '';
+        // Path
+        if (photoDirInput.value) {
+            var pathEl = document.createElement('span');
+            pathEl.className = 'header-meta-item';
+            pathEl.textContent = photoDirInput.value;
+            meta.appendChild(pathEl);
+        }
+        // Photo count
+        if (stats.total !== undefined) {
+            var countEl = document.createElement('span');
+            countEl.className = 'header-meta-item';
+            countEl.textContent = stats.total + ' photos';
+            meta.appendChild(countEl);
+        }
+        // GPS %
+        if (stats.pct_gps !== undefined) {
+            var gpsEl = document.createElement('span');
+            gpsEl.className = 'header-meta-item';
+            gpsEl.textContent = stats.pct_gps + '% GPS';
+            meta.appendChild(gpsEl);
+        }
+    }
+
+    // ---- Pipeline strip ----
+
+    function updatePipelineStrip(steps, currentStep, status) {
+        var strip = document.getElementById("pipeline-strip");
+        if (!strip) return;
+        strip.style.display = "flex";
+        strip.innerHTML = '';
+        for (var i = 0; i < steps.length; i++) {
+            if (i > 0) {
+                var conn = document.createElement('div');
+                conn.className = 'pipeline-connector';
+                strip.appendChild(conn);
+            }
+            var node = document.createElement('div');
+            node.className = 'pipeline-node';
+            if (status === 'done' || i < currentStep) {
+                node.classList.add('done');
+                node.innerHTML = '<i class="bi bi-check-circle-fill"></i> ' + escapeHtml(steps[i]);
+            } else if (i === currentStep && status === 'running') {
+                node.classList.add('running');
+                node.innerHTML = '<i class="bi bi-arrow-repeat"></i> ' + escapeHtml(steps[i]);
+            } else if ((status === 'failed' || status === 'cancelled') && i === currentStep) {
+                node.classList.add('failed');
+                node.innerHTML = '<i class="bi bi-x-circle-fill"></i> ' + escapeHtml(steps[i]);
+            } else {
+                node.textContent = steps[i];
+            }
+            strip.appendChild(node);
+        }
+    }
 
     // ---- Folder Validation ----
 
@@ -578,6 +667,7 @@ document.addEventListener("DOMContentLoaded", function() {
             hideFolderMetaStats();
             photoDirInput.classList.remove("is-valid", "is-invalid");
             folderValid = false;
+            updateHeaderMeta(null);
             return;
         }
 
@@ -595,6 +685,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     photoDirInput.classList.remove("is-valid");
                     photoDirInput.classList.add("is-invalid");
                     folderValid = false;
+                    updateHeaderMeta(null);
                 } else if (data.warning) {
                     setFolderStatus(
                         '<i class="bi bi-exclamation-triangle-fill"></i> ' + data.warning +
@@ -624,6 +715,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     "text-danger"
                 );
                 folderValid = false;
+                updateHeaderMeta(null);
             });
     }
 
@@ -656,6 +748,8 @@ document.addEventListener("DOMContentLoaded", function() {
                     return;
                 }
                 renderFolderMetaStats(result.data);
+                // Update header meta with stats
+                updateHeaderMeta(result.data);
             })
             .catch(function(err) {
                 folderMetaStats.innerHTML = '';
@@ -709,6 +803,7 @@ document.addEventListener("DOMContentLoaded", function() {
             hideFolderMetaStats();
             photoDirInput.classList.remove("is-valid", "is-invalid");
             folderValid = false;
+            updateHeaderMeta(null);
             return;
         }
         validateTimer = setTimeout(function() {
@@ -719,7 +814,6 @@ document.addEventListener("DOMContentLoaded", function() {
     // Validate immediately on paste (skip the 600ms debounce)
     photoDirInput.addEventListener("paste", function() {
         clearTimeout(validateTimer);
-        // Use setTimeout(0) so the pasted value is in the input
         setTimeout(function() {
             var val = photoDirInput.value.trim();
             if (val) validateFolder(val);
@@ -730,13 +824,11 @@ document.addEventListener("DOMContentLoaded", function() {
 
     var browserShowHidden = document.getElementById("browser-show-hidden");
 
-    // Elements for drive bar and breadcrumb (created dynamically on first browse)
     var browserDriveBar = null;
     var browserBreadcrumb = null;
 
     function ensureBrowserChrome() {
         if (browserDriveBar) return;
-        // Insert drive bar and breadcrumb before the browser-list element
         var container = browserList.parentElement;
         var refNode = browserList;
 
@@ -779,7 +871,6 @@ document.addEventListener("DOMContentLoaded", function() {
                     var driveHtml = '<span class="drive-label"><i class="bi bi-hdd"></i></span>';
                     for (var d = 0; d < data.drives.length; d++) {
                         var drv = data.drives[d];
-                        // Check if current path is on this drive
                         var drvLetter = drv.charAt(0).toLowerCase();
                         var active = "";
                         if (isWsl) {
@@ -797,7 +888,6 @@ document.addEventListener("DOMContentLoaded", function() {
                     browserDriveBar.style.display = "flex";
                     browserDriveBar.querySelectorAll(".drive-btn").forEach(function(btn) {
                         btn.addEventListener("click", function() {
-                            // Send the drive letter; backend translates for the platform
                             browseToPath(btn.dataset.drive + "/");
                         });
                     });
@@ -829,7 +919,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
                 var html = "";
 
-                // Warning banner (timeout, stale mounts, etc.)
+                // Warning banner
                 if (data.warning) {
                     html += '<div class="browser-warning">'
                          + '<i class="bi bi-exclamation-triangle"></i> '
@@ -854,14 +944,13 @@ document.addEventListener("DOMContentLoaded", function() {
                     var dirName = typeof dirEntry === "string" ? dirEntry : dirEntry.name;
                     var fullPath = typeof dirEntry === "string" ? dirEntry : dirEntry.path;
                     html += '<div class="browser-item" data-path="' + escapeAttr(fullPath) + '">' +
-                            '<i class="bi bi-folder-fill" style="color:#aaa"></i> ' +
+                            '<i class="bi bi-folder-fill" style="color:var(--ps-text-dim)"></i> ' +
                             escapeHtml(dirName) +
                             '</div>';
                 }
 
                 browserList.innerHTML = html;
 
-                // Click handlers for directory items
                 browserList.querySelectorAll(".browser-item").forEach(function(el) {
                     el.addEventListener("click", function() {
                         browseToPath(el.dataset.path);
@@ -906,7 +995,6 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     });
 
-    // Navigate immediately on paste into the browser path input
     browserPathInput.addEventListener("paste", function() {
         setTimeout(function() {
             var val = browserPathInput.value.trim();
@@ -915,7 +1003,6 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 
     // Track which input the folder browser was opened for.
-    // null = photo_dir (default), "backup-source", "backup-dest"
     var browserTarget = null;
 
     browserSelectBtn.addEventListener("click", function() {
@@ -1224,9 +1311,12 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
+    // Track pipeline step labels for strip visualization
+    var pipelineStepLabels = [];
+
     function startPipeline(data) {
         btnRun.disabled = true;
-        btnCancel.style.display = "inline-block";
+        btnCancel.style.display = "inline-flex";
         logPanel.classList.add("active");
         progressBar.classList.add("active");
 
@@ -1251,7 +1341,12 @@ document.addEventListener("DOMContentLoaded", function() {
                 return;
             }
             currentJobId = body.job_id;
+            pipelineStepLabels = body.steps || [];
             renderStepBadges(body.steps);
+            // Initialize pipeline strip
+            if (pipelineStepLabels.length > 0) {
+                updatePipelineStrip(pipelineStepLabels, 0, "running");
+            }
             startPolling();
         })
         .catch(function(err) {
@@ -1279,6 +1374,11 @@ document.addEventListener("DOMContentLoaded", function() {
                     logPanel.textContent = data.log;
                     logPanel.scrollTop = logPanel.scrollHeight;
                     updateStepBadges(data);
+
+                    // Update pipeline strip
+                    if (pipelineStepLabels.length > 0) {
+                        updatePipelineStrip(pipelineStepLabels, data.current_step || 0, data.status);
+                    }
 
                     if (data.status !== "running") {
                         clearInterval(pollTimer);
@@ -1553,4 +1653,23 @@ document.addEventListener("DOMContentLoaded", function() {
                 .catch(function() { /* ignore transient errors */ });
         }, 1000);
     }
+
+    // ---- Keyboard shortcuts ----
+
+    document.addEventListener("keydown", function(e) {
+        // Don't fire shortcuts when typing in inputs/textareas
+        var tag = document.activeElement ? document.activeElement.tagName : "";
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+        if (e.key === "r" || e.key === "R") {
+            e.preventDefault();
+            if (!btnRun.disabled) btnRun.click();
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            if (btnCancel.style.display !== "none") btnCancel.click();
+        } else if (e.key === "/") {
+            e.preventDefault();
+            photoDirInput.focus();
+        }
+    });
 });

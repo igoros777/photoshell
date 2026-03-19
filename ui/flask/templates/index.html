@@ -4,789 +4,631 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>PhotoShell</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
 </head>
 <body>
 
-<!-- Navbar -->
-<nav class="navbar navbar-expand-sm">
-    <div class="container-fluid justify-content-center">
-        <span class="navbar-brand mb-0 h1">
-            <i class="bi bi-camera-fill accent"></i>
-            Photo<span class="accent">Shell</span>
-        </span>
+<!-- ================================================================== -->
+<!-- HEADER BAR                                                          -->
+<!-- ================================================================== -->
+<header class="app-header">
+    <div class="app-brand">
+        <i class="bi bi-camera-fill"></i>
+        <span>Photo<span class="accent">Shell</span></span>
     </div>
-</nav>
+    <div class="header-meta" id="header-meta">
+        <!-- populated by JS: path, photo count, GPS % -->
+    </div>
+</header>
 
-<div class="main-container">
-<form id="workflow-form" autocomplete="off">
+<div class="app-layout">
+    <!-- ================================================================== -->
+    <!-- SIDEBAR                                                             -->
+    <!-- ================================================================== -->
+    <aside class="app-sidebar">
+        <form id="workflow-form" autocomplete="off">
 
-<!-- ================================================================== -->
-<!-- ACCORDION                                                           -->
-<!-- ================================================================== -->
-<div id="order-warning" class="order-warning" style="display:none"></div>
-<div class="accordion" id="mainAccordion">
-
-<!-- ──────────────── 0. Target Photo Folder ──────────────── -->
-<div class="accordion-item">
-    <h2 class="accordion-header">
-        <button class="accordion-button" type="button"
-                data-bs-toggle="collapse" data-bs-target="#sec-folder">
-            <span class="step-header">
-                <i class="bi bi-folder-fill" style="color:var(--ps-accent)"></i>
-                <span class="step-label">Target Photo Folder &amp; Workflow Steps</span>
-            </span>
-        </button>
-    </h2>
-    <div id="sec-folder" class="accordion-collapse collapse show" data-bs-parent="#mainAccordion">
-        <div class="accordion-body">
-            <p class="section-desc">
-                Set the working directory, then enable each processing step.
-                Enabled steps will run in top-to-bottom order.
-            </p>
-
-            <div class="mb-3">
-                <label class="form-label" for="photo_dir">Photo Directory (absolute path)</label>
-                <div class="input-group">
+            <!-- Folder path input -->
+            <div class="sidebar-section">
+                <label class="sidebar-section-label">Target Folder</label>
+                <div class="input-group input-group-sm">
                     <input type="text" class="form-control" id="photo_dir" name="photo_dir"
-                           placeholder="C:\Photos\2026-03 or /home/user/Pictures" required>
-                    <button class="btn btn-outline-secondary" type="button" id="btn-browse"
+                           placeholder="/path/to/photos" required>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" id="btn-browse"
                             title="Browse folders on server">
                         <i class="bi bi-folder2-open"></i>
                     </button>
-                    <button class="btn btn-outline-secondary" type="button" id="btn-validate"
+                    <button class="btn btn-outline-secondary btn-sm" type="button" id="btn-validate"
                             title="Validate folder">
                         <i class="bi bi-check-circle"></i>
                     </button>
                 </div>
-                <div id="folder-status" class="mt-1" style="font-size:.85rem"></div>
-                <div id="folder-meta-stats" class="folder-meta-stats" style="display:none"></div>
+                <div id="folder-status" class="mt-1"></div>
             </div>
 
-            <div class="mb-3">
-                <label class="form-label" for="location_override">
-                    <i class="bi bi-geo-alt"></i> Location Fallback (optional)
+            <!-- Location override -->
+            <div class="sidebar-section">
+                <label class="sidebar-section-label">
+                    <i class="bi bi-geo-alt"></i> Location Fallback
                 </label>
-                <input type="text" class="form-control" id="location_override" name="location_override"
-                       placeholder="e.g. Longwood Gardens, Kennett Square, PA">
-                <div class="field-help">
-                    Used as the location for photos missing GPS data in
-                    Extract Photo Summary, Geo Rename, and GoPro Geo Rename steps.
-                </div>
+                <input type="text" class="form-control form-control-sm" id="location_override"
+                       name="location_override" placeholder="e.g. Longwood Gardens, PA">
             </div>
 
-            <hr class="border-secondary">
+            <hr class="sidebar-divider">
 
-            <!-- Backup Folder -->
-            <div class="backup-inline">
-                <div class="backup-inline-header">
-                    <i class="bi bi-archive-fill" style="color:var(--ps-accent)"></i>
-                    <span class="backup-inline-title">Backup Folder</span>
-                    <span class="backup-inline-hint">Create a timestamped .tar.gz archive</span>
-                </div>
-                <div class="field-row mt-2">
-                    <div style="flex:2">
-                        <label class="form-label">Destination Folder</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control" id="backup-dest"
-                                   placeholder="Same as photo directory if empty">
-                            <button class="btn btn-outline-secondary" type="button" id="btn-backup-browse-dest"
-                                    title="Browse destination folder">
-                                <i class="bi bi-folder2-open"></i>
-                            </button>
-                        </div>
-                        <div class="field-help">Defaults to the photo directory above</div>
-                    </div>
-                    <div class="d-flex align-items-end pb-1">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="backup-recursive">
-                            <label class="form-check-label" for="backup-recursive">Include subdirectories</label>
-                        </div>
-                    </div>
-                </div>
-                <div id="backup-estimate" class="backup-estimate" style="display:none"></div>
-                <div class="d-flex gap-2 mt-2">
-                    <button type="button" class="btn btn-sm btn-photoshell" id="btn-backup-estimate">
-                        <i class="bi bi-calculator"></i> Estimate
-                    </button>
-                    <button type="button" class="btn btn-sm btn-photoshell" id="btn-backup-run">
-                        <i class="bi bi-archive"></i> Run Backup
-                    </button>
-                    <button type="button" class="btn btn-sm btn-cancel" id="btn-backup-cancel" style="display:none">
-                        <i class="bi bi-x-circle"></i> Cancel
-                    </button>
-                </div>
-                <pre class="log-panel backup-log" id="backup-log" style="display:none"></pre>
-            </div>
+            <!-- Step checklist -->
+            <div class="sidebar-section">
+                <label class="sidebar-section-label">Workflow Steps</label>
+                <div id="sidebar-steps">
 
-            <hr class="border-secondary">
-            <p class="form-label mb-2">Enable workflow steps:</p>
-
-            <div class="row g-2">
-
-                <div class="col-sm-6">
-                    <div class="step-row">
-                        <div class="form-check">
-                            <input class="form-check-input section-toggle" type="checkbox"
-                                   id="chk-sync" name="enable_sync_exif" data-section="sec-sync">
-                            <label class="form-check-label" for="chk-sync">
-                                <i class="bi bi-arrow-repeat"></i> Sync EXIF &amp; Rename
-                            </label>
-                        </div>
-                        <span class="step-actions">
+                    <div class="sidebar-step" data-step="sync">
+                        <input class="form-check-input section-toggle" type="checkbox"
+                               id="chk-sync" name="enable_sync_exif" data-section="sec-sync">
+                        <span class="sidebar-step-label"><i class="bi bi-arrow-repeat"></i> Sync EXIF &amp; Rename</span>
+                        <span class="sidebar-step-badge step-badge" data-step-key="enable_sync_exif">Step</span>
+                        <span class="sidebar-step-actions">
                             <i class="bi bi-info-circle step-tooltip" tabindex="0"
                                data-bs-toggle="popover" data-bs-trigger="hover focus"
                                data-bs-content="Copies EXIF/IPTC metadata from original RAW/source files to exported JPEGs and renames exports to match the original archive filenames."></i>
                             <i class="bi bi-book step-docs-link" data-doc="sync_exif_and_rename" title="Full documentation"></i>
                         </span>
                     </div>
-                </div>
 
-                <div class="col-sm-6">
-                    <div class="step-row">
-                        <div class="form-check">
-                            <input class="form-check-input section-toggle" type="checkbox"
-                                   id="chk-gps" name="enable_gps_gap_fill" data-section="sec-gps">
-                            <label class="form-check-label" for="chk-gps">
-                                <i class="bi bi-geo-alt"></i> GPS Gap Fill
-                            </label>
-                        </div>
-                        <span class="step-actions">
+                    <div class="sidebar-step" data-step="gps">
+                        <input class="form-check-input section-toggle" type="checkbox"
+                               id="chk-gps" name="enable_gps_gap_fill" data-section="sec-gps">
+                        <span class="sidebar-step-label"><i class="bi bi-geo-alt"></i> GPS Gap Fill</span>
+                        <span class="sidebar-step-badge step-badge" data-step-key="enable_gps_gap_fill">Step</span>
+                        <span class="sidebar-step-actions">
                             <i class="bi bi-info-circle step-tooltip" tabindex="0"
                                data-bs-toggle="popover" data-bs-trigger="hover focus"
                                data-bs-content="Fills missing GPS coordinates in photos by borrowing location data from the nearest-in-time photo that has valid geotags (default max gap: 2 hours)."></i>
                             <i class="bi bi-book step-docs-link" data-doc="gps_gap_fill" title="Full documentation"></i>
                         </span>
                     </div>
-                </div>
 
-                <div class="col-sm-6">
-                    <div class="step-row">
-                        <div class="form-check">
-                            <input class="form-check-input section-toggle" type="checkbox"
-                                   id="chk-summary" name="enable_extract_summary" data-section="sec-summary">
-                            <label class="form-check-label" for="chk-summary">
-                                <i class="bi bi-card-text"></i> Extract Photo Summary
-                            </label>
-                        </div>
-                        <span class="step-actions">
+                    <div class="sidebar-step" data-step="summary">
+                        <input class="form-check-input section-toggle" type="checkbox"
+                               id="chk-summary" name="enable_extract_summary" data-section="sec-summary">
+                        <span class="sidebar-step-label"><i class="bi bi-card-text"></i> Extract Photo Summary</span>
+                        <span class="sidebar-step-badge step-badge" data-step-key="enable_extract_summary">Step</span>
+                        <span class="sidebar-step-actions">
                             <i class="bi bi-info-circle step-tooltip" tabindex="0"
                                data-bs-toggle="popover" data-bs-trigger="hover focus"
                                data-bs-content="Reads EXIF data (camera, lens, exposure, GPS) and generates a concise human-readable technical summary with reverse geocoding, then writes it to metadata comment/description fields."></i>
                             <i class="bi bi-book step-docs-link" data-doc="extract_photo_summary" title="Full documentation"></i>
                         </span>
                     </div>
-                </div>
 
-                <div class="col-sm-6">
-                    <div class="step-row">
-                        <div class="form-check">
-                            <input class="form-check-input section-toggle" type="checkbox"
-                                   id="chk-desc" name="enable_annotate_desc" data-section="sec-desc">
-                            <label class="form-check-label" for="chk-desc">
-                                <i class="bi bi-chat-left-text"></i> Annotate - Description
-                            </label>
-                        </div>
-                        <span class="step-actions">
+                    <div class="sidebar-step" data-step="desc">
+                        <input class="form-check-input section-toggle" type="checkbox"
+                               id="chk-desc" name="enable_annotate_desc" data-section="sec-desc">
+                        <span class="sidebar-step-label"><i class="bi bi-chat-left-text"></i> Annotate - Description</span>
+                        <span class="sidebar-step-badge step-badge" data-step-key="enable_annotate_desc">Step</span>
+                        <span class="sidebar-step-actions">
                             <i class="bi bi-info-circle step-tooltip" tabindex="0"
                                data-bs-toggle="popover" data-bs-trigger="hover focus"
                                data-bs-content="Uses Ollama LLM (e.g. gemma3:27b) to analyze each photo and generate a natural-language description, which is written to EXIF/IPTC metadata fields."></i>
                             <i class="bi bi-book step-docs-link" data-doc="annotate_desc" title="Full documentation"></i>
                         </span>
                     </div>
-                </div>
 
-                <div class="col-sm-6">
-                    <div class="step-row">
-                        <div class="form-check">
-                            <input class="form-check-input section-toggle" type="checkbox"
-                                   id="chk-kw" name="enable_annotate_kw" data-section="sec-kw">
-                            <label class="form-check-label" for="chk-kw">
-                                <i class="bi bi-tags"></i> Annotate - Keywords
-                            </label>
-                        </div>
-                        <span class="step-actions">
+                    <div class="sidebar-step" data-step="kw">
+                        <input class="form-check-input section-toggle" type="checkbox"
+                               id="chk-kw" name="enable_annotate_kw" data-section="sec-kw">
+                        <span class="sidebar-step-label"><i class="bi bi-tags"></i> Annotate - Keywords</span>
+                        <span class="sidebar-step-badge step-badge" data-step-key="enable_annotate_kw">Step</span>
+                        <span class="sidebar-step-actions">
                             <i class="bi bi-info-circle step-tooltip" tabindex="0"
                                data-bs-toggle="popover" data-bs-trigger="hover focus"
                                data-bs-content="Uses Ollama LLM to analyze each photo and generate relevant keywords/tags, which are written to IPTC keyword metadata fields for cataloging and search."></i>
                             <i class="bi bi-book step-docs-link" data-doc="annotate_kw" title="Full documentation"></i>
                         </span>
                     </div>
-                </div>
 
-                <div class="col-sm-6">
-                    <div class="step-row">
-                        <div class="form-check">
-                            <input class="form-check-input section-toggle" type="checkbox"
-                                   id="chk-blur" name="enable_blur" data-section="sec-blur">
-                            <label class="form-check-label" for="chk-blur">
-                                <i class="bi bi-eye"></i> Detect Blurry Photos
-                            </label>
-                        </div>
-                        <span class="step-actions">
+                    <div class="sidebar-step" data-step="blur">
+                        <input class="form-check-input section-toggle" type="checkbox"
+                               id="chk-blur" name="enable_blur" data-section="sec-blur">
+                        <span class="sidebar-step-label"><i class="bi bi-eye"></i> Detect Blurry Photos</span>
+                        <span class="sidebar-step-badge step-badge" data-step-key="enable_blur">Step</span>
+                        <span class="sidebar-step-actions">
                             <i class="bi bi-info-circle step-tooltip" tabindex="0"
                                data-bs-toggle="popover" data-bs-trigger="hover focus"
                                data-bs-content="Scores image sharpness using ImageMagick, groups photos into scenes by timestamp and visual similarity, then selects the sharpest frame from each scene."></i>
                             <i class="bi bi-book step-docs-link" data-doc="detect_blurry" title="Full documentation"></i>
                         </span>
                     </div>
-                </div>
 
-                <div class="col-sm-6">
-                    <div class="step-row">
-                        <div class="form-check">
-                            <input class="form-check-input section-toggle" type="checkbox"
-                                   id="chk-geo" name="enable_geo_rename" data-section="sec-geo">
-                            <label class="form-check-label" for="chk-geo">
-                                <i class="bi bi-signpost-2"></i> Geo Rename Photos
-                            </label>
-                        </div>
-                        <span class="step-actions">
+                    <div class="sidebar-step" data-step="geo">
+                        <input class="form-check-input section-toggle" type="checkbox"
+                               id="chk-geo" name="enable_geo_rename" data-section="sec-geo">
+                        <span class="sidebar-step-label"><i class="bi bi-signpost-2"></i> Geo Rename Photos</span>
+                        <span class="sidebar-step-badge step-badge" data-step-key="enable_geo_rename">Step</span>
+                        <span class="sidebar-step-actions">
                             <i class="bi bi-info-circle step-tooltip" tabindex="0"
                                data-bs-toggle="popover" data-bs-trigger="hover focus"
                                data-bs-content="Renames photos to YYYYMMDD-HHMMSS-camera-location.ext using EXIF capture time, camera model, and reverse-geocoded GPS location. Optionally organizes into date-based folders."></i>
                             <i class="bi bi-book step-docs-link" data-doc="geo_rename" title="Full documentation"></i>
                         </span>
                     </div>
-                </div>
 
-                <div class="col-sm-6">
-                    <div class="step-row">
-                        <div class="form-check">
-                            <input class="form-check-input section-toggle" type="checkbox"
-                                   id="chk-gopro" name="enable_gopro" data-section="sec-gopro">
-                            <label class="form-check-label" for="chk-gopro">
-                                <i class="bi bi-camera-video"></i> GoPro Geo Rename
-                            </label>
-                        </div>
-                        <span class="step-actions">
+                    <div class="sidebar-step" data-step="gopro">
+                        <input class="form-check-input section-toggle" type="checkbox"
+                               id="chk-gopro" name="enable_gopro" data-section="sec-gopro">
+                        <span class="sidebar-step-label"><i class="bi bi-camera-video"></i> GoPro Geo Rename</span>
+                        <span class="sidebar-step-badge step-badge" data-step-key="enable_gopro">Step</span>
+                        <span class="sidebar-step-actions">
                             <i class="bi bi-info-circle step-tooltip" tabindex="0"
                                data-bs-toggle="popover" data-bs-trigger="hover focus"
                                data-bs-content="Renames GoPro MP4 clips to YYYYMMDD-HHMM-location-duration-original.mp4 using embedded capture time, reverse-geocoded GPS coordinates, and clip duration."></i>
                             <i class="bi bi-book step-docs-link" data-doc="gopro_geo_rename" title="Full documentation"></i>
                         </span>
                     </div>
-                </div>
 
-                <div class="col-sm-6">
-                    <div class="step-row">
-                        <div class="form-check">
-                            <input class="form-check-input section-toggle" type="checkbox"
-                                   id="chk-cs" name="enable_contact_sheet" data-section="sec-cs">
-                            <label class="form-check-label" for="chk-cs">
-                                <i class="bi bi-grid-3x3"></i> Contact Sheet
-                            </label>
-                        </div>
-                        <span class="step-actions">
+                    <div class="sidebar-step" data-step="cs">
+                        <input class="form-check-input section-toggle" type="checkbox"
+                               id="chk-cs" name="enable_contact_sheet" data-section="sec-cs">
+                        <span class="sidebar-step-label"><i class="bi bi-grid-3x3"></i> Contact Sheet</span>
+                        <span class="sidebar-step-badge step-badge" data-step-key="enable_contact_sheet">Step</span>
+                        <span class="sidebar-step-actions">
                             <i class="bi bi-info-circle step-tooltip" tabindex="0"
                                data-bs-toggle="popover" data-bs-trigger="hover focus"
                                data-bs-content="Generates a contact/proof sheet image with thumbnails and metadata captions (filename, date, camera, exposure) using ImageMagick. Supports light/dark themes."></i>
                             <i class="bi bi-book step-docs-link" data-doc="contact_sheet" title="Full documentation"></i>
                         </span>
                     </div>
-                </div>
 
-                <div class="col-sm-6">
-                    <div class="step-row">
-                        <div class="form-check">
-                            <input class="form-check-input section-toggle" type="checkbox"
-                                   id="chk-scrub" name="enable_scrub" data-section="sec-scrub">
-                            <label class="form-check-label" for="chk-scrub">
-                                <i class="bi bi-eraser"></i> Scrub Metadata
-                            </label>
-                        </div>
-                        <span class="step-actions">
+                    <div class="sidebar-step" data-step="scrub">
+                        <input class="form-check-input section-toggle" type="checkbox"
+                               id="chk-scrub" name="enable_scrub" data-section="sec-scrub">
+                        <span class="sidebar-step-label"><i class="bi bi-eraser"></i> Scrub Metadata</span>
+                        <span class="sidebar-step-badge step-badge" data-step-key="enable_scrub">Step</span>
+                        <span class="sidebar-step-actions">
                             <i class="bi bi-info-circle step-tooltip" tabindex="0"
                                data-bs-toggle="popover" data-bs-trigger="hover focus"
                                data-bs-content="Clears selected EXIF/IPTC metadata fields from image files. Defaults to removing UserComment, ImageDescription, Caption, Caption-Abstract, and Keywords. Supports custom tag selection."></i>
                             <i class="bi bi-book step-docs-link" data-doc="scrub_metadata" title="Full documentation"></i>
                         </span>
                     </div>
-                </div>
 
+                </div>
+            </div>
 
-            </div>
-        </div>
-    </div>
-</div>
+            <hr class="sidebar-divider">
 
-<!-- ──────────────── 1. Sync EXIF & Rename ──────────────── -->
-<div class="accordion-item disabled">
-    <h2 class="accordion-header">
-        <button class="accordion-button collapsed" type="button"
-                data-bs-toggle="collapse" data-bs-target="#sec-sync">
-            <span class="step-header">
-                <span class="step-label"><i class="bi bi-arrow-repeat"></i> Sync EXIF &amp; Rename</span>
-                <span class="step-badge" data-step-key="enable_sync_exif">Step</span>
-            </span>
-        </button>
-    </h2>
-    <div id="sec-sync" class="accordion-collapse collapse" data-bs-parent="#mainAccordion">
-        <div class="accordion-body">
-            <p class="section-desc">
-                Syncs export JPEG metadata from matching originals and renames files to source names.
-            </p>
-            <div class="field-row">
-                <div>
-                    <label class="form-label">Originals Directory (optional)</label>
-                    <input type="text" class="form-control" name="sync_orig_dir"
-                           placeholder="Auto-detected if empty">
-                </div>
+            <!-- Actions -->
+            <div class="sidebar-actions">
+                <button type="button" class="btn btn-primary-ps" id="btn-run">
+                    <i class="bi bi-play-fill"></i> Run Pipeline
+                </button>
+                <button type="button" class="btn btn-secondary-ps" id="btn-cancel" style="display:none">
+                    <i class="bi bi-x-circle"></i> Cancel
+                </button>
+                <button type="button" class="btn btn-secondary-ps" id="btn-validate-workflow"
+                        title="Check folder, steps, and ordering before running">
+                    <i class="bi bi-clipboard-check"></i> Validate
+                </button>
             </div>
-            <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" name="sync_dry_run" id="sync-dry">
-                <label class="form-check-label" for="sync-dry">Dry run (preview only)</label>
-            </div>
-        </div>
-    </div>
-</div>
 
-<!-- ──────────────── 2. GPS Gap Fill ──────────────── -->
-<div class="accordion-item disabled">
-    <h2 class="accordion-header">
-        <button class="accordion-button collapsed" type="button"
-                data-bs-toggle="collapse" data-bs-target="#sec-gps">
-            <span class="step-header">
-                <span class="step-label"><i class="bi bi-geo-alt"></i> GPS Gap Fill</span>
-                <span class="step-badge" data-step-key="enable_gps_gap_fill">Step</span>
-            </span>
-        </button>
-    </h2>
-    <div id="sec-gps" class="accordion-collapse collapse" data-bs-parent="#mainAccordion">
-        <div class="accordion-body">
-            <p class="section-desc">
-                Fills missing GPS coordinates by copying from nearest-in-time donor photos (default gap: 2 hours).
-            </p>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="gps_dry_run" id="gps-dry">
-                <label class="form-check-label" for="gps-dry">Dry run (preview only)</label>
+            <!-- Keyboard shortcuts reference -->
+            <div class="sidebar-shortcuts">
+                <span><kbd>R</kbd> Run</span>
+                <span><kbd>Esc</kbd> Cancel</span>
+                <span><kbd>/</kbd> Focus path</span>
             </div>
-        </div>
-    </div>
-</div>
 
-<!-- ──────────────── 3. Extract Photo Summary ──────────────── -->
-<div class="accordion-item disabled">
-    <h2 class="accordion-header">
-        <button class="accordion-button collapsed" type="button"
-                data-bs-toggle="collapse" data-bs-target="#sec-summary">
-            <span class="step-header">
-                <span class="step-label"><i class="bi bi-card-text"></i> Extract Photo Summary</span>
-                <span class="step-badge" data-step-key="enable_extract_summary">Step</span>
-            </span>
-        </button>
-    </h2>
-    <div id="sec-summary" class="accordion-collapse collapse" data-bs-parent="#mainAccordion">
-        <div class="accordion-body">
-            <p class="section-desc">
-                Extracts EXIF metadata and builds a concise summary written to comment/description tags.
-                Runs on all JPG/JPEG files in the target folder. Requires <code>GEOCODIO_API_KEY</code> env var for reverse geocoding.
-            </p>
-            <p class="field-help">No additional options – processes all JPG/JPEG files in the target folder.</p>
-        </div>
-    </div>
-</div>
+            <!-- ================================================================== -->
+            <!-- HIDDEN STEP CONFIG PANELS (shown in inspector when step is clicked) -->
+            <!-- ================================================================== -->
 
-<!-- ──────────────── 4. Annotate – Description ──────────────── -->
-<div class="accordion-item disabled">
-    <h2 class="accordion-header">
-        <button class="accordion-button collapsed" type="button"
-                data-bs-toggle="collapse" data-bs-target="#sec-desc">
-            <span class="step-header">
-                <span class="step-label"><i class="bi bi-chat-left-text"></i> Annotate – Description (Ollama)</span>
-                <span class="step-badge" data-step-key="enable_annotate_desc">Step</span>
-            </span>
-        </button>
-    </h2>
-    <div id="sec-desc" class="accordion-collapse collapse" data-bs-parent="#mainAccordion">
-        <div class="accordion-body">
-            <p class="section-desc">
-                Generates photo descriptions via Ollama LLM and writes them to EXIF/IPTC metadata.
-            </p>
-            <div class="field-row">
-                <div>
-                    <label class="form-label">Ollama Model</label>
-                    <input type="text" class="form-control" name="desc_model" value="gemma3:27b">
-                </div>
-                <div>
-                    <label class="form-label">Prompt ID</label>
-                    <input type="text" class="form-control" name="desc_prompt_id" value="1"
-                           placeholder="0 = built-in">
-                    <div class="field-help">Use 0 for built-in prompt, or an ID from the prompts file</div>
-                </div>
-            </div>
-            <div class="field-row mt-2">
-                <div>
-                    <label class="form-label">Single file (optional)</label>
-                    <input type="text" class="form-control" name="desc_file" placeholder="Process all if empty">
-                </div>
-            </div>
-            <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" name="desc_recursive" id="desc-rec">
-                <label class="form-check-label" for="desc-rec">Include subfolders</label>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ──────────────── 5. Annotate – Keywords ──────────────── -->
-<div class="accordion-item disabled">
-    <h2 class="accordion-header">
-        <button class="accordion-button collapsed" type="button"
-                data-bs-toggle="collapse" data-bs-target="#sec-kw">
-            <span class="step-header">
-                <span class="step-label"><i class="bi bi-tags"></i> Annotate – Keywords (Ollama)</span>
-                <span class="step-badge" data-step-key="enable_annotate_kw">Step</span>
-            </span>
-        </button>
-    </h2>
-    <div id="sec-kw" class="accordion-collapse collapse" data-bs-parent="#mainAccordion">
-        <div class="accordion-body">
-            <p class="section-desc">
-                Generates photo keywords via Ollama LLM and writes them to IPTC keyword tags.
-            </p>
-            <div class="field-row">
-                <div>
-                    <label class="form-label">Ollama Model</label>
-                    <input type="text" class="form-control" name="kw_model" value="gemma3:27b">
-                </div>
-                <div>
-                    <label class="form-label">Prompt ID</label>
-                    <input type="text" class="form-control" name="kw_prompt_id" value="1"
-                           placeholder="0 = built-in">
-                </div>
-            </div>
-            <div class="field-row mt-2">
-                <div>
-                    <label class="form-label">Single file (optional)</label>
-                    <input type="text" class="form-control" name="kw_file" placeholder="Process all if empty">
-                </div>
-            </div>
-            <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" name="kw_recursive" id="kw-rec">
-                <label class="form-check-label" for="kw-rec">Include subfolders</label>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ──────────────── 6. Detect Blurry Photos ──────────────── -->
-<div class="accordion-item disabled">
-    <h2 class="accordion-header">
-        <button class="accordion-button collapsed" type="button"
-                data-bs-toggle="collapse" data-bs-target="#sec-blur">
-            <span class="step-header">
-                <span class="step-label"><i class="bi bi-eye"></i> Detect Blurry Photos</span>
-                <span class="step-badge" data-step-key="enable_blur">Step</span>
-            </span>
-        </button>
-    </h2>
-    <div id="sec-blur" class="accordion-collapse collapse" data-bs-parent="#mainAccordion">
-        <div class="accordion-body">
-            <p class="section-desc">
-                Detects blur via ImageMagick, splits photos into scenes, selects the sharpest frame per scene.
-            </p>
-            <div class="field-row">
-                <div>
-                    <label class="form-label">Mode</label>
-                    <select class="form-select" name="blur_mode">
-                        <option value="all" selected>all (analyze + select)</option>
-                        <option value="analyze">analyze only</option>
-                        <option value="select">select only</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="form-label">Time Gap (seconds)</label>
-                    <input type="number" class="form-control" name="blur_time_gap" placeholder="5" min="1" max="3600" step="1">
-                    <div class="field-help">Scene break threshold</div>
-                </div>
-            </div>
-            <div class="field-row mt-2">
-                <div>
-                    <label class="form-label">Visual Threshold</label>
-                    <input type="text" class="form-control" name="blur_visual_threshold" placeholder="0.10">
-                </div>
-                <div>
-                    <label class="form-label">Thumbnail Size</label>
-                    <input type="text" class="form-control" name="blur_thumb_size" placeholder="256">
-                </div>
-                <div>
-                    <label class="form-label">Stat Window (WxH)</label>
-                    <input type="text" class="form-control" name="blur_window" placeholder="5x5">
-                </div>
-            </div>
-            <div class="d-flex gap-3 mt-2">
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="blur_no_visual" id="blur-novis">
-                    <label class="form-check-label" for="blur-novis">Disable visual similarity</label>
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="blur_clean" id="blur-clean">
-                    <label class="form-check-label" for="blur-clean">Clean output dirs first</label>
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="blur_dry_run" id="blur-dry">
-                    <label class="form-check-label" for="blur-dry">Dry run</label>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ──────────────── 7. Geo Rename Photos ──────────────── -->
-<div class="accordion-item disabled">
-    <h2 class="accordion-header">
-        <button class="accordion-button collapsed" type="button"
-                data-bs-toggle="collapse" data-bs-target="#sec-geo">
-            <span class="step-header">
-                <span class="step-label"><i class="bi bi-signpost-2"></i> Geo Rename Photos</span>
-                <span class="step-badge" data-step-key="enable_geo_rename">Step</span>
-            </span>
-        </button>
-    </h2>
-    <div id="sec-geo" class="accordion-collapse collapse" data-bs-parent="#mainAccordion">
-        <div class="accordion-body">
-            <p class="section-desc">
-                Renames photos to <code>YYYYMMDD-HHMMSS-camera-location.ext</code> using EXIF + reverse geocoding.
-                Requires <code>GEOCODIO_API_KEY</code>.
-            </p>
-            <div class="field-row">
-                <div>
-                    <label class="form-label">Folder Structure</label>
-                    <select class="form-select" name="geo_structure">
-                        <option value="none" selected>none (flat)</option>
-                        <option value="daily">daily (YYYY/YYYY-MM-DD)</option>
-                        <option value="monthly">monthly (YYYY/YYYY-MM)</option>
-                    </select>
-                </div>
-            </div>
-            <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" name="geo_dry_run" id="geo-dry">
-                <label class="form-check-label" for="geo-dry">Dry run (preview only)</label>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ──────────────── 8. GoPro Geo Rename ──────────────── -->
-<div class="accordion-item disabled">
-    <h2 class="accordion-header">
-        <button class="accordion-button collapsed" type="button"
-                data-bs-toggle="collapse" data-bs-target="#sec-gopro">
-            <span class="step-header">
-                <span class="step-label"><i class="bi bi-camera-video"></i> GoPro Geo Rename</span>
-                <span class="step-badge" data-step-key="enable_gopro">Step</span>
-            </span>
-        </button>
-    </h2>
-    <div id="sec-gopro" class="accordion-collapse collapse" data-bs-parent="#mainAccordion">
-        <div class="accordion-body">
-            <p class="section-desc">
-                Renames GoPro MP4 clips to <code>YYYYMMDD-HHMM-location-duration-original.mp4</code>.
-                Requires <code>GEOCODIO_API_KEY</code>.
-            </p>
-            <p class="field-help">No additional options – processes all MP4 files in the target folder.</p>
-        </div>
-    </div>
-</div>
-
-<!-- ──────────────── 9. Contact Sheet ──────────────── -->
-<div class="accordion-item disabled">
-    <h2 class="accordion-header">
-        <button class="accordion-button collapsed" type="button"
-                data-bs-toggle="collapse" data-bs-target="#sec-cs">
-            <span class="step-header">
-                <span class="step-label"><i class="bi bi-grid-3x3"></i> Contact Sheet</span>
-                <span class="step-badge" data-step-key="enable_contact_sheet">Step</span>
-            </span>
-        </button>
-    </h2>
-    <div id="sec-cs" class="accordion-collapse collapse" data-bs-parent="#mainAccordion">
-        <div class="accordion-body">
-            <p class="section-desc">
-                Generates a contact/proof sheet with metadata captions.
-            </p>
-            <div class="field-row">
-                <div>
-                    <label class="form-label">Thumbnail Size (px)</label>
-                    <input type="number" class="form-control" name="cs_thumb_size" placeholder="256" min="32" max="2048" step="1">
-                </div>
-                <div>
-                    <label class="form-label">Theme</label>
-                    <select class="form-select" name="cs_theme">
-                        <option value="">default (light)</option>
-                        <option value="light">light</option>
-                        <option value="dark">dark</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="form-label">Output File</label>
-                    <input type="text" class="form-control" name="cs_output" placeholder="contact_sheet.jpg">
-                </div>
-            </div>
-            <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" name="cs_recursive" id="cs-rec">
-                <label class="form-check-label" for="cs-rec">Include subfolders</label>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- ──────────────── 10. Scrub Metadata ──────────────── -->
-<div class="accordion-item disabled">
-    <h2 class="accordion-header">
-        <button class="accordion-button collapsed" type="button"
-                data-bs-toggle="collapse" data-bs-target="#sec-scrub">
-            <span class="step-header">
-                <span class="step-label"><i class="bi bi-eraser"></i> Scrub Metadata</span>
-                <span class="step-badge" data-step-key="enable_scrub">Step</span>
-            </span>
-        </button>
-    </h2>
-    <div id="sec-scrub" class="accordion-collapse collapse" data-bs-parent="#mainAccordion">
-        <div class="accordion-body">
-            <p class="section-desc">
-                Clears selected EXIF/IPTC fields. Defaults: UserComment, ImageDescription, Caption, Caption-Abstract, Keywords.
-            </p>
-            <div class="field-row">
-                <div>
-                    <label class="form-label">EXIF Tags (comma-separated, optional)</label>
-                    <input type="text" class="form-control" name="scrub_exif_tags"
-                           placeholder="UserComment,ImageDescription">
-                </div>
-                <div>
-                    <label class="form-label">IPTC Tags (comma-separated, optional)</label>
-                    <input type="text" class="form-control" name="scrub_iptc_tags"
-                           placeholder="Caption,Caption-Abstract,Keywords">
-                </div>
-            </div>
-            <div class="field-row mt-2">
-                <div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="scrub_recursive" id="scrub-rec">
-                        <label class="form-check-label" for="scrub-rec">Recursive</label>
+            <!-- 1. Sync EXIF & Rename -->
+            <div class="step-config" id="config-sync" style="display:none">
+                <p class="section-desc">
+                    Syncs export JPEG metadata from matching originals and renames files to source names.
+                </p>
+                <div class="field-row">
+                    <div>
+                        <label class="form-label">Originals Directory (optional)</label>
+                        <input type="text" class="form-control" name="sync_orig_dir"
+                               placeholder="Auto-detected if empty">
                     </div>
                 </div>
-                <div>
-                    <label class="form-label">Recursion Depth</label>
-                    <input type="text" class="form-control" name="scrub_recursive_depth"
-                           placeholder="0 = current only" value="0">
-                    <div class="field-help">Leave blank for unlimited when recursive is checked</div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" name="sync_dry_run" id="sync-dry">
+                    <label class="form-check-label" for="sync-dry">Dry run (preview only)</label>
                 </div>
             </div>
-            <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" name="scrub_dry_run" id="scrub-dry">
-                <label class="form-check-label" for="scrub-dry">Dry run (preview only)</label>
-            </div>
-        </div>
-    </div>
-</div>
 
-
-</div><!-- /accordion -->
-
-<!-- ================================================================== -->
-<!-- Toolbar + progress + log                                            -->
-<!-- ================================================================== -->
-<div class="toolbar">
-    <button type="button" class="btn btn-photoshell" id="btn-validate-workflow"
-            title="Check folder, steps, and ordering before running">
-        <i class="bi bi-clipboard-check"></i> Validate
-    </button>
-    <button type="button" class="btn btn-photoshell" id="btn-run">
-        <i class="bi bi-play-fill"></i> Run Workflow
-    </button>
-    <button type="button" class="btn btn-cancel" id="btn-cancel" style="display:none">
-        <i class="bi bi-x-circle"></i> Cancel
-    </button>
-</div>
-<div id="validation-result" class="validation-result" style="display:none"></div>
-<div id="advisory-panel" class="advisory-panel" style="display:none"></div>
-
-<div class="pipeline-progress" id="pipeline-progress">
-    <div class="pipeline-steps" id="pipeline-steps"></div>
-</div>
-
-<pre class="log-panel" id="log-panel"></pre>
-
-</form>
-
-<!-- ================================================================== -->
-<!-- Standalone Search EXIF / IPTC                                       -->
-<!-- ================================================================== -->
-<div class="search-panel">
-    <div class="search-panel-header">
-        <h5><i class="bi bi-search"></i> Search EXIF / IPTC</h5>
-        <span class="search-panel-hint">Search metadata across image, raw, and video files</span>
-        <i class="bi bi-book step-docs-link search-docs-link" data-doc="search_exif_iptc" title="Full documentation"></i>
-    </div>
-    <div class="search-panel-body">
-        <div class="field-row">
-            <div style="flex:2">
-                <label class="form-label">Directory</label>
-                <input type="text" class="form-control" id="search-dir"
-                       placeholder="Photo directory (uses workflow dir if empty)">
-            </div>
-            <div style="flex:2">
-                <label class="form-label">Search Query</label>
-                <input type="text" class="form-control" id="search-query" placeholder="e.g. sunset">
-            </div>
-            <div>
-                <label class="form-label">Fields</label>
-                <select class="form-select" id="search-fields">
-                    <option value="">all</option>
-                    <option value="exif">exif only</option>
-                    <option value="iptc">iptc only</option>
-                </select>
-            </div>
-            <div>
-                <label class="form-label">Media Types</label>
-                <select class="form-select" id="search-media-types">
-                    <option value="">all</option>
-                    <option value="image">image</option>
-                    <option value="raw">raw</option>
-                    <option value="video">video</option>
-                </select>
-            </div>
-        </div>
-        <div class="field-row mt-2">
-            <div>
-                <label class="form-label">Copy matches to (optional)</label>
-                <input type="text" class="form-control" id="search-copy-to"
-                       placeholder="Directory path">
-            </div>
-            <div class="d-flex align-items-end gap-3 pb-1">
+            <!-- 2. GPS Gap Fill -->
+            <div class="step-config" id="config-gps" style="display:none">
+                <p class="section-desc">
+                    Fills missing GPS coordinates by copying from nearest-in-time donor photos (default gap: 2 hours).
+                </p>
                 <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="search-recursive" checked>
-                    <label class="form-check-label" for="search-recursive">Recursive</label>
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="search-fzf">
-                    <label class="form-check-label" for="search-fzf">Fuzzy matching</label>
+                    <input class="form-check-input" type="checkbox" name="gps_dry_run" id="gps-dry">
+                    <label class="form-check-label" for="gps-dry">Dry run (preview only)</label>
                 </div>
             </div>
-        </div>
-        <div class="d-flex gap-2 mt-3">
-            <button type="button" class="btn btn-photoshell" id="btn-search">
-                <i class="bi bi-search"></i> Search
-            </button>
-            <button type="button" class="btn btn-cancel" id="btn-search-cancel" style="display:none">
-                <i class="bi bi-x-circle"></i> Cancel
-            </button>
-        </div>
-        <pre class="log-panel search-log" id="search-log" style="display:none"></pre>
-    </div>
-</div>
 
-</div><!-- /main-container -->
+            <!-- 3. Extract Photo Summary -->
+            <div class="step-config" id="config-summary" style="display:none">
+                <p class="section-desc">
+                    Extracts EXIF metadata and builds a concise summary written to comment/description tags.
+                    Runs on all JPG/JPEG files in the target folder. Requires <code>GEOCODIO_API_KEY</code> env var for reverse geocoding.
+                </p>
+                <p class="field-help">No additional options -- processes all JPG/JPEG files in the target folder.</p>
+            </div>
+
+            <!-- 4. Annotate - Description -->
+            <div class="step-config" id="config-desc" style="display:none">
+                <p class="section-desc">
+                    Generates photo descriptions via Ollama LLM and writes them to EXIF/IPTC metadata.
+                </p>
+                <div class="field-row">
+                    <div>
+                        <label class="form-label">Ollama Model</label>
+                        <input type="text" class="form-control" name="desc_model" value="gemma3:27b">
+                    </div>
+                    <div>
+                        <label class="form-label">Prompt ID</label>
+                        <input type="text" class="form-control" name="desc_prompt_id" value="1"
+                               placeholder="0 = built-in">
+                        <div class="field-help">Use 0 for built-in prompt, or an ID from the prompts file</div>
+                    </div>
+                </div>
+                <div class="field-row mt-2">
+                    <div>
+                        <label class="form-label">Single file (optional)</label>
+                        <input type="text" class="form-control" name="desc_file" placeholder="Process all if empty">
+                    </div>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" name="desc_recursive" id="desc-rec">
+                    <label class="form-check-label" for="desc-rec">Include subfolders</label>
+                </div>
+            </div>
+
+            <!-- 5. Annotate - Keywords -->
+            <div class="step-config" id="config-kw" style="display:none">
+                <p class="section-desc">
+                    Generates photo keywords via Ollama LLM and writes them to IPTC keyword tags.
+                </p>
+                <div class="field-row">
+                    <div>
+                        <label class="form-label">Ollama Model</label>
+                        <input type="text" class="form-control" name="kw_model" value="gemma3:27b">
+                    </div>
+                    <div>
+                        <label class="form-label">Prompt ID</label>
+                        <input type="text" class="form-control" name="kw_prompt_id" value="1"
+                               placeholder="0 = built-in">
+                    </div>
+                </div>
+                <div class="field-row mt-2">
+                    <div>
+                        <label class="form-label">Single file (optional)</label>
+                        <input type="text" class="form-control" name="kw_file" placeholder="Process all if empty">
+                    </div>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" name="kw_recursive" id="kw-rec">
+                    <label class="form-check-label" for="kw-rec">Include subfolders</label>
+                </div>
+            </div>
+
+            <!-- 6. Detect Blurry Photos -->
+            <div class="step-config" id="config-blur" style="display:none">
+                <p class="section-desc">
+                    Detects blur via ImageMagick, splits photos into scenes, selects the sharpest frame per scene.
+                </p>
+                <div class="field-row">
+                    <div>
+                        <label class="form-label">Mode</label>
+                        <select class="form-select" name="blur_mode">
+                            <option value="all" selected>all (analyze + select)</option>
+                            <option value="analyze">analyze only</option>
+                            <option value="select">select only</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Time Gap (seconds)</label>
+                        <input type="number" class="form-control" name="blur_time_gap" placeholder="5" min="1" max="3600" step="1">
+                        <div class="field-help">Scene break threshold</div>
+                    </div>
+                </div>
+                <div class="field-row mt-2">
+                    <div>
+                        <label class="form-label">Visual Threshold</label>
+                        <input type="text" class="form-control" name="blur_visual_threshold" placeholder="0.10">
+                    </div>
+                    <div>
+                        <label class="form-label">Thumbnail Size</label>
+                        <input type="text" class="form-control" name="blur_thumb_size" placeholder="256">
+                    </div>
+                    <div>
+                        <label class="form-label">Stat Window (WxH)</label>
+                        <input type="text" class="form-control" name="blur_window" placeholder="5x5">
+                    </div>
+                </div>
+                <div class="d-flex gap-3 mt-2 flex-wrap">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="blur_no_visual" id="blur-novis">
+                        <label class="form-check-label" for="blur-novis">Disable visual similarity</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="blur_clean" id="blur-clean">
+                        <label class="form-check-label" for="blur-clean">Clean output dirs first</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="blur_dry_run" id="blur-dry">
+                        <label class="form-check-label" for="blur-dry">Dry run</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 7. Geo Rename Photos -->
+            <div class="step-config" id="config-geo" style="display:none">
+                <p class="section-desc">
+                    Renames photos to <code>YYYYMMDD-HHMMSS-camera-location.ext</code> using EXIF + reverse geocoding.
+                    Requires <code>GEOCODIO_API_KEY</code>.
+                </p>
+                <div class="field-row">
+                    <div>
+                        <label class="form-label">Folder Structure</label>
+                        <select class="form-select" name="geo_structure">
+                            <option value="none" selected>none (flat)</option>
+                            <option value="daily">daily (YYYY/YYYY-MM-DD)</option>
+                            <option value="monthly">monthly (YYYY/YYYY-MM)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" name="geo_dry_run" id="geo-dry">
+                    <label class="form-check-label" for="geo-dry">Dry run (preview only)</label>
+                </div>
+            </div>
+
+            <!-- 8. GoPro Geo Rename -->
+            <div class="step-config" id="config-gopro" style="display:none">
+                <p class="section-desc">
+                    Renames GoPro MP4 clips to <code>YYYYMMDD-HHMM-location-duration-original.mp4</code>.
+                    Requires <code>GEOCODIO_API_KEY</code>.
+                </p>
+                <p class="field-help">No additional options -- processes all MP4 files in the target folder.</p>
+            </div>
+
+            <!-- 9. Contact Sheet -->
+            <div class="step-config" id="config-cs" style="display:none">
+                <p class="section-desc">
+                    Generates a contact/proof sheet with metadata captions.
+                </p>
+                <div class="field-row">
+                    <div>
+                        <label class="form-label">Thumbnail Size (px)</label>
+                        <input type="number" class="form-control" name="cs_thumb_size" placeholder="256" min="32" max="2048" step="1">
+                    </div>
+                    <div>
+                        <label class="form-label">Theme</label>
+                        <select class="form-select" name="cs_theme">
+                            <option value="">default (light)</option>
+                            <option value="light">light</option>
+                            <option value="dark">dark</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Output File</label>
+                        <input type="text" class="form-control" name="cs_output" placeholder="contact_sheet.jpg">
+                    </div>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" name="cs_recursive" id="cs-rec">
+                    <label class="form-check-label" for="cs-rec">Include subfolders</label>
+                </div>
+            </div>
+
+            <!-- 10. Scrub Metadata -->
+            <div class="step-config" id="config-scrub" style="display:none">
+                <p class="section-desc">
+                    Clears selected EXIF/IPTC fields. Defaults: UserComment, ImageDescription, Caption, Caption-Abstract, Keywords.
+                </p>
+                <div class="field-row">
+                    <div>
+                        <label class="form-label">EXIF Tags (comma-separated, optional)</label>
+                        <input type="text" class="form-control" name="scrub_exif_tags"
+                               placeholder="UserComment,ImageDescription">
+                    </div>
+                    <div>
+                        <label class="form-label">IPTC Tags (comma-separated, optional)</label>
+                        <input type="text" class="form-control" name="scrub_iptc_tags"
+                               placeholder="Caption,Caption-Abstract,Keywords">
+                    </div>
+                </div>
+                <div class="field-row mt-2">
+                    <div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="scrub_recursive" id="scrub-rec">
+                            <label class="form-check-label" for="scrub-rec">Recursive</label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label">Recursion Depth</label>
+                        <input type="text" class="form-control" name="scrub_recursive_depth"
+                               placeholder="0 = current only" value="0">
+                        <div class="field-help">Leave blank for unlimited when recursive is checked</div>
+                    </div>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" name="scrub_dry_run" id="scrub-dry">
+                    <label class="form-check-label" for="scrub-dry">Dry run (preview only)</label>
+                </div>
+            </div>
+
+            <!-- Backup (hidden config panel) -->
+            <div class="step-config" id="config-backup" style="display:none">
+                <div class="backup-inline">
+                    <div class="backup-inline-header">
+                        <i class="bi bi-archive-fill" style="color:var(--ps-accent)"></i>
+                        <span class="backup-inline-title">Backup Folder</span>
+                        <span class="backup-inline-hint">Create a timestamped .tar.gz archive</span>
+                    </div>
+                    <div class="field-row mt-2">
+                        <div style="flex:2">
+                            <label class="form-label">Destination Folder</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="backup-dest"
+                                       placeholder="Same as photo directory if empty">
+                                <button class="btn btn-outline-secondary" type="button" id="btn-backup-browse-dest"
+                                        title="Browse destination folder">
+                                    <i class="bi bi-folder2-open"></i>
+                                </button>
+                            </div>
+                            <div class="field-help">Defaults to the photo directory above</div>
+                        </div>
+                        <div class="d-flex align-items-end pb-1">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="backup-recursive">
+                                <label class="form-check-label" for="backup-recursive">Include subdirectories</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="backup-estimate" class="backup-estimate" style="display:none"></div>
+                    <div class="d-flex gap-2 mt-2">
+                        <button type="button" class="btn btn-sm btn-photoshell" id="btn-backup-estimate">
+                            <i class="bi bi-calculator"></i> Estimate
+                        </button>
+                        <button type="button" class="btn btn-sm btn-photoshell" id="btn-backup-run">
+                            <i class="bi bi-archive"></i> Run Backup
+                        </button>
+                        <button type="button" class="btn btn-sm btn-cancel" id="btn-backup-cancel" style="display:none">
+                            <i class="bi bi-x-circle"></i> Cancel
+                        </button>
+                    </div>
+                    <pre class="log-panel backup-log" id="backup-log" style="display:none"></pre>
+                </div>
+            </div>
+
+        </form>
+    </aside>
+
+    <!-- ================================================================== -->
+    <!-- MAIN CONTENT                                                        -->
+    <!-- ================================================================== -->
+    <main class="app-main">
+
+        <!-- Pipeline strip -->
+        <div id="pipeline-strip" class="pipeline-strip" style="display:none">
+            <!-- populated by JS -->
+        </div>
+
+        <!-- Inspector panel (shows selected step config) -->
+        <div id="inspector-panel" class="inspector-panel">
+            <div class="inspector-title" id="inspector-title">Select a workflow step</div>
+            <div id="inspector-content">
+                <p class="text-muted" style="font-size:13px">
+                    Click a step in the sidebar to configure it, or enable steps and click Run.
+                </p>
+            </div>
+        </div>
+
+        <!-- Order warning -->
+        <div id="order-warning" class="order-warning" style="display:none"></div>
+
+        <!-- Validation result -->
+        <div id="validation-result" class="validation-result" style="display:none"></div>
+
+        <!-- Advisory panel -->
+        <div id="advisory-panel" class="advisory-panel" style="display:none"></div>
+
+        <!-- Folder metadata stats -->
+        <div id="folder-meta-stats" class="folder-meta-stats" style="display:none"></div>
+
+        <!-- Pipeline progress (legacy compat) -->
+        <div class="pipeline-progress" id="pipeline-progress">
+            <div class="pipeline-steps" id="pipeline-steps"></div>
+        </div>
+
+        <!-- Log panel -->
+        <pre class="log-panel" id="log-panel"></pre>
+
+        <!-- ================================================================== -->
+        <!-- Standalone Search EXIF / IPTC                                       -->
+        <!-- ================================================================== -->
+        <div class="search-panel">
+            <div class="search-panel-header">
+                <h5><i class="bi bi-search"></i> Search EXIF / IPTC</h5>
+                <span class="search-panel-hint">Search metadata across image, raw, and video files</span>
+                <i class="bi bi-book step-docs-link search-docs-link" data-doc="search_exif_iptc" title="Full documentation"></i>
+            </div>
+            <div class="search-panel-body">
+                <div class="field-row">
+                    <div style="flex:2">
+                        <label class="form-label">Directory</label>
+                        <input type="text" class="form-control" id="search-dir"
+                               placeholder="Photo directory (uses workflow dir if empty)">
+                    </div>
+                    <div style="flex:2">
+                        <label class="form-label">Search Query</label>
+                        <input type="text" class="form-control" id="search-query" placeholder="e.g. sunset">
+                    </div>
+                    <div>
+                        <label class="form-label">Fields</label>
+                        <select class="form-select" id="search-fields">
+                            <option value="">all</option>
+                            <option value="exif">exif only</option>
+                            <option value="iptc">iptc only</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Media Types</label>
+                        <select class="form-select" id="search-media-types">
+                            <option value="">all</option>
+                            <option value="image">image</option>
+                            <option value="raw">raw</option>
+                            <option value="video">video</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="field-row mt-2">
+                    <div>
+                        <label class="form-label">Copy matches to (optional)</label>
+                        <input type="text" class="form-control" id="search-copy-to"
+                               placeholder="Directory path">
+                    </div>
+                    <div class="d-flex align-items-end gap-3 pb-1">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="search-recursive" checked>
+                            <label class="form-check-label" for="search-recursive">Recursive</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="search-fzf">
+                            <label class="form-check-label" for="search-fzf">Fuzzy matching</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex gap-2 mt-3">
+                    <button type="button" class="btn btn-photoshell" id="btn-search">
+                        <i class="bi bi-search"></i> Search
+                    </button>
+                    <button type="button" class="btn btn-cancel" id="btn-search-cancel" style="display:none">
+                        <i class="bi bi-x-circle"></i> Cancel
+                    </button>
+                </div>
+                <pre class="log-panel search-log" id="search-log" style="display:none"></pre>
+            </div>
+        </div>
+
+    </main>
+</div>
 
 <!-- Folder Browser Modal -->
 <div class="modal fade" id="folderBrowserModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content" style="background:var(--ps-surface);border-color:var(--ps-border)">
-            <div class="modal-header" style="border-color:var(--ps-border)">
+        <div class="modal-content">
+            <div class="modal-header">
                 <h5 class="modal-title"><i class="bi bi-folder2-open"></i> Browse Server Folders</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
@@ -800,8 +642,8 @@
                 </div>
                 <div id="browser-list" style="max-height:400px;overflow-y:auto"></div>
             </div>
-            <div class="modal-footer" style="border-color:var(--ps-border)">
-                <div class="form-check me-auto" style="font-size:.8rem">
+            <div class="modal-footer">
+                <div class="form-check me-auto" style="font-size:12px">
                     <input class="form-check-input" type="checkbox" id="browser-show-hidden">
                     <label class="form-check-label" for="browser-show-hidden">Show hidden</label>
                 </div>
@@ -817,8 +659,8 @@
 <!-- Documentation Modal -->
 <div class="modal fade" id="docsModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl">
-        <div class="modal-content" style="background:var(--ps-surface);border-color:var(--ps-border)">
-            <div class="modal-header" style="border-color:var(--ps-border)">
+        <div class="modal-content">
+            <div class="modal-header">
                 <h5 class="modal-title" id="docs-modal-title">
                     <i class="bi bi-book"></i> Documentation
                 </h5>
@@ -830,7 +672,7 @@
                 </div>
                 <div id="docs-content" class="docs-rendered"></div>
             </div>
-            <div class="modal-footer" style="border-color:var(--ps-border)">
+            <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
@@ -846,16 +688,16 @@
         theme: "dark",
         themeVariables: {
             darkMode: true,
-            background: "#2c2c2c",
-            primaryColor: "#484848",
+            background: "#1e1e1e",
+            primaryColor: "#3a3a3a",
             primaryTextColor: "#ddd",
-            primaryBorderColor: "#666",
-            lineColor: "#888",
-            secondaryColor: "#3a3a3a",
-            tertiaryColor: "#333",
-            noteBkgColor: "#363636",
+            primaryBorderColor: "#555",
+            lineColor: "#666",
+            secondaryColor: "#2a2a2a",
+            tertiaryColor: "#272727",
+            noteBkgColor: "#272727",
             noteTextColor: "#ccc",
-            noteBorderColor: "#555"
+            noteBorderColor: "#444"
         }
     });
 </script>
