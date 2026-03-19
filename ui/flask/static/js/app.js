@@ -347,9 +347,11 @@ document.addEventListener("DOMContentLoaded", function() {
             var idx = activeOrder.indexOf(key);
             if (idx >= 0) {
                 badge.textContent = "Step " + (idx + 1);
+                badge.style.display = "";
                 badge.classList.remove("step-warn");
             } else {
-                badge.textContent = "Step";
+                badge.textContent = "";
+                badge.style.display = "none";
                 badge.classList.remove("step-warn");
             }
         }
