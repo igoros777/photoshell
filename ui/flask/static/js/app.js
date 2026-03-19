@@ -2021,19 +2021,22 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     function renderSearchResults(log) {
+        // Extract the resolved search directory from the log header
+        // (the server normalizes it, e.g. C:\... -> /mnt/c/... on WSL)
+        var dirMatch = log.match(/^Search directory:\s*(.+)$/m);
+        var searchDir = dirMatch ? dirMatch[1].trim() : (searchDirInput.value.trim() || photoDirInput.value.trim());
+
         // Extract file paths from search output lines like "File: ./relative/path.jpg"
-        // The search script outputs paths relative to the search directory
-        var searchDir = searchDirInput.value.trim() || photoDirInput.value.trim();
         var fileRegex = /^File:\s*(.+)$/gm;
         var match;
         var files = [];
         while ((match = fileRegex.exec(log)) !== null) {
             var f = match[1].trim();
             if (!f) continue;
-            // Convert relative paths to absolute by prepending search dir
+            // Convert relative paths to absolute by prepending the resolved search dir
             if (f.startsWith("./")) {
                 f = searchDir + "/" + f.substring(2);
-            } else if (!f.startsWith("/")) {
+            } else if (!f.startsWith("/") && !f.match(/^[A-Za-z]:/)) {
                 f = searchDir + "/" + f;
             }
             files.push(f);

@@ -1158,7 +1158,8 @@ def api_thumbnail():
     if not filepath:
         return jsonify({"error": "path is required"}), 400
 
-    filepath = os.path.realpath(filepath)
+    # Normalize cross-platform paths (C:\... -> /mnt/c/... on WSL)
+    filepath = _normalize_browser_path(filepath)
     if not os.path.isfile(filepath):
         return jsonify({"error": "File not found"}), 404
 
@@ -1213,12 +1214,13 @@ def api_search_meta():
     Returns: {"results": [{"file": ..., "comment": ..., "caption": ..., "keywords": ...}, ...]}
     """
     data = request.get_json(force=True)
-    files = data.get("files", [])
-    if not files:
+    raw_files = data.get("files", [])
+    if not raw_files:
         return jsonify({"results": []})
 
-    # Cap at 200 files to avoid overwhelming exiftool
-    files = files[:200]
+    # Normalize cross-platform paths (C:\... -> /mnt/c/... on WSL)
+    # and cap at 200 files to avoid overwhelming exiftool
+    files = [_normalize_browser_path(f) for f in raw_files[:200]]
 
     try:
         cmd = ["exiftool", "-json", "-charset", "exif=UTF8", "-charset", "iptc=UTF8",
