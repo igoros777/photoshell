@@ -150,6 +150,40 @@ flowchart TD
     L --> M[sync_exif_and_rename.sh<br/>Restore original metadata + names]
 ```
 
+## Web UI
+
+PhotoShell includes an optional Flask-based web interface for workflow orchestration. Instead of running scripts individually from the command line, the web UI lets you configure, validate, and execute your entire photo workflow from a browser.
+
+### Quick Start
+
+```bash
+cd ui/flask
+pip install -r requirements.txt
+python3 app.py
+# Open http://localhost:5050
+```
+
+Use `--host` and `--port` to customize the bind address (e.g., `python3 app.py --port 8080`).
+
+### Features
+
+- **Sidebar + inspector layout** — select workflow steps in the sidebar, configure each step's options in the main panel
+- **Folder browser** — navigate and select photo directories on the server via a built-in file browser modal
+- **Folder validation** — verify directories exist, see photo counts, GPS coverage percentage, and metadata stats
+- **Pipeline visualization** — watch workflow steps light up in real-time as they execute (pending → running → done/failed)
+- **Step ordering validation** — warns if steps are in a suboptimal order (e.g., GPS Fill should run before Geo Rename)
+- **Advisory pre-flight checks** — detects potential issues before execution (missing GPS, existing metadata that would be overwritten, etc.)
+- **Ollama integration** — auto-discovers installed models, flags vision-capable models, validates that the Ollama server is running
+- **Prompt management** — browse, preview, edit, and save prompts for the Ollama annotation workflows
+- **Metadata search** — search EXIF/IPTC metadata across files with field and media type filters
+- **Backup** — create timestamped `.tar.gz` archives with size estimation before running
+- **Keyboard shortcuts** — `R` (run), `Esc` (cancel), `/` (focus path input)
+- **Responsive** — works on desktop and mobile viewports
+
+### Design
+
+The UI follows a DaVinci Resolve-inspired dark pro-tool aesthetic with warm amber accents, Inter + JetBrains Mono typography, and an information-dense layout. See [`DESIGN.md`](DESIGN.md) for the full design system specification.
+
 ## Scripts
 - [`scripts/photofolders.bat`](scripts/photofolders.bat): Create a standardized photo project folder tree (originals + processed) for multi-camera workflows.
 - [`scripts/photofolders.sh`](scripts/photofolders.sh): Linux Bash version of `photofolders` with the same config-driven folder scaffold workflow.
@@ -165,6 +199,7 @@ flowchart TD
 - [`scripts/gopro_geo_rename.sh`](scripts/gopro_geo_rename.sh): Rename GoPro MP4 clips with capture time, reverse-geocoded location, duration, and original filename.
 - [`scripts/search_exif_iptc.sh`](scripts/search_exif_iptc.sh): Search EXIF/IPTC metadata text across supported image/raw/video files with field, type, and recursion filters.
 - [`scripts/scrub_selected_metadata.sh`](scripts/scrub_selected_metadata.sh): Clear selected EXIF/IPTC fields with optional exact tag selectors (`--exif`, `--iptc`) and recursion control.
+- [`scripts/backup_folder.sh`](scripts/backup_folder.sh): Create timestamped `.tar.gz` archives of a photo directory with optional recursion.
 
 ## Documentation
 - [`docs/photofolders.md`](docs/photofolders.md): `photofolders` behavior, rationale, usage, and workflow integration for Windows and Linux variants.
