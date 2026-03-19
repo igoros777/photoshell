@@ -793,6 +793,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     function fetchFolderMetaStats(resolvedPath) {
+        lastMetaPath = resolvedPath;
         folderMetaStats.innerHTML = '<span class="text-muted"><i class="bi bi-hourglass-split"></i> Scanning metadata...</span>';
         folderMetaStats.style.display = "block";
 
@@ -831,19 +832,57 @@ document.addEventListener("DOMContentLoaded", function() {
             });
     }
 
+    var lastMetaPath = "";  // track resolved path for "scan all" button
+
     function renderFolderMetaStats(d) {
-        var sampleNote = d.sampled < d.total
+        var isSampled = d.sampled < d.total;
+        var sampleNote = isSampled
             ? " (sampled " + d.sampled + " of " + d.total + ")"
-            : "";
+            : " (" + d.total + " files)";
 
-        var html = '<span class="fms-label">Metadata coverage' + sampleNote + ':</span>';
-
-        html += renderMetaStat("bi-geo-alt-fill", "GPS", d.has_gps, d.sampled, d.pct_gps);
-        html += renderMetaStat("bi-card-text", "IPTC Caption", d.has_caption, d.sampled, d.pct_caption);
-        html += renderMetaStat("bi-chat-square-text", "UserComment", d.has_comment, d.sampled, d.pct_comment);
-
-        folderMetaStats.innerHTML = html;
+        folderMetaStats.innerHTML = "";
         folderMetaStats.style.display = "block";
+
+        var label = document.createElement("span");
+        label.className = "fms-label";
+        label.textContent = "Metadata coverage" + sampleNote + ":";
+        folderMetaStats.appendChild(label);
+
+        folderMetaStats.insertAdjacentHTML("beforeend",
+            renderMetaStat("bi-geo-alt-fill", "GPS", d.has_gps, d.sampled, d.pct_gps) +
+            renderMetaStat("bi-card-text", "IPTC Caption", d.has_caption, d.sampled, d.pct_caption) +
+            renderMetaStat("bi-chat-square-text", "UserComment", d.has_comment, d.sampled, d.pct_comment) +
+            renderMetaStat("bi-tags-fill", "Keywords", d.has_keywords || 0, d.sampled, d.pct_keywords || 0)
+        );
+
+        // Show "Scan all" button if this was a sample
+        if (isSampled && lastMetaPath) {
+            var scanBtn = document.createElement("button");
+            scanBtn.type = "button";
+            scanBtn.className = "btn btn-sm btn-photoshell";
+            scanBtn.style.marginLeft = "auto";
+            scanBtn.style.fontSize = "11px";
+            scanBtn.style.padding = "2px 8px";
+            scanBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Scan all ' + d.total;
+            scanBtn.addEventListener("click", function() {
+                scanBtn.disabled = true;
+                scanBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Scanning...';
+                fetch("/api/folder_meta?path=" + encodeURIComponent(lastMetaPath) + "&limit=0")
+                    .then(function(res) { return res.json(); })
+                    .then(function(data) {
+                        if (data.error) {
+                            scanBtn.textContent = "Error: " + data.error;
+                            return;
+                        }
+                        renderFolderMetaStats(data);
+                        updateHeaderMeta(data);
+                    })
+                    .catch(function() {
+                        scanBtn.textContent = "Scan failed";
+                    });
+            });
+            folderMetaStats.appendChild(scanBtn);
+        }
     }
 
     function renderMetaStat(icon, label, count, total, pct) {

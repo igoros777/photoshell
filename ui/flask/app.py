@@ -1110,17 +1110,27 @@ def api_validate_folder():
 
 @app.route("/api/folder_meta")
 def api_folder_meta():
-    """Quick metadata scan: GPS, IPTC caption, UserComment coverage."""
+    """Metadata scan: GPS, IPTC caption, UserComment, Keywords coverage.
+
+    Query params:
+      path  - directory to scan (required)
+      limit - max files to sample; 0 = scan all (default: 30)
+    """
     path = request.args.get("path", "").strip()
     if not path:
         return jsonify({"error": "No path specified"}), 400
+
+    try:
+        limit = int(request.args.get("limit", 30))
+    except (ValueError, TypeError):
+        limit = 30
 
     target, error = _resolve_directory(path)
     if error:
         return jsonify({"error": "Directory not accessible: %s" % path}), 400
 
     try:
-        result = scan_folder_metadata(target)
+        result = scan_folder_metadata(target, limit=limit)
     except Exception as exc:
         logger.error("Metadata scan failed: %s", exc, exc_info=True)
         return jsonify({"error": "An error occurred while processing your request"}), 500

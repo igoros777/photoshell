@@ -493,22 +493,14 @@ def check_no_photos(photo_dir):
 # Main entry point
 # ---------------------------------------------------------------------------
 
-def scan_folder_metadata(photo_dir):
-    """Quick metadata scan of sampled photos in *photo_dir*.
+def scan_folder_metadata(photo_dir, limit=_SAMPLE_LIMIT):
+    """Metadata scan of photos in *photo_dir*.
 
-    Returns a dict with counts/percentages for GPS, IPTC caption, and
-    EXIF UserComment coverage::
+    *limit* controls sampling: the default samples up to ``_SAMPLE_LIMIT``
+    files.  Pass ``limit=0`` to scan ALL files (slower but exact).
 
-        {
-            "sampled":       int,
-            "total":         int,
-            "has_gps":       int,
-            "has_caption":   int,
-            "has_comment":   int,
-            "pct_gps":       int,
-            "pct_caption":   int,
-            "pct_comment":   int,
-        }
+    Returns a dict with counts/percentages for GPS, IPTC caption,
+    EXIF UserComment, and IPTC Keywords coverage.
 
     Returns ``None`` if the directory has no photos or exiftool fails.
     """
@@ -516,14 +508,14 @@ def scan_folder_metadata(photo_dir):
     if total == 0:
         return None
 
-    files = _list_photo_files(photo_dir)
+    files = _list_photo_files(photo_dir, limit=limit if limit > 0 else total)
     if not files:
         return None
 
     data = _run_exiftool_json(
         files,
         ["-GPSLatitude", "-GPSLongitude",
-         "-IPTC:Caption-Abstract", "-UserComment"],
+         "-IPTC:Caption-Abstract", "-UserComment", "-IPTC:Keywords"],
     )
     if not data:
         return None
@@ -531,6 +523,7 @@ def scan_folder_metadata(photo_dir):
     has_gps = 0
     has_caption = 0
     has_comment = 0
+    has_keywords = 0
 
     for rec in data:
         lat = rec.get("GPSLatitude")
@@ -546,6 +539,13 @@ def scan_folder_metadata(photo_dir):
         if isinstance(comment, str) and comment.strip():
             has_comment += 1
 
+        kw = rec.get("Keywords")
+        if kw:
+            if isinstance(kw, list) and len(kw) > 0:
+                has_keywords += 1
+            elif isinstance(kw, str) and kw.strip():
+                has_keywords += 1
+
     sampled = len(data)
     return {
         "sampled": sampled,
@@ -553,9 +553,11 @@ def scan_folder_metadata(photo_dir):
         "has_gps": has_gps,
         "has_caption": has_caption,
         "has_comment": has_comment,
+        "has_keywords": has_keywords,
         "pct_gps": _pct(has_gps, sampled),
         "pct_caption": _pct(has_caption, sampled),
         "pct_comment": _pct(has_comment, sampled),
+        "pct_keywords": _pct(has_keywords, sampled),
     }
 
 
