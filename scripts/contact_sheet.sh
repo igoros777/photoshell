@@ -287,12 +287,12 @@ build_tiles() {
     log "  [${current}/${total}] ${base}"
 
     caption="$(caption_for_file "${file}")"
-    caption="${base} | ${caption}"
 
     tile="${temp_dir}/tile_$(printf '%05d' "${index}").png"
     "${CONVERT_CMD[@]}" \
       \( "${file}" -auto-orient -thumbnail "${THUMB_LONG_EDGE}x${THUMB_LONG_EDGE}>" -background "${TILE_BACKGROUND}" -gravity center -extent "${THUMB_LONG_EDGE}x${THUMB_LONG_EDGE}" \) \
-      \( -size "${THUMB_LONG_EDGE}x" -background "${CAPTION_BACKGROUND}" -fill "${TEXT_COLOR}" -gravity northwest -pointsize "${caption_point_size}" caption:"${caption}" -bordercolor "${CAPTION_BACKGROUND}" -border 0x8 \) \
+      \( -size "${THUMB_LONG_EDGE}x" -background "${CAPTION_BACKGROUND}" -fill "${TEXT_COLOR}" -gravity northwest -pointsize "${caption_point_size}" -style Italic caption:"${base}" -bordercolor "${CAPTION_BACKGROUND}" -border 6x4 \) \
+      \( -size "${THUMB_LONG_EDGE}x" -background "${CAPTION_BACKGROUND}" -fill "${TEXT_COLOR}" -gravity northwest -pointsize "${caption_point_size}" -style Normal caption:"${caption}" -bordercolor "${CAPTION_BACKGROUND}" -border 6x4 \) \
       -append "${tile}"
 
     TILE_FILES+=("${tile}")
