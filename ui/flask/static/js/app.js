@@ -1087,6 +1087,37 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     }
 
+    var searchCopyValidateBtn = document.getElementById("btn-search-validate-copy");
+    var searchCopyStatus = document.getElementById("search-copy-status");
+
+    function validateSearchCopy(path) {
+        if (!searchCopyStatus) return;
+        if (!path) { searchCopyStatus.innerHTML = ""; return; }
+        searchCopyStatus.innerHTML = '<span class="text-muted"><i class="bi bi-arrow-repeat"></i> Checking...</span>';
+        fetch("/api/validate_folder?path=" + encodeURIComponent(path))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.valid) {
+                    var msg = '<span style="color:var(--ps-success)"><i class="bi bi-check-circle-fill"></i> Valid</span>';
+                    if (data.path) {
+                        msg += ' <span class="text-muted" style="font-size:11px">(resolved: ' + data.path + ')</span>';
+                    }
+                    searchCopyStatus.innerHTML = msg;
+                } else {
+                    searchCopyStatus.innerHTML = '<span style="color:var(--ps-danger)"><i class="bi bi-x-circle-fill"></i> ' + (data.reason || "Invalid directory") + '</span>';
+                }
+            })
+            .catch(function() {
+                searchCopyStatus.innerHTML = '<span style="color:var(--ps-danger)"><i class="bi bi-x-circle-fill"></i> Validation failed</span>';
+            });
+    }
+
+    if (searchCopyValidateBtn) {
+        searchCopyValidateBtn.addEventListener("click", function() {
+            validateSearchCopy(document.getElementById("search-copy-to").value.trim());
+        });
+    }
+
     // ---- Collect form data ----
 
     function collectFormData() {
