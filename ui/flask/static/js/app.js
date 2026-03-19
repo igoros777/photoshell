@@ -2057,6 +2057,12 @@ document.addEventListener("DOMContentLoaded", function() {
         } else if (e.key === "/") {
             e.preventDefault();
             photoDirInput.focus();
+        } else if (e.key === "v" || e.key === "V") {
+            e.preventDefault();
+            if (btnValidateWf) btnValidateWf.click();
+        } else if (e.key === "?") {
+            e.preventDefault();
+            openDocsModal("web_ui_help");
         }
     });
 });

@@ -432,6 +432,7 @@ DOCS_MAP = {
     "contact_sheet": "contact_sheet.md",
     "scrub_metadata": "scrub_selected_metadata.md",
     "search_exif_iptc": "search_exif_iptc.md",
+    "web_ui_help": "web_ui_help.md",
 }
 
 
