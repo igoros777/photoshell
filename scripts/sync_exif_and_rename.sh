@@ -136,18 +136,22 @@ PREFERRED_EXTS=(
 shopt -s nullglob
 
 # Build upfront index of originals to avoid per-file find calls (O(n) vs O(n*m))
+# Note: bash variables cannot hold null bytes, so we use newline as the separator.
+# Filenames with literal newlines are unsupported (extremely rare in practice).
 declare -A ORIG_MAP
+_orig_count=0
 while IFS= read -r -d '' f; do
     stem="$(basename "$f")"
     stem="${stem%.*}"
-    # Use lowercase key for case-insensitive matching; append to list for multi-match
     key="${stem,,}"
     if [[ -n "${ORIG_MAP[$key]+_}" ]]; then
-        ORIG_MAP["$key"]+=$'\0'"$f"
+        ORIG_MAP["$key"]+=$'\n'"$f"
     else
         ORIG_MAP["$key"]="$f"
     fi
+    ((_orig_count++)) || true
 done < <(find "$ORIG_DIR" -type f -print0)
+echo "Indexed ${_orig_count} original file(s) from: $ORIG_DIR"
 
 # Find JPGs only at this level
 while IFS= read -r -d '' jpg; do
@@ -202,8 +206,8 @@ while IFS= read -r -d '' jpg; do
     stems_tried+=("$candidate_stem")
     key="${candidate_stem,,}"
     if [[ -n "${ORIG_MAP[$key]+_}" ]]; then
-      # Use printf to avoid trailing newline that <<< adds (breaks exiftool)
-      mapfile -d '' -t candidates < <(printf '%s' "${ORIG_MAP[$key]}")
+      # Split newline-separated entries into array
+      mapfile -t candidates <<< "${ORIG_MAP[$key]}"
     fi
 
     # Fallback: try replacing underscores with hyphens if nothing matched
@@ -213,7 +217,7 @@ while IFS= read -r -d '' jpg; do
         stems_tried+=("$alt_stem")
         alt_key="${alt_stem,,}"
         if [[ -n "${ORIG_MAP[$alt_key]+_}" ]]; then
-          mapfile -d '' -t candidates < <(printf '%s' "${ORIG_MAP[$alt_key]}")
+          mapfile -t candidates <<< "${ORIG_MAP[$alt_key]}"
           echo "  fallback stem: $alt_stem"
           candidate_stem="$alt_stem"
         fi
@@ -251,26 +255,47 @@ while IFS= read -r -d '' jpg; do
   new_name="${orig_stem}.jpg"
   new_path="$dir/$new_name"
 
+  # Verify the selected source file actually exists
+  if [[ ! -f "$pick" ]]; then
+    echo "ERROR: Source file does not exist: $pick"
+    echo "  (matched stem '$stem_used' but file is missing)"
+    continue
+  fi
+
+  # Compute relative path for display
+  rel_source="$(realpath --relative-to="$TARGET_DIR" "$pick" 2>/dev/null)" || rel_source="$pick"
+
   echo "Processing:"
   echo "  target: $base"
-  echo "  source: $(realpath --relative-to="$TARGET_DIR" "$pick")"
+  echo "  source: $rel_source"
+  echo "  candidates found: ${#candidates[@]} (picked: $(basename "$pick"))"
   echo "  rename: $base -> $new_name"
 
   if [[ $DRY_RUN -eq 0 ]]; then
 
     # Preserve existing Orientation, wipe other tags
-    orientation=$(exiftool -Orientation -b "$jpg" || true)
-    exiftool -q -q -overwrite_original -all= "$jpg"
+    orientation=$(exiftool -Orientation -b "$jpg" 2>/dev/null || true)
+    if ! exiftool -q -q -overwrite_original -all= "$jpg" 2>/dev/null; then
+      echo "  ERROR: Failed to clear tags on $base"
+      continue
+    fi
 
     # Restore the original JPEG's orientation tag if present
     if [[ -n "$orientation" ]]; then
-      exiftool -q -q -overwrite_original "-Orientation=$orientation" "$jpg"
+      if ! exiftool -q -q -overwrite_original "-Orientation=$orientation" "$jpg" 2>/dev/null; then
+        echo "  WARN: Failed to restore orientation on $base"
+      fi
     fi
 
     # Copy all tags from source except Orientation
-    exiftool -q -q -overwrite_original "-TagsFromFile" "$pick" "-all:all>all:all" "-Orientation=" "$jpg"
+    if ! exiftool -q -q -overwrite_original "-TagsFromFile" "$pick" "-all:all>all:all" "-Orientation=" "$jpg" 2>/dev/null; then
+      echo "  ERROR: Failed to copy tags from $rel_source to $base"
+      continue
+    fi
 
-    touch -r "$pick" "$jpg"
+    if ! touch -r "$pick" "$jpg" 2>/dev/null; then
+      echo "  WARN: Failed to sync timestamp from $rel_source"
+    fi
 
     # Rename to match original's basename
     if [[ "$jpg" != "$new_path" ]]; then
