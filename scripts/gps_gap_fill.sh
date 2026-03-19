@@ -249,7 +249,9 @@ fill_missing_gps() {
   done
 
   echo -e "\nDone: ${tagged} file(s) tagged, ${skipped} file(s) skipped."
-  [[ ${DRY_RUN} -eq 1 ]] && echo "(Dry run — re-run without --dry-run to apply changes)"
+  if [[ ${DRY_RUN} -eq 1 ]]; then
+    echo "(Dry run — re-run without --dry-run to apply changes)"
+  fi
 }
 
 # ----------------------------------------------------------------------------
