@@ -265,3 +265,4 @@ extract_metadata
 print_report
 build_donor_list || exit 0
 fill_missing_gps
+exit 0
