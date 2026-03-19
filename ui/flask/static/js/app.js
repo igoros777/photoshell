@@ -2021,13 +2021,22 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     function renderSearchResults(log) {
-        // Extract file paths from search output lines like "File: /path/to/file.jpg"
+        // Extract file paths from search output lines like "File: ./relative/path.jpg"
+        // The search script outputs paths relative to the search directory
+        var searchDir = searchDirInput.value.trim() || photoDirInput.value.trim();
         var fileRegex = /^File:\s*(.+)$/gm;
         var match;
         var files = [];
         while ((match = fileRegex.exec(log)) !== null) {
             var f = match[1].trim();
-            if (f) files.push(f);
+            if (!f) continue;
+            // Convert relative paths to absolute by prepending search dir
+            if (f.startsWith("./")) {
+                f = searchDir + "/" + f.substring(2);
+            } else if (!f.startsWith("/")) {
+                f = searchDir + "/" + f;
+            }
+            files.push(f);
         }
 
         if (files.length === 0) {
