@@ -337,12 +337,16 @@ def build_pipeline(data):
 # functions.constants
 
 
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+
+
 def _check_tool(name):
     """Check if a tool is available on the system.
 
     Returns (available: bool, resolved_name: str).
     For 'imagemagick', checks magick first (IM7), then falls back to
     identify+convert (IM6).
+    For 'ollama', checks both the binary AND that the server is running.
     """
     if name == "imagemagick":
         if shutil.which("magick"):
@@ -354,6 +358,17 @@ def _check_tool(name):
             return True, "identify/convert/montage (ImageMagick 6)"
         missing = [t for t in im6_tools if t not in found]
         return False, "missing: " + ", ".join(missing)
+    if name == "ollama":
+        if not shutil.which("ollama"):
+            return False, "ollama binary not found"
+        # Check that ollama serve is actually running
+        import urllib.request
+        try:
+            req = urllib.request.urlopen(OLLAMA_BASE_URL + "/api/version", timeout=3)
+            req.read()
+            return True, "ollama (server running)"
+        except Exception:
+            return False, "ollama installed but server not running — run: ollama serve"
     return bool(shutil.which(name)), name
 
 
@@ -423,6 +438,55 @@ DOCS_MAP = {
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/api/ollama_models")
+def api_ollama_models():
+    """List installed Ollama models, flagging which support vision (images).
+
+    Vision models have 'clip' in their model families (the image encoder).
+    Returns: {models: [{name, size, vision, families}, ...], default: str}
+    """
+    import urllib.request
+    try:
+        req = urllib.request.urlopen(OLLAMA_BASE_URL + "/api/tags", timeout=5)
+        data = json.loads(req.read().decode("utf-8"))
+    except Exception as exc:
+        logger.warning("Cannot reach Ollama API: %s", exc)
+        return jsonify({"error": "Ollama server not reachable", "models": []}), 503
+
+    models = []
+    for m in data.get("models", []):
+        name = m.get("name", "")
+        size_bytes = m.get("size", 0)
+        size_gb = round(size_bytes / (1024 ** 3), 1) if size_bytes else 0
+        families = []
+        details = m.get("details", {})
+        if isinstance(details, dict):
+            families = details.get("families", []) or []
+            if details.get("family"):
+                families = families or [details["family"]]
+        is_vision = "clip" in families
+        models.append({
+            "name": name,
+            "size_gb": size_gb,
+            "vision": is_vision,
+            "families": families,
+        })
+
+    # Sort: vision models first, then alphabetically
+    models.sort(key=lambda x: (not x["vision"], x["name"]))
+
+    # Pick a sensible default: first vision model, or first model overall
+    default = ""
+    for md in models:
+        if md["vision"]:
+            default = md["name"]
+            break
+    if not default and models:
+        default = models[0]["name"]
+
+    return jsonify({"models": models, "default": default})
 
 
 @app.route("/api/docs/<doc_key>")

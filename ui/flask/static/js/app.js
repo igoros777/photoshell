@@ -1118,6 +1118,108 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     }
 
+    // ---- Ollama model discovery ----
+
+    var ollamaModelsFetched = false;
+
+    function fetchOllamaModels() {
+        if (ollamaModelsFetched) return;
+        ollamaModelsFetched = true;
+
+        var selects = document.querySelectorAll(".ollama-model-select");
+        var statuses = document.querySelectorAll(".ollama-model-status");
+        statuses.forEach(function(s) {
+            s.innerHTML = '<span class="text-muted"><i class="bi bi-arrow-repeat"></i> Loading models...</span>';
+        });
+
+        fetch("/api/ollama_models")
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    statuses.forEach(function(s) {
+                        s.innerHTML = '<span style="color:var(--ps-danger)"><i class="bi bi-x-circle"></i> ' + data.error + '</span>';
+                    });
+                    ollamaModelsFetched = false;
+                    return;
+                }
+                var models = data.models || [];
+                if (models.length === 0) {
+                    statuses.forEach(function(s) {
+                        s.innerHTML = '<span style="color:var(--ps-warning)"><i class="bi bi-exclamation-triangle"></i> No models installed</span>';
+                    });
+                    return;
+                }
+
+                selects.forEach(function(sel) {
+                    var currentVal = sel.value;
+                    sel.innerHTML = "";
+
+                    // Vision models group
+                    var visionModels = models.filter(function(m) { return m.vision; });
+                    var otherModels = models.filter(function(m) { return !m.vision; });
+
+                    if (visionModels.length > 0) {
+                        var vGroup = document.createElement("optgroup");
+                        vGroup.label = "Vision models (recommended)";
+                        visionModels.forEach(function(m) {
+                            var opt = document.createElement("option");
+                            opt.value = m.name;
+                            opt.textContent = m.name + " (" + m.size_gb + " GB)";
+                            vGroup.appendChild(opt);
+                        });
+                        sel.appendChild(vGroup);
+                    }
+
+                    if (otherModels.length > 0) {
+                        var oGroup = document.createElement("optgroup");
+                        oGroup.label = "Other models";
+                        otherModels.forEach(function(m) {
+                            var opt = document.createElement("option");
+                            opt.value = m.name;
+                            opt.textContent = m.name + " (" + m.size_gb + " GB)";
+                            oGroup.appendChild(opt);
+                        });
+                        sel.appendChild(oGroup);
+                    }
+
+                    // Restore previous value if it exists, otherwise use server default
+                    var found = false;
+                    for (var i = 0; i < sel.options.length; i++) {
+                        if (sel.options[i].value === currentVal) {
+                            sel.value = currentVal;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found && data.default) {
+                        sel.value = data.default;
+                    }
+                });
+
+                var vCount = models.filter(function(m) { return m.vision; }).length;
+                var summary = models.length + " model" + (models.length !== 1 ? "s" : "");
+                if (vCount > 0) {
+                    summary += " (" + vCount + " vision)";
+                }
+                statuses.forEach(function(s) {
+                    s.innerHTML = '<span style="color:var(--ps-success)"><i class="bi bi-check-circle"></i> ' + summary + '</span>';
+                });
+            })
+            .catch(function(err) {
+                statuses.forEach(function(s) {
+                    s.innerHTML = '<span style="color:var(--ps-danger)"><i class="bi bi-x-circle"></i> Failed to load models</span>';
+                });
+                ollamaModelsFetched = false;
+            });
+    }
+
+    // Fetch models when a description or keywords step is clicked
+    document.querySelectorAll('.sidebar-step[data-step="desc"], .sidebar-step[data-step="kw"]').forEach(function(el) {
+        el.addEventListener("click", function() {
+            fetchOllamaModels();
+        });
+    });
+
     // ---- Collect form data ----
 
     function collectFormData() {

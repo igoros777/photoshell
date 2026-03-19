@@ -271,7 +271,10 @@
                 <div class="field-row">
                     <div>
                         <label class="form-label">Ollama Model</label>
-                        <input type="text" class="form-control" name="desc_model" value="gemma3:27b">
+                        <select class="form-select ollama-model-select" name="desc_model" id="desc-model-select">
+                            <option value="gemma3:27b" selected>gemma3:27b</option>
+                        </select>
+                        <div class="field-help ollama-model-status" id="desc-model-status"></div>
                     </div>
                     <div>
                         <label class="form-label">Prompt ID</label>
@@ -300,7 +303,10 @@
                 <div class="field-row">
                     <div>
                         <label class="form-label">Ollama Model</label>
-                        <input type="text" class="form-control" name="kw_model" value="gemma3:27b">
+                        <select class="form-select ollama-model-select" name="kw_model" id="kw-model-select">
+                            <option value="gemma3:27b" selected>gemma3:27b</option>
+                        </select>
+                        <div class="field-help ollama-model-status" id="kw-model-status"></div>
                     </div>
                     <div>
                         <label class="form-label">Prompt ID</label>
