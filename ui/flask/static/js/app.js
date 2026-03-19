@@ -1122,11 +1122,25 @@ document.addEventListener("DOMContentLoaded", function() {
 
     function collectFormData() {
         var data = {};
-        form.querySelectorAll("input[type=text], input[type=number], select").forEach(function(el) {
-            if (el.name) data[el.name] = el.value.trim();
+        // Collect from both the sidebar form AND the inspector panel,
+        // since step config panels are moved into the inspector (outside the form)
+        var containers = [form, document.getElementById("inspector-content")];
+        containers.forEach(function(container) {
+            if (!container) return;
+            container.querySelectorAll("input[type=text], input[type=number], select").forEach(function(el) {
+                if (el.name) data[el.name] = el.value.trim();
+            });
+            container.querySelectorAll("input[type=checkbox]").forEach(function(el) {
+                if (el.name) data[el.name] = el.checked;
+            });
         });
-        form.querySelectorAll("input[type=checkbox]").forEach(function(el) {
-            if (el.name) data[el.name] = el.checked;
+        // Also collect from any step-config panels still in the form
+        // (panels that haven't been clicked/moved to inspector yet)
+        document.querySelectorAll(".step-config input[type=text], .step-config input[type=number], .step-config select").forEach(function(el) {
+            if (el.name && !(el.name in data)) data[el.name] = el.value.trim();
+        });
+        document.querySelectorAll(".step-config input[type=checkbox]").forEach(function(el) {
+            if (el.name && !(el.name in data)) data[el.name] = el.checked;
         });
         // Include the user's selection order so backend runs steps in this sequence
         data.step_order = selectionOrder.slice();
