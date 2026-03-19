@@ -214,3 +214,12 @@ The UI follows a DaVinci Resolve-inspired dark pro-tool aesthetic with warm ambe
 - [`docs/gopro_geo_rename.md`](docs/gopro_geo_rename.md): Why this script exists, how filename construction works, requirements, usage, and limitations.
 - [`docs/search_exif_iptc.md`](docs/search_exif_iptc.md): EXIF/IPTC metadata search behavior, field/media filters, recursive control, and examples.
 - [`docs/scrub_selected_metadata.md`](docs/scrub_selected_metadata.md): Metadata scrub behavior, default tags, exact EXIF/IPTC selector usage, recursion modes, and safety notes.
+
+## Project
+
+- [`ARCHITECTURE.md`](ARCHITECTURE.md): System overview, component diagram, design decisions, directory structure, and security model.
+- [`DESIGN.md`](DESIGN.md): Design system specification — color palette, spacing, typography, component specs, interaction states.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md): Setup instructions, code style, testing approach, and how to submit changes.
+- [`CHANGELOG.md`](CHANGELOG.md): Release history with user-facing feature descriptions.
+- [`TODOS.md`](TODOS.md): Planned features, open work items, and completed milestones.
+- [`SECURITY.md`](SECURITY.md): Vulnerability reporting policy.
