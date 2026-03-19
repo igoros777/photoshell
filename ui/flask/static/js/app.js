@@ -553,19 +553,22 @@ document.addEventListener("DOMContentLoaded", function() {
             });
             el.classList.add("active");
 
-            // Hide all step configs
-            document.querySelectorAll(".step-config").forEach(function(panel) {
-                panel.style.display = "none";
-            });
+            // Return any currently-displayed config panel to its hidden state
+            var currentConfig = inspectorContent.querySelector(".step-config");
+            if (currentConfig) {
+                currentConfig.style.display = "none";
+                // Move it back to the form so collectFormData can still find it
+                form.appendChild(currentConfig);
+            }
 
             // Show the selected config in the inspector
             var configId = STEP_CONFIG_MAP[enableKey];
             var config = configId ? document.getElementById(configId) : null;
             if (config) {
-                // Move config content into inspector
-                inspectorContent.innerHTML = "";
                 inspectorContent.appendChild(config);
                 config.style.display = "block";
+                inspectorTitle.textContent = STEP_LABELS[enableKey] || stepKey;
+            } else {
                 inspectorTitle.textContent = STEP_LABELS[enableKey] || stepKey;
             }
         });
