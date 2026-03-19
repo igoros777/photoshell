@@ -467,6 +467,15 @@
                         <input type="text" class="form-control" name="cs_output" placeholder="contact_sheet.jpg">
                     </div>
                 </div>
+                <div class="field-row mt-2">
+                    <div>
+                        <label class="form-label">Max Images Per Sheet</label>
+                        <input type="number" class="form-control" name="cs_max_per_sheet"
+                               id="cs-max-per-sheet" placeholder="0 = all on one sheet"
+                               min="0" max="500" step="1" value="0">
+                        <div class="field-help">Split into numbered sheets when set (e.g. proof_1.jpg, proof_2.jpg)</div>
+                    </div>
+                </div>
                 <div class="form-check mt-2">
                     <input class="form-check-input" type="checkbox" name="cs_recursive" id="cs-rec">
                     <label class="form-check-label" for="cs-rec">Include subfolders</label>

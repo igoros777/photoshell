@@ -24,6 +24,7 @@ SHEET_BACKGROUND=""
 TILE_BACKGROUND=""
 CAPTION_BACKGROUND=""
 TEXT_COLOR=""
+MAX_PER_SHEET=0  # 0 = unlimited (all images on one sheet)
 GAP=12
 TARGET_MAX_WIDTH=4096
 TARGET_ASPECT=1.6
@@ -53,11 +54,14 @@ Options:
   -t, --thumb-size PX        Thumbnail long-edge size in pixels (default: 256)
   --theme NAME               Color theme: light | dark (default: light)
   -o, --output FILE          Output contact sheet file (default: contact_sheet.jpg)
+  --max-per-sheet N          Max images per sheet; 0 = all on one sheet (default: 0)
+                             When set, produces numbered files (e.g. contact_sheet_1.jpg, _2.jpg)
   -h, --help                 Show this help
 
 Examples:
   ${SCRIPT_NAME}
   ${SCRIPT_NAME} -s /photos/job42 -r -t 320 -o proof_job42.jpg
+  ${SCRIPT_NAME} -s /photos/trip --max-per-sheet 60 -o proof.jpg
 EOF
 }
 
@@ -351,6 +355,11 @@ while [[ $# -gt 0 ]]; do
       OUTPUT_FILE="$2"
       shift 2
       ;;
+    --max-per-sheet)
+      [[ $# -lt 2 ]] && die "missing value for $1"
+      MAX_PER_SHEET="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -366,6 +375,7 @@ done
 
 [[ -d "${SOURCE_DIR}" ]] || die "source directory does not exist: ${SOURCE_DIR}"
 [[ "${THUMB_LONG_EDGE}" =~ ^[0-9]+$ ]] || die "thumbnail size must be an integer"
+[[ "${MAX_PER_SHEET}" =~ ^[0-9]+$ ]] || die "max-per-sheet must be a non-negative integer"
 if (( THUMB_LONG_EDGE < 64 || THUMB_LONG_EDGE > 4096 )); then
   die "thumbnail size must be between 64 and 4096"
 fi
@@ -390,6 +400,44 @@ log "Theme: ${THEME}"
 log "Contact sheet geometry: ${cols} columns x ${rows} rows"
 
 build_tiles "${temp_dir}" "${caption_point_size}"
-build_contact_sheet "${cols}" "${OUTPUT_FILE}"
+
+# Split into multiple sheets if --max-per-sheet is set
+if [[ ${MAX_PER_SHEET} -gt 0 && ${#TILE_FILES[@]} -gt ${MAX_PER_SHEET} ]]; then
+  total_tiles="${#TILE_FILES[@]}"
+  sheet_count=$(( (total_tiles + MAX_PER_SHEET - 1) / MAX_PER_SHEET ))
+  log "Splitting into ${sheet_count} sheets (max ${MAX_PER_SHEET} images per sheet)"
+
+  # Derive numbered output filenames from OUTPUT_FILE
+  out_dir="$(dirname "${OUTPUT_FILE}")"
+  out_base="$(basename "${OUTPUT_FILE}")"
+  out_stem="${out_base%.*}"
+  out_ext="${out_base##*.}"
+
+  for ((s=0; s<sheet_count; s++)); do
+    start=$(( s * MAX_PER_SHEET ))
+    end=$(( start + MAX_PER_SHEET ))
+    if (( end > total_tiles )); then
+      end=${total_tiles}
+    fi
+    chunk=("${TILE_FILES[@]:${start}:${MAX_PER_SHEET}}")
+    chunk_count="${#chunk[@]}"
+
+    # Recalculate columns for this chunk
+    chunk_cols="$(calc_columns "${chunk_count}" "${tile_width}")"
+
+    sheet_num=$((s + 1))
+    sheet_file="${out_dir}/${out_stem}_${sheet_num}.${out_ext}"
+    log "Sheet ${sheet_num}/${sheet_count}: ${chunk_count} images -> ${sheet_file}"
+
+    "${MONTAGE_CMD[@]}" "${chunk[@]}" \
+      -tile "${chunk_cols}x" \
+      -geometry +"${GAP}"+"${GAP}" \
+      -background "${SHEET_BACKGROUND}" \
+      "${sheet_file}"
+  done
+  log "Done: ${sheet_count} contact sheet(s) created"
+else
+  build_contact_sheet "${cols}" "${OUTPUT_FILE}"
+fi
 
 log "Wrote contact sheet: ${OUTPUT_FILE}"

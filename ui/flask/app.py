@@ -289,6 +289,8 @@ def _build_step(key, data):
             cmd += ["--output", data["cs_output"]]
         if data.get("cs_recursive"):
             cmd.append("--recursive")
+        if data.get("cs_max_per_sheet"):
+            cmd += ["--max-per-sheet", data["cs_max_per_sheet"]]
         return {"label": "Contact Sheet", "cmd": cmd}
 
     if key == "enable_scrub" and data.get(key):

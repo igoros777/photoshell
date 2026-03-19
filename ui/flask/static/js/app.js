@@ -751,6 +751,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     photoDirInput.classList.remove("is-invalid");
                     photoDirInput.classList.add("is-valid");
                     folderValid = true;
+                    autoDefaultMaxPerSheet(data.photo_count);
                     fetchFolderMetaStats(data.path);
                 } else {
                     setFolderStatus(
@@ -762,6 +763,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     photoDirInput.classList.remove("is-invalid");
                     photoDirInput.classList.add("is-valid");
                     folderValid = true;
+                    autoDefaultMaxPerSheet(data.photo_count);
                     fetchFolderMetaStats(data.path);
                 }
             })
@@ -773,6 +775,16 @@ document.addEventListener("DOMContentLoaded", function() {
                 folderValid = false;
                 updateHeaderMeta(null);
             });
+    }
+
+    function autoDefaultMaxPerSheet(photoCount) {
+        var input = document.getElementById("cs-max-per-sheet");
+        if (!input) return;
+        // Only auto-set if the user hasn't manually changed it from the default
+        var current = parseInt(input.value, 10);
+        if (current === 0 && photoCount > 60) {
+            input.value = "60";
+        }
     }
 
     function hideFolderMetaStats() {
