@@ -1223,6 +1223,175 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     });
 
+    // ---- Prompt management ----
+
+    var promptCache = {};  // workflow -> [{id, text, source}, ...]
+
+    function fetchPrompts(workflow) {
+        if (promptCache[workflow]) {
+            populatePromptSelect(workflow, promptCache[workflow]);
+            return;
+        }
+        fetch("/api/prompts/" + encodeURIComponent(workflow))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.error) return;
+                promptCache[workflow] = data.prompts || [];
+                populatePromptSelect(workflow, promptCache[workflow]);
+            })
+            .catch(function() {});
+    }
+
+    function populatePromptSelect(workflow, prompts) {
+        var prefix = workflow === "description" ? "desc" : "kw";
+        var sel = document.getElementById(prefix + "-prompt-select");
+        if (!sel) return;
+
+        var currentVal = sel.value;
+        sel.innerHTML = "";
+
+        prompts.forEach(function(p) {
+            var opt = document.createElement("option");
+            opt.value = String(p.id);
+            var label = p.id + " — " + p.text.substring(0, 80);
+            if (p.text.length > 80) label += "...";
+            if (p.source === "built-in") label += " (built-in)";
+            opt.textContent = label;
+            sel.appendChild(opt);
+        });
+
+        // Restore selection
+        var found = false;
+        for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === currentVal) {
+                sel.value = currentVal;
+                found = true;
+                break;
+            }
+        }
+        if (!found && sel.options.length > 0) {
+            // Default to first file prompt (id=1) or first available
+            var filePrompt = prompts.find(function(p) { return p.source === "file"; });
+            sel.value = filePrompt ? String(filePrompt.id) : String(prompts[0].id);
+        }
+
+        // Show the selected prompt text
+        updatePromptText(workflow);
+    }
+
+    function updatePromptText(workflow) {
+        var prefix = workflow === "description" ? "desc" : "kw";
+        var sel = document.getElementById(prefix + "-prompt-select");
+        var textarea = document.getElementById(prefix + "-prompt-text");
+        if (!sel || !textarea) return;
+
+        var prompts = promptCache[workflow] || [];
+        var selectedId = sel.value;
+        var prompt = prompts.find(function(p) { return String(p.id) === selectedId; });
+        textarea.value = prompt ? prompt.text : "";
+        textarea.readOnly = true;
+
+        // Reset edit state
+        var editBtn = document.getElementById(prefix + "-prompt-edit");
+        var saveBtn = document.getElementById(prefix + "-prompt-save");
+        var status = document.getElementById(prefix + "-prompt-status");
+        if (editBtn) { editBtn.style.display = ""; editBtn.textContent = ""; editBtn.innerHTML = '<i class="bi bi-pencil"></i> Edit'; }
+        if (saveBtn) saveBtn.style.display = "none";
+        if (status) status.innerHTML = "";
+    }
+
+    // Wire up prompt select change events
+    document.querySelectorAll(".prompt-select").forEach(function(sel) {
+        sel.addEventListener("change", function() {
+            updatePromptText(sel.dataset.workflow);
+        });
+    });
+
+    // Wire up Edit buttons
+    document.querySelectorAll(".prompt-edit-btn").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+            var wf = btn.dataset.workflow;
+            var prefix = wf === "description" ? "desc" : "kw";
+            var textarea = document.getElementById(prefix + "-prompt-text");
+            var saveBtn = document.getElementById(prefix + "-prompt-save");
+            var sel = document.getElementById(prefix + "-prompt-select");
+
+            if (textarea.readOnly) {
+                // Enter edit mode
+                textarea.readOnly = false;
+                textarea.focus();
+                textarea.style.borderColor = "var(--ps-accent)";
+                btn.innerHTML = '<i class="bi bi-x-circle"></i> Cancel';
+                if (saveBtn && sel.value !== "0") saveBtn.style.display = "";
+            } else {
+                // Cancel edit — restore original text
+                textarea.readOnly = true;
+                textarea.style.borderColor = "";
+                updatePromptText(wf);
+            }
+        });
+    });
+
+    // Wire up Save buttons
+    document.querySelectorAll(".prompt-save-btn").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+            var wf = btn.dataset.workflow;
+            var prefix = wf === "description" ? "desc" : "kw";
+            var textarea = document.getElementById(prefix + "-prompt-text");
+            var sel = document.getElementById(prefix + "-prompt-select");
+            var status = document.getElementById(prefix + "-prompt-status");
+            var promptId = sel.value;
+            var promptText = textarea.value.trim();
+
+            if (!promptText) {
+                if (status) status.innerHTML = '<span style="color:var(--ps-danger)">Prompt text cannot be empty</span>';
+                return;
+            }
+            if (promptId === "0") {
+                if (status) status.innerHTML = '<span style="color:var(--ps-danger)">Cannot overwrite built-in prompt</span>';
+                return;
+            }
+
+            if (status) status.innerHTML = '<span class="text-muted">Saving...</span>';
+
+            fetch("/api/prompts/" + encodeURIComponent(wf) + "/save", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({id: parseInt(promptId), text: promptText})
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    if (status) status.innerHTML = '<span style="color:var(--ps-danger)">' + data.error + '</span>';
+                    return;
+                }
+                if (status) status.innerHTML = '<span style="color:var(--ps-success)"><i class="bi bi-check-circle"></i> Saved</span>';
+                // Update cache and UI
+                textarea.readOnly = true;
+                textarea.style.borderColor = "";
+                btn.style.display = "none";
+                var editBtn = document.getElementById(prefix + "-prompt-edit");
+                if (editBtn) editBtn.innerHTML = '<i class="bi bi-pencil"></i> Edit';
+                // Refresh prompts from server
+                delete promptCache[wf];
+                fetchPrompts(wf);
+                // Clear status after 3s
+                setTimeout(function() { if (status) status.innerHTML = ""; }, 3000);
+            })
+            .catch(function() {
+                if (status) status.innerHTML = '<span style="color:var(--ps-danger)">Save failed</span>';
+            });
+        });
+    });
+
+    // Fetch prompts when annotate steps are clicked
+    document.querySelectorAll('.sidebar-step[data-step="desc"]').forEach(function(el) {
+        el.addEventListener("click", function() { fetchPrompts("description"); });
+    });
+    document.querySelectorAll('.sidebar-step[data-step="kw"]').forEach(function(el) {
+        el.addEventListener("click", function() { fetchPrompts("keywords"); });
+    });
+
     // ---- Collect form data ----
 
     function collectFormData() {

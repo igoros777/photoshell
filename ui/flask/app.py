@@ -435,6 +435,110 @@ DOCS_MAP = {
 }
 
 
+PROMPTS_FILES = {
+    "description": os.path.join(SCRIPTS_DIR, "annotate_photos_with_ollama.prompts.txt"),
+    "keywords": os.path.join(SCRIPTS_DIR, "annotate_photos_with_ollama.keywords.prompts.txt"),
+}
+
+BUILTIN_PROMPTS = {
+    "description": "Provide a concise description about the scene and photographic aspects. "
+                   "Include some details about the photo's location: LOCATION. "
+                   "Do not include any formatting or commentary.",
+    "keywords": "Generate 8 to 15 concise, search-friendly keywords for this photo. "
+                "Focus on subject, scene type, location, lighting, weather, mood, "
+                "and photographic technique. Incorporate the location naturally: LOCATION. "
+                "Return keywords only as a comma-separated list. No numbering, quotes, "
+                "or commentary.",
+}
+
+
+def _parse_prompts_file(filepath):
+    """Parse a prompts file. Returns list of {id, text}."""
+    prompts = []
+    if not os.path.isfile(filepath):
+        return prompts
+    with open(filepath, "r") as f:
+        for line in f:
+            line = line.strip().rstrip("\r")
+            if not line or line.startswith("#"):
+                continue
+            import re as _re
+            m = _re.match(r"^(\d+)\s*\|\s*(.+)$", line)
+            if m:
+                prompts.append({"id": int(m.group(1)), "text": m.group(2).strip()})
+    return prompts
+
+
+@app.route("/api/prompts/<workflow>")
+def api_prompts(workflow):
+    """Return all prompts for a workflow (description or keywords).
+
+    Includes the built-in default as ID 0.
+    """
+    if workflow not in PROMPTS_FILES:
+        return jsonify({"error": "Unknown workflow: %s" % workflow}), 404
+
+    builtin = BUILTIN_PROMPTS.get(workflow, "")
+    prompts = [{"id": 0, "text": builtin, "source": "built-in"}]
+
+    filepath = PROMPTS_FILES[workflow]
+    file_prompts = _parse_prompts_file(filepath)
+    for p in file_prompts:
+        p["source"] = "file"
+        prompts.append(p)
+
+    return jsonify({"workflow": workflow, "prompts": prompts, "file": filepath})
+
+
+@app.route("/api/prompts/<workflow>/save", methods=["POST"])
+def api_prompts_save(workflow):
+    """Save a new or updated prompt to the prompts file."""
+    if workflow not in PROMPTS_FILES:
+        return jsonify({"error": "Unknown workflow: %s" % workflow}), 404
+
+    data = request.get_json(force=True)
+    prompt_id = data.get("id")
+    prompt_text = (data.get("text") or "").strip()
+
+    if prompt_id is None or not prompt_text:
+        return jsonify({"error": "Both 'id' and 'text' are required"}), 400
+
+    try:
+        prompt_id = int(prompt_id)
+    except (ValueError, TypeError):
+        return jsonify({"error": "Prompt ID must be an integer"}), 400
+
+    if prompt_id == 0:
+        return jsonify({"error": "Cannot overwrite the built-in prompt (ID 0)"}), 400
+
+    # Clean the text: single line, no pipe chars
+    prompt_text = prompt_text.replace("\n", " ").replace("\r", " ").strip()
+
+    filepath = PROMPTS_FILES[workflow]
+
+    # Read existing prompts
+    existing = _parse_prompts_file(filepath)
+    replaced = False
+    for p in existing:
+        if p["id"] == prompt_id:
+            p["text"] = prompt_text
+            replaced = True
+            break
+
+    if not replaced:
+        existing.append({"id": prompt_id, "text": prompt_text})
+
+    # Write back
+    existing.sort(key=lambda p: p["id"])
+    with open(filepath, "w") as f:
+        f.write("# Format: <integer>|<prompt text>\n")
+        for p in existing:
+            f.write("%d|%s\n" % (p["id"], p["text"]))
+
+    logger.info("Saved prompt ID %d for %s workflow", prompt_id, workflow)
+    return jsonify({"ok": True, "id": prompt_id, "workflow": workflow})
+
+
 @app.route("/")
 def index():
     return render_template("index.html")

@@ -277,10 +277,27 @@
                         <div class="field-help ollama-model-status" id="desc-model-status"></div>
                     </div>
                     <div>
-                        <label class="form-label">Prompt ID</label>
-                        <input type="text" class="form-control" name="desc_prompt_id" value="1"
-                               placeholder="0 = built-in">
-                        <div class="field-help">Use 0 for built-in prompt, or an ID from the prompts file</div>
+                        <label class="form-label">Prompt</label>
+                        <select class="form-select prompt-select" name="desc_prompt_id" id="desc-prompt-select"
+                                data-workflow="description">
+                            <option value="1" selected>1 — (loading...)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <label class="form-label">Prompt Text</label>
+                    <textarea class="form-control prompt-text-area" id="desc-prompt-text" rows="3"
+                              style="font-size:12px;line-height:1.5" readonly></textarea>
+                    <div class="d-flex gap-2 mt-1 align-items-center">
+                        <button type="button" class="btn btn-sm btn-photoshell prompt-edit-btn"
+                                id="desc-prompt-edit" data-workflow="description">
+                            <i class="bi bi-pencil"></i> Edit
+                        </button>
+                        <button type="button" class="btn btn-sm btn-photoshell prompt-save-btn"
+                                id="desc-prompt-save" data-workflow="description" style="display:none">
+                            <i class="bi bi-save"></i> Save to file
+                        </button>
+                        <span class="prompt-save-status field-help" id="desc-prompt-status"></span>
                     </div>
                 </div>
                 <div class="field-row mt-2">
@@ -309,9 +326,27 @@
                         <div class="field-help ollama-model-status" id="kw-model-status"></div>
                     </div>
                     <div>
-                        <label class="form-label">Prompt ID</label>
-                        <input type="text" class="form-control" name="kw_prompt_id" value="1"
-                               placeholder="0 = built-in">
+                        <label class="form-label">Prompt</label>
+                        <select class="form-select prompt-select" name="kw_prompt_id" id="kw-prompt-select"
+                                data-workflow="keywords">
+                            <option value="1" selected>1 — (loading...)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <label class="form-label">Prompt Text</label>
+                    <textarea class="form-control prompt-text-area" id="kw-prompt-text" rows="3"
+                              style="font-size:12px;line-height:1.5" readonly></textarea>
+                    <div class="d-flex gap-2 mt-1 align-items-center">
+                        <button type="button" class="btn btn-sm btn-photoshell prompt-edit-btn"
+                                id="kw-prompt-edit" data-workflow="keywords">
+                            <i class="bi bi-pencil"></i> Edit
+                        </button>
+                        <button type="button" class="btn btn-sm btn-photoshell prompt-save-btn"
+                                id="kw-prompt-save" data-workflow="keywords" style="display:none">
+                            <i class="bi bi-save"></i> Save to file
+                        </button>
+                        <span class="prompt-save-status field-help" id="kw-prompt-status"></span>
                     </div>
                 </div>
                 <div class="field-row mt-2">
