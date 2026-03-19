@@ -202,7 +202,8 @@ while IFS= read -r -d '' jpg; do
     stems_tried+=("$candidate_stem")
     key="${candidate_stem,,}"
     if [[ -n "${ORIG_MAP[$key]+_}" ]]; then
-      mapfile -d '' -t candidates <<< "${ORIG_MAP[$key]}"
+      # Use printf to avoid trailing newline that <<< adds (breaks exiftool)
+      mapfile -d '' -t candidates < <(printf '%s' "${ORIG_MAP[$key]}")
     fi
 
     # Fallback: try replacing underscores with hyphens if nothing matched
@@ -212,7 +213,7 @@ while IFS= read -r -d '' jpg; do
         stems_tried+=("$alt_stem")
         alt_key="${alt_stem,,}"
         if [[ -n "${ORIG_MAP[$alt_key]+_}" ]]; then
-          mapfile -d '' -t candidates <<< "${ORIG_MAP[$alt_key]}"
+          mapfile -d '' -t candidates < <(printf '%s' "${ORIG_MAP[$alt_key]}")
           echo "  fallback stem: $alt_stem"
           candidate_stem="$alt_stem"
         fi
