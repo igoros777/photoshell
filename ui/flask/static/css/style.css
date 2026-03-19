@@ -772,7 +772,7 @@ body {
 
 .folder-meta-stats {
     margin-top: var(--ps-space-xs);
-    padding: 4px var(--ps-space-sm);
+    padding: var(--ps-space-sm) var(--ps-space-md);
     background: rgba(255,255,255,.02);
     border: 1px solid var(--ps-border);
     border-radius: var(--ps-radius-sm);
@@ -780,7 +780,7 @@ body {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 2px var(--ps-space-md);
+    gap: var(--ps-space-sm) var(--ps-space-lg);
 }
 
 .folder-meta-stats .fms-label {
