@@ -1961,6 +1961,8 @@ document.addEventListener("DOMContentLoaded", function() {
 
         btnSearch.disabled = true;
         btnSearchCancel.style.display = "inline-block";
+        searchResultsEl.style.display = "none";
+        searchResultsEl.innerHTML = "";
         searchLog.style.display = "block";
         searchLog.classList.add("active");
         searchLog.textContent = "Searching in " + dir + " ...\n";
@@ -1993,6 +1995,8 @@ document.addEventListener("DOMContentLoaded", function() {
         fetch("/api/cancel/" + searchJobId, {method: "POST"});
     });
 
+    var searchResultsEl = document.getElementById("search-results");
+
     function startSearchPolling() {
         searchPollTimer = setInterval(function() {
             if (!searchJobId) return;
@@ -2006,10 +2010,97 @@ document.addEventListener("DOMContentLoaded", function() {
                         btnSearch.disabled = false;
                         btnSearchCancel.style.display = "none";
                         searchJobId = null;
+                        // Parse matched files from the log and fetch thumbnails
+                        if (data.status === "done") {
+                            renderSearchResults(data.log);
+                        }
                     }
                 })
                 .catch(function() { /* ignore transient errors */ });
         }, 1000);
+    }
+
+    function renderSearchResults(log) {
+        // Extract file paths from search output lines like "File: /path/to/file.jpg"
+        var fileRegex = /^File:\s*(.+)$/gm;
+        var match;
+        var files = [];
+        while ((match = fileRegex.exec(log)) !== null) {
+            var f = match[1].trim();
+            if (f) files.push(f);
+        }
+
+        if (files.length === 0) {
+            searchResultsEl.style.display = "none";
+            return;
+        }
+
+        // Show loading state
+        searchResultsEl.style.display = "block";
+        searchResultsEl.innerHTML = '<div class="search-results-header">'
+            + '<span><i class="bi bi-images"></i> ' + files.length + ' match' + (files.length !== 1 ? 'es' : '') + ' found</span>'
+            + '<span class="text-muted">Loading metadata...</span></div>';
+
+        // Fetch metadata for matched files
+        fetch("/api/search_meta", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({files: files})
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            var results = data.results || [];
+            var html = '<div class="search-results-header">'
+                + '<span><i class="bi bi-images"></i> ' + results.length + ' match' + (results.length !== 1 ? 'es' : '') + '</span></div>';
+
+            // Build a lookup by file path for metadata
+            var metaMap = {};
+            results.forEach(function(r) { metaMap[r.file] = r; });
+
+            // Render grid — use original file order
+            html += '<div class="search-results-grid">';
+            files.forEach(function(filepath) {
+                var m = metaMap[filepath] || {filename: filepath.split("/").pop(), comment: "", caption: "", keywords: ""};
+                var thumbUrl = "/api/thumbnail?path=" + encodeURIComponent(filepath) + "&size=200";
+                var fullUrl = "/api/thumbnail?path=" + encodeURIComponent(filepath) + "&size=800";
+
+                html += '<div class="search-result-card">';
+                html += '<a href="' + fullUrl + '" target="_blank">';
+                html += '<img src="' + thumbUrl + '" alt="' + escapeHtml(m.filename) + '" loading="lazy">';
+                html += '</a>';
+                html += '<div class="search-result-meta">';
+                html += '<div class="search-result-filename" title="' + escapeHtml(filepath) + '">' + escapeHtml(m.filename) + '</div>';
+                if (m.caption) {
+                    html += '<div class="search-result-field"><span class="search-result-field-label">Caption:</span> ' + escapeHtml(m.caption) + '</div>';
+                }
+                if (m.comment) {
+                    html += '<div class="search-result-field"><span class="search-result-field-label">Comment:</span> ' + escapeHtml(m.comment) + '</div>';
+                }
+                if (m.keywords) {
+                    html += '<div class="search-result-field"><span class="search-result-field-label">Keywords:</span> ' + escapeHtml(m.keywords) + '</div>';
+                }
+                html += '</div></div>';
+            });
+            html += '</div>';
+
+            searchResultsEl.innerHTML = html;
+        })
+        .catch(function() {
+            // Fallback: show thumbnails without metadata
+            var html = '<div class="search-results-header">'
+                + '<span><i class="bi bi-images"></i> ' + files.length + ' matches</span></div>';
+            html += '<div class="search-results-grid">';
+            files.forEach(function(filepath) {
+                var fname = filepath.split("/").pop();
+                var thumbUrl = "/api/thumbnail?path=" + encodeURIComponent(filepath) + "&size=200";
+                html += '<div class="search-result-card">';
+                html += '<a href="' + thumbUrl + '" target="_blank"><img src="' + thumbUrl + '" alt="' + escapeHtml(fname) + '" loading="lazy"></a>';
+                html += '<div class="search-result-meta"><div class="search-result-filename">' + escapeHtml(fname) + '</div></div>';
+                html += '</div>';
+            });
+            html += '</div>';
+            searchResultsEl.innerHTML = html;
+        });
     }
 
     // ---- Backup Folder ----

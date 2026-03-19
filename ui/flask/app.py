@@ -20,7 +20,7 @@ from collections import defaultdict
 from pathlib import Path
 from urllib.parse import urlparse
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_file
 
 from functions.advisory_checks import run_advisory_checks, scan_folder_metadata
 from functions.constants import (
@@ -1139,6 +1139,126 @@ def api_folder_meta():
         return jsonify({"error": "No photos found or exiftool not available"}), 400
 
     return jsonify(result)
+
+
+@app.route("/api/thumbnail")
+def api_thumbnail():
+    """Serve a thumbnail for a photo file, generated in-memory.
+
+    Uses exiftool to extract the embedded JPEG thumbnail (fastest), with
+    a fallback to reading and resizing the full image via Pillow.
+    No temp files are written to disk.
+
+    Query params:
+      path - absolute path to the photo file (required)
+      size - max thumbnail dimension in pixels (default: 200)
+    """
+    import io
+    filepath = request.args.get("path", "").strip()
+    if not filepath:
+        return jsonify({"error": "path is required"}), 400
+
+    filepath = os.path.realpath(filepath)
+    if not os.path.isfile(filepath):
+        return jsonify({"error": "File not found"}), 404
+
+    try:
+        size = int(request.args.get("size", 200))
+    except (ValueError, TypeError):
+        size = 200
+    size = max(32, min(size, 800))
+
+    # Strategy 1: extract embedded JPEG thumbnail via exiftool (fast, ~50ms)
+    try:
+        proc = subprocess.run(
+            ["exiftool", "-b", "-ThumbnailImage", filepath],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10,
+        )
+        if proc.returncode == 0 and proc.stdout and len(proc.stdout) > 100:
+            return send_file(
+                io.BytesIO(proc.stdout),
+                mimetype="image/jpeg",
+                max_age=3600,
+            )
+    except Exception:
+        pass
+
+    # Strategy 2: read with Pillow and resize (slower, works for all formats)
+    try:
+        from PIL import Image
+        img = Image.open(filepath)
+        img.thumbnail((size, size))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=75)
+        buf.seek(0)
+        return send_file(buf, mimetype="image/jpeg", max_age=3600)
+    except Exception:
+        pass
+
+    # Strategy 3: return a 1x1 transparent pixel as fallback
+    return send_file(
+        io.BytesIO(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01'
+                    b'\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89'
+                    b'\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01'
+                    b'\r\n\xb4\x00\x00\x00\x00IEND\xaeB`\x82'),
+        mimetype="image/png",
+    )
+
+
+@app.route("/api/search_meta", methods=["POST"])
+def api_search_meta():
+    """Return metadata (UserComment, Caption, Keywords) for a list of files.
+
+    Expects JSON: {"files": ["/path/to/file1.jpg", ...]}
+    Returns: {"results": [{"file": ..., "comment": ..., "caption": ..., "keywords": ...}, ...]}
+    """
+    data = request.get_json(force=True)
+    files = data.get("files", [])
+    if not files:
+        return jsonify({"results": []})
+
+    # Cap at 200 files to avoid overwhelming exiftool
+    files = files[:200]
+
+    try:
+        cmd = ["exiftool", "-json", "-charset", "exif=UTF8", "-charset", "iptc=UTF8",
+               "-UserComment", "-IPTC:Caption-Abstract", "-IPTC:Keywords",
+               "-FileName"] + files
+        proc = subprocess.run(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=60, encoding="utf-8", errors="replace",
+        )
+        if proc.returncode not in (0, 1) or not proc.stdout:
+            return jsonify({"results": []})
+
+        exif_data = json.loads(proc.stdout)
+    except Exception as exc:
+        logger.error("search_meta exiftool failed: %s", exc)
+        return jsonify({"results": []})
+
+    results = []
+    for rec in exif_data:
+        src = rec.get("SourceFile", "")
+        comment = rec.get("UserComment") or ""
+        caption = rec.get("Caption-Abstract") or ""
+        keywords = rec.get("Keywords") or ""
+        if isinstance(keywords, list):
+            keywords = ", ".join(keywords)
+        # Clean binary markers
+        if isinstance(comment, str):
+            comment = comment.strip()
+        if isinstance(caption, str):
+            caption = caption.strip()
+
+        results.append({
+            "file": src,
+            "filename": rec.get("FileName", os.path.basename(src)),
+            "comment": comment,
+            "caption": caption,
+            "keywords": keywords,
+        })
+
+    return jsonify({"results": results})
 
 
 @app.route("/api/preflight", methods=["POST"])
