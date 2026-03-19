@@ -135,6 +135,20 @@ PREFERRED_EXTS=(
 
 shopt -s nullglob
 
+# Build upfront index of originals to avoid per-file find calls (O(n) vs O(n*m))
+declare -A ORIG_MAP
+while IFS= read -r -d '' f; do
+    stem="$(basename "$f")"
+    stem="${stem%.*}"
+    # Use lowercase key for case-insensitive matching; append to list for multi-match
+    key="${stem,,}"
+    if [[ -n "${ORIG_MAP[$key]+_}" ]]; then
+        ORIG_MAP["$key"]+=$'\0'"$f"
+    else
+        ORIG_MAP["$key"]="$f"
+    fi
+done < <(find "$ORIG_DIR" -type f -print0)
+
 # Find JPGs only at this level
 while IFS= read -r -d '' jpg; do
   base="$(basename "$jpg")"
@@ -183,18 +197,25 @@ while IFS= read -r -d '' jpg; do
   stem_used=""
   stems_tried=()
 
+  # Use the upfront ORIG_MAP index instead of per-file find calls
   for candidate_stem in "${stem_candidates[@]}"; do
     stems_tried+=("$candidate_stem")
-    mapfile -d '' -t candidates < <(find "$ORIG_DIR" -type f -iname "$candidate_stem.*" -print0)
+    key="${candidate_stem,,}"
+    if [[ -n "${ORIG_MAP[$key]+_}" ]]; then
+      mapfile -d '' -t candidates <<< "${ORIG_MAP[$key]}"
+    fi
 
     # Fallback: try replacing underscores with hyphens if nothing matched
     if [[ ${#candidates[@]} -eq 0 ]]; then
       alt_stem="${candidate_stem//_/-}"
       if [[ "$alt_stem" != "$candidate_stem" ]]; then
         stems_tried+=("$alt_stem")
-        mapfile -d '' -t candidates < <(find "$ORIG_DIR" -type f -iname "$alt_stem.*" -print0)
-        [[ ${#candidates[@]} -gt 0 ]] && echo "  fallback stem: $alt_stem"
-        [[ ${#candidates[@]} -gt 0 ]] && candidate_stem="$alt_stem"
+        alt_key="${alt_stem,,}"
+        if [[ -n "${ORIG_MAP[$alt_key]+_}" ]]; then
+          mapfile -d '' -t candidates <<< "${ORIG_MAP[$alt_key]}"
+          echo "  fallback stem: $alt_stem"
+          candidate_stem="$alt_stem"
+        fi
       fi
     fi
 

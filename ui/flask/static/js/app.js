@@ -76,7 +76,11 @@ document.addEventListener("DOMContentLoaded", function() {
         docsLoading.style.display = "block";
         docsContent.innerHTML = "";
         docsContent.style.display = "none";
-        docsTitle.innerHTML = '<i class="bi bi-book"></i> Loading...';
+        docsTitle.innerHTML = '';
+        var loadIcon = document.createElement('i');
+        loadIcon.className = 'bi bi-book';
+        docsTitle.appendChild(loadIcon);
+        docsTitle.appendChild(document.createTextNode(' Loading...'));
         docsModal.show();
 
         fetch("/api/docs/" + encodeURIComponent(docKey))
@@ -85,11 +89,19 @@ document.addEventListener("DOMContentLoaded", function() {
                 if (data.error) {
                     docsLoading.style.display = "none";
                     docsContent.style.display = "block";
-                    docsContent.innerHTML = '<div class="text-danger">Error: ' + data.error + '</div>';
+                    docsContent.innerHTML = '';
+                    var errDiv = document.createElement('div');
+                    errDiv.className = 'text-danger';
+                    errDiv.textContent = 'Error: ' + data.error;
+                    docsContent.appendChild(errDiv);
                     return;
                 }
 
-                docsTitle.innerHTML = '<i class="bi bi-book"></i> ' + data.filename;
+                docsTitle.innerHTML = '';
+                var icon = document.createElement('i');
+                icon.className = 'bi bi-book';
+                docsTitle.appendChild(icon);
+                docsTitle.appendChild(document.createTextNode(' ' + data.filename));
 
                 // Let marked parse everything normally (mermaid blocks become
                 // <pre><code class="language-mermaid">...</code></pre>)
@@ -131,7 +143,11 @@ document.addEventListener("DOMContentLoaded", function() {
             .catch(function(err) {
                 docsLoading.style.display = "none";
                 docsContent.style.display = "block";
-                docsContent.innerHTML = '<div class="text-danger">Failed to load documentation: ' + err + '</div>';
+                docsContent.innerHTML = '';
+                var errDiv = document.createElement('div');
+                errDiv.className = 'text-danger';
+                errDiv.textContent = 'Failed to load documentation: ' + err;
+                docsContent.appendChild(errDiv);
             });
     }
 
@@ -629,13 +645,27 @@ document.addEventListener("DOMContentLoaded", function() {
             .then(function(result) {
                 if (!result.ok || result.data.error) {
                     var msg = (result.data && result.data.error) || "HTTP error";
-                    folderMetaStats.innerHTML = '<span class="text-muted"><i class="bi bi-exclamation-triangle"></i> ' + msg + '</span>';
+                    folderMetaStats.innerHTML = '';
+                    var span = document.createElement('span');
+                    span.className = 'text-muted';
+                    var warnIcon = document.createElement('i');
+                    warnIcon.className = 'bi bi-exclamation-triangle';
+                    span.appendChild(warnIcon);
+                    span.appendChild(document.createTextNode(' ' + msg));
+                    folderMetaStats.appendChild(span);
                     return;
                 }
                 renderFolderMetaStats(result.data);
             })
             .catch(function(err) {
-                folderMetaStats.innerHTML = '<span class="text-muted"><i class="bi bi-exclamation-triangle"></i> Metadata scan unavailable: ' + (err.message || err) + '</span>';
+                folderMetaStats.innerHTML = '';
+                var span = document.createElement('span');
+                span.className = 'text-muted';
+                var warnIcon = document.createElement('i');
+                warnIcon.className = 'bi bi-exclamation-triangle';
+                span.appendChild(warnIcon);
+                span.appendChild(document.createTextNode(' Metadata scan unavailable: ' + (err.message || err)));
+                folderMetaStats.appendChild(span);
             });
     }
 

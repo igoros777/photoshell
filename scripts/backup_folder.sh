@@ -165,13 +165,13 @@ if $RECURSIVE; then
     tar -czf "$ARCHIVE_PATH" -C "$(dirname "$SOURCE")" "$FOLDER_NAME"
 else
     # Non-recursive: only top-level files
-    # Use find to list files, then tar them
-    find "$SOURCE" -maxdepth 1 -type f -printf '%f\n' 2>/dev/null \
-        | tar -czf "$ARCHIVE_PATH" -C "$SOURCE" -T - 2>/dev/null \
+    # Use null-terminated strings to handle filenames with spaces/special chars
+    find "$SOURCE" -maxdepth 1 -type f -printf '%f\0' 2>/dev/null \
+        | tar -czf "$ARCHIVE_PATH" -C "$SOURCE" --null -T - 2>/dev/null \
     || {
         # macOS/BSD fallback: -printf not available
         cd "$SOURCE"
-        find . -maxdepth 1 -type f | sed 's|^\./||' | tar -czf "$ARCHIVE_PATH" -T -
+        find . -maxdepth 1 -type f -print0 | sed -z 's|^\./||' | tar -czf "$ARCHIVE_PATH" --null -T -
     }
 fi
 

@@ -19,12 +19,7 @@ import os
 import re
 import subprocess
 
-# Photo extensions we consider (matches the main app).
-PHOTO_EXTENSIONS = {
-    ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".heic", ".heif",
-    ".webp", ".bmp", ".gif", ".dng", ".nef", ".cr2", ".cr3",
-    ".arw", ".orf", ".rw2", ".srw", ".raf", ".pef", ".x3f",
-}
+from functions.constants import PHOTO_EXTENSIONS
 
 # Maximum number of files to sample for metadata checks.
 _SAMPLE_LIMIT = 30
@@ -109,7 +104,7 @@ def _pct(part, total):
 # Individual advisory checks
 # ---------------------------------------------------------------------------
 
-def check_gps_coverage(photo_dir, enabled_steps):
+def check_gps_coverage(photo_dir, enabled_steps, cached_data=None):
     """Warn if photos lack GPS and no GPS-providing step is enabled."""
     # If sync-exif or gps-gap-fill is in the workflow, skip this advisory
     if "enable_sync_exif" in enabled_steps or "enable_gps_gap_fill" in enabled_steps:
@@ -123,11 +118,13 @@ def check_gps_coverage(photo_dir, enabled_steps):
     if not gps_consumers.intersection(enabled_steps):
         return None
 
-    files = _list_photo_files(photo_dir)
-    if not files:
-        return None
-
-    data = _run_exiftool_json(files, ["-GPSLatitude", "-GPSLongitude"])
+    if cached_data is not None:
+        data = cached_data
+    else:
+        files = _list_photo_files(photo_dir)
+        if not files:
+            return None
+        data = _run_exiftool_json(files, ["-GPSLatitude", "-GPSLongitude"])
     if not data:
         return None
 
@@ -167,16 +164,18 @@ def check_gps_coverage(photo_dir, enabled_steps):
     }
 
 
-def check_summary_already_done(photo_dir, enabled_steps):
+def check_summary_already_done(photo_dir, enabled_steps, cached_data=None):
     """Advise if Extract Photo Summary appears to have already run."""
     if "enable_extract_summary" not in enabled_steps:
         return None
 
-    files = _list_photo_files(photo_dir)
-    if not files:
-        return None
-
-    data = _run_exiftool_json(files, ["-UserComment"])
+    if cached_data is not None:
+        data = cached_data
+    else:
+        files = _list_photo_files(photo_dir)
+        if not files:
+            return None
+        data = _run_exiftool_json(files, ["-UserComment"])
     if not data:
         return None
 
@@ -220,16 +219,18 @@ def check_summary_already_done(photo_dir, enabled_steps):
         }
 
 
-def check_description_already_done(photo_dir, enabled_steps):
+def check_description_already_done(photo_dir, enabled_steps, cached_data=None):
     """Advise if Annotate - Description appears to have already run."""
     if "enable_annotate_desc" not in enabled_steps:
         return None
 
-    files = _list_photo_files(photo_dir)
-    if not files:
-        return None
-
-    data = _run_exiftool_json(files, ["-ImageDescription", "-IPTC:Caption-Abstract"])
+    if cached_data is not None:
+        data = cached_data
+    else:
+        files = _list_photo_files(photo_dir)
+        if not files:
+            return None
+        data = _run_exiftool_json(files, ["-ImageDescription", "-IPTC:Caption-Abstract"])
     if not data:
         return None
 
@@ -272,16 +273,18 @@ def check_description_already_done(photo_dir, enabled_steps):
         }
 
 
-def check_keywords_already_done(photo_dir, enabled_steps):
+def check_keywords_already_done(photo_dir, enabled_steps, cached_data=None):
     """Advise if Annotate - Keywords appears to have already run."""
     if "enable_annotate_kw" not in enabled_steps:
         return None
 
-    files = _list_photo_files(photo_dir)
-    if not files:
-        return None
-
-    data = _run_exiftool_json(files, ["-IPTC:Keywords"])
+    if cached_data is not None:
+        data = cached_data
+    else:
+        files = _list_photo_files(photo_dir)
+        if not files:
+            return None
+        data = _run_exiftool_json(files, ["-IPTC:Keywords"])
     if not data:
         return None
 
@@ -326,7 +329,7 @@ def check_keywords_already_done(photo_dir, enabled_steps):
         }
 
 
-def check_geo_rename_done(photo_dir, enabled_steps):
+def check_geo_rename_done(photo_dir, enabled_steps, cached_data=None):
     """Advise if files already follow the geo-rename pattern."""
     if "enable_geo_rename" not in enabled_steps:
         return None
@@ -367,7 +370,7 @@ def check_geo_rename_done(photo_dir, enabled_steps):
     return None
 
 
-def check_contact_sheet_exists(photo_dir, enabled_steps):
+def check_contact_sheet_exists(photo_dir, enabled_steps, cached_data=None):
     """Advise if a contact sheet already exists in the directory."""
     if "enable_contact_sheet" not in enabled_steps:
         return None
@@ -388,7 +391,7 @@ def check_contact_sheet_exists(photo_dir, enabled_steps):
     return None
 
 
-def check_blurry_output_exists(photo_dir, enabled_steps):
+def check_blurry_output_exists(photo_dir, enabled_steps, cached_data=None):
     """Advise if blur detection output directories already exist."""
     if "enable_blur" not in enabled_steps:
         return None
@@ -418,7 +421,7 @@ def check_blurry_output_exists(photo_dir, enabled_steps):
     }
 
 
-def check_scrub_after_writes(photo_dir, enabled_steps):
+def check_scrub_after_writes(photo_dir, enabled_steps, cached_data=None):
     """Warn if scrub is enabled but metadata-writing steps are not,
     meaning the user may be about to erase valuable metadata."""
     if "enable_scrub" not in enabled_steps:
@@ -432,14 +435,16 @@ def check_scrub_after_writes(photo_dir, enabled_steps):
         # handled by the ordering system.
         return None
 
-    # Scrub enabled alone — check if there is metadata to scrub
-    files = _list_photo_files(photo_dir)
-    if not files:
-        return None
-
-    data = _run_exiftool_json(
-        files, ["-UserComment", "-ImageDescription", "-IPTC:Keywords"]
-    )
+    # Scrub enabled alone -- check if there is metadata to scrub
+    if cached_data is not None:
+        data = cached_data
+    else:
+        files = _list_photo_files(photo_dir)
+        if not files:
+            return None
+        data = _run_exiftool_json(
+            files, ["-UserComment", "-ImageDescription", "-IPTC:Keywords"]
+        )
     if not data:
         return None
 
@@ -584,9 +589,21 @@ def run_advisory_checks(photo_dir, enabled_steps):
         advisories.append(adv)
         return advisories  # no point checking metadata if no files
 
+    # Pre-fetch all metadata tags needed by checks in a single exiftool call
+    files = _list_photo_files(photo_dir)
+    cached_data = None
+    if files:
+        cached_data = _run_exiftool_json(files, [
+            "-GPSLatitude", "-GPSLongitude",
+            "-UserComment", "-ImageDescription",
+            "-IPTC:Caption-Abstract", "-IPTC:Keywords",
+        ])
+        if not cached_data:
+            cached_data = None
+
     for check_fn in ALL_CHECKS:
         try:
-            adv = check_fn(photo_dir, enabled)
+            adv = check_fn(photo_dir, enabled, cached_data=cached_data)
         except Exception:
             continue
         if adv:

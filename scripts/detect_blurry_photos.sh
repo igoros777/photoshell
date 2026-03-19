@@ -205,8 +205,9 @@ visual_delta() {
   local out
   local metric
 
-  thumb_a="$(mktemp --suffix=.png)"
-  thumb_b="$(mktemp --suffix=.png)"
+  # Check mktemp success to fail fast if temp file creation fails
+  thumb_a="$(mktemp --suffix=.png)" || { echo "ERROR: Failed to create temp file" >&2; return 1; }
+  thumb_b="$(mktemp --suffix=.png)" || { echo "ERROR: Failed to create temp file" >&2; rm -f "${thumb_a}"; return 1; }
 
   if ! "${CONVERT_CMD[@]}" "${image_a}" -auto-orient -colorspace Gray -resize "${THUMB_SIZE}x${THUMB_SIZE}!" "${thumb_a}" >/dev/null 2>&1; then
     rm -f "${thumb_a}" "${thumb_b}"
@@ -309,8 +310,9 @@ split_scenes() {
   local delta_visual="0.000000"
 
   prepare_dir "${SCENES_DIR}"
-  map_file="$(mktemp)"
-  sorted_file="$(mktemp)"
+  # Check mktemp success to fail fast if temp file creation fails
+  map_file="$(mktemp)" || { echo "ERROR: Failed to create temp file" >&2; return 1; }
+  sorted_file="$(mktemp)" || { echo "ERROR: Failed to create temp file" >&2; rm -f "${map_file}"; return 1; }
 
   for image in "${IMAGES[@]}"; do
     epoch="$(image_epoch "${image}")"

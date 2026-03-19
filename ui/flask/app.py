@@ -4,6 +4,7 @@
 import argparse
 import glob
 import json
+import logging
 import os
 import platform
 import re
@@ -15,22 +16,93 @@ import subprocess
 import threading
 import time
 import uuid
+from collections import defaultdict
 from pathlib import Path
+from urllib.parse import urlparse
 
 from flask import Flask, jsonify, render_template, request
 
 from functions.advisory_checks import run_advisory_checks, scan_folder_metadata
+from functions.constants import (
+    DEFAULT_STEP_ORDER,
+    PHOTO_EXTENSIONS,
+    STEP_PREFLIGHT_LABELS,
+    STEP_TOOL_DEPS,
+    TOOL_LABELS,
+)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("photoshell")
 
 app = Flask(__name__)
+
+# ---------------------------------------------------------------------------
+# Rate limiting (in-memory, per IP)
+# ---------------------------------------------------------------------------
+
+_request_times = defaultdict(list)
+_RATE_LIMIT_PER_MINUTE = 120
+
+
+@app.before_request
+def _rate_limit():
+    now = time.time()
+    ip = request.remote_addr or "unknown"
+    times = _request_times[ip]
+    # Remove entries older than 60 seconds
+    _request_times[ip] = [t for t in times if now - t < 60]
+    if len(_request_times[ip]) >= _RATE_LIMIT_PER_MINUTE:
+        return jsonify({"error": "Rate limit exceeded. Try again in a moment."}), 429
+    _request_times[ip].append(now)
+
+
+# ---------------------------------------------------------------------------
+# CSRF protection
+# ---------------------------------------------------------------------------
+
+
+@app.before_request
+def _csrf_check():
+    """Validate Origin/Referer on state-changing requests."""
+    if request.method not in ("POST", "PUT", "DELETE"):
+        return
+    origin = request.headers.get("Origin", "")
+    referer = request.headers.get("Referer", "")
+    host = request.host
+    if origin:
+        if urlparse(origin).netloc != host:
+            return jsonify({"error": "CSRF validation failed"}), 403
+    elif referer:
+        if urlparse(referer).netloc != host:
+            return jsonify({"error": "CSRF validation failed"}), 403
 
 # Resolve directories relative to this file
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPTS_DIR = str(REPO_ROOT / "scripts")
 DOCS_DIR = str(REPO_ROOT / "docs")
 
-# In-memory job store: job_id -> {status, log, current_step, steps, pid}
+# In-memory job store: job_id -> {status, log, current_step, steps, pid, created_at}
 jobs = {}
 jobs_lock = threading.Lock()
+
+STEP_TIMEOUT_SECONDS = 1800  # 30 minutes
+_JOB_TTL_SECONDS = 3600  # 1 hour
+
+
+def _cleanup_stale_jobs():
+    now = time.time()
+    with jobs_lock:
+        stale = [jid for jid, job in jobs.items()
+                 if job.get("status") in ("done", "failed")
+                 and now - job.get("created_at", now) > _JOB_TTL_SECONDS]
+        for jid in stale:
+            del jobs[jid]
+        if stale:
+            logger.info("Cleaned up %d stale jobs", len(stale))
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +120,7 @@ def _run_step(job_id, step_index, cmd, cwd):
         job["log"] += "=" * 60 + "\n"
         job["log"] += "$ %s\n\n" % " ".join(cmd)
 
+    start_time = time.time()
     try:
         proc = subprocess.Popen(
             cmd,
@@ -60,19 +133,29 @@ def _run_step(job_id, step_index, cmd, cwd):
         with jobs_lock:
             jobs[job_id]["pid"] = proc.pid
 
-        for line in proc.stdout:
-            with jobs_lock:
-                jobs[job_id]["log"] += line
+        kill_timer = threading.Timer(STEP_TIMEOUT_SECONDS, lambda: proc.kill())
+        kill_timer.start()
+        try:
+            for line in proc.stdout:
+                with jobs_lock:
+                    jobs[job_id]["log"] += line
+            proc.wait()
+            rc = proc.returncode
+        finally:
+            kill_timer.cancel()
 
-        proc.wait()
-        rc = proc.returncode
+        if rc == -9:  # killed by timer
+            with jobs_lock:
+                jobs[job_id]["log"] += "\n[TIMEOUT] Step killed after %d seconds\n" % STEP_TIMEOUT_SECONDS
     except Exception as exc:
         rc = -1
         with jobs_lock:
             jobs[job_id]["log"] += "\n[ERROR] %s\n" % str(exc)
+        logger.error("Step %d failed: %s", step_index, exc)
 
+    elapsed = time.time() - start_time
     with jobs_lock:
-        jobs[job_id]["log"] += "\n[Exit code: %d]\n" % rc
+        jobs[job_id]["log"] += "\n[Exit code: %d] (%.1fs)\n" % (rc, elapsed)
         jobs[job_id]["pid"] = None
 
     return rc
@@ -86,11 +169,13 @@ def _run_pipeline(job_id, steps, cwd):
             with jobs_lock:
                 jobs[job_id]["status"] = "failed"
                 jobs[job_id]["log"] += "\n*** Pipeline stopped due to error ***\n"
+            logger.info("Job %s failed at step %d", job_id, i)
             return
 
     with jobs_lock:
         jobs[job_id]["status"] = "done"
         jobs[job_id]["log"] += "\n*** All steps completed successfully ***\n"
+    logger.info("Job %s completed successfully", job_id)
 
 
 # ---------------------------------------------------------------------------
@@ -121,14 +206,12 @@ def _build_step(key, data):
 
     if key == "enable_extract_summary" and data.get(key):
         script_path = _script("extract_photo_summary.sh")
-        loc_arg = ""
+        cmd = ["find", ".", "-maxdepth", "1", "-type", "f",
+               "(", "-iname", "*.jpg", "-o", "-iname", "*.jpeg", ")",
+               "-exec", "bash", script_path]
         if data.get("location_override"):
-            loc_arg = '--location "%s" ' % data["location_override"].replace('"', '\\"')
-        cmd = [
-            "bash", "-c",
-            'find ./ -maxdepth 1 -type f \\( -iname "*.jpg" -o -iname "*.jpeg" \\) '
-            '-print0 | xargs -0 -I{} bash "%s" %s"{}"' % (script_path, loc_arg),
-        ]
+            cmd += ["--location", data["location_override"]]
+        cmd += ["{}", ";"]
         return {"label": "Extract Photo Summary", "cmd": cmd}
 
     if key == "enable_annotate_desc" and data.get(key):
@@ -218,17 +301,7 @@ def _build_step(key, data):
     return None
 
 
-# Default step order (used when client doesn't send step_order).
-# Mirrors the recommended workflow:
-#   sync EXIF -> GPS gap fill -> summary -> descriptions -> keywords
-#   -> geo rename -> gopro rename -> blur detect -> contact sheet
-#   -> scrub -> search
-DEFAULT_STEP_ORDER = [
-    "enable_sync_exif", "enable_gps_gap_fill", "enable_extract_summary",
-    "enable_annotate_desc", "enable_annotate_kw",
-    "enable_geo_rename", "enable_gopro", "enable_blur",
-    "enable_contact_sheet", "enable_scrub",
-]
+# DEFAULT_STEP_ORDER is imported from functions.constants
 
 
 def build_pipeline(data):
@@ -256,44 +329,8 @@ def build_pipeline(data):
 # Tool dependency preflight check
 # ---------------------------------------------------------------------------
 
-# Maps each step key to the external tools it requires.
-# "imagemagick" is a virtual dependency resolved to magick (IM7) or
-# identify+convert+montage (IM6).
-STEP_TOOL_DEPS = {
-    "enable_sync_exif":       ["exiftool"],
-    "enable_gps_gap_fill":    ["exiftool"],
-    "enable_extract_summary": ["exiftool", "curl", "jq"],
-    "enable_annotate_desc":   ["exiftool", "ollama"],
-    "enable_annotate_kw":     ["exiftool", "ollama"],
-    "enable_blur":            ["exiftool", "imagemagick"],
-    "enable_geo_rename":      ["exiftool", "curl", "jq"],
-    "enable_gopro":           ["exiftool", "curl", "jq"],
-    "enable_contact_sheet":   ["exiftool", "imagemagick"],
-    "enable_scrub":           ["exiftool"],
-}
-
-# Human-readable labels for tools (used in preflight messages).
-TOOL_LABELS = {
-    "exiftool":    "ExifTool",
-    "curl":        "curl",
-    "jq":          "jq",
-    "ollama":      "Ollama",
-    "imagemagick": "ImageMagick (magick or convert/identify/montage)",
-}
-
-# Step labels for preflight messages.
-STEP_PREFLIGHT_LABELS = {
-    "enable_sync_exif":       "Sync EXIF & Rename",
-    "enable_gps_gap_fill":    "GPS Gap Fill",
-    "enable_extract_summary": "Extract Photo Summary",
-    "enable_annotate_desc":   "Annotate (Description)",
-    "enable_annotate_kw":     "Annotate (Keywords)",
-    "enable_blur":            "Detect Blurry Photos",
-    "enable_geo_rename":      "Geo Rename Photos",
-    "enable_gopro":           "GoPro Geo Rename",
-    "enable_contact_sheet":   "Contact Sheet",
-    "enable_scrub":           "Scrub Metadata",
-}
+# STEP_TOOL_DEPS, TOOL_LABELS, STEP_PREFLIGHT_LABELS are imported from
+# functions.constants
 
 
 def _check_tool(name):
@@ -361,11 +398,7 @@ def run_preflight(enabled_steps):
 # Routes
 # ---------------------------------------------------------------------------
 
-PHOTO_EXTENSIONS = {
-    ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".heic", ".heif",
-    ".webp", ".bmp", ".gif", ".dng", ".nef", ".cr2", ".cr3",
-    ".arw", ".orf", ".rw2", ".srw", ".raf", ".pef", ".x3f",
-}
+# PHOTO_EXTENSIONS is imported from functions.constants
 
 
 DOCS_MAP = {
@@ -656,10 +689,13 @@ def _browse_directory(target, show_hidden):
                 continue
             try:
                 if entry.is_dir():
-                    dirs.append({
+                    item = {
                         "name": entry.name,
                         "path": os.path.normpath(os.path.join(target, entry.name)),
-                    })
+                    }
+                    if entry.is_symlink():
+                        item["symlink"] = True
+                    dirs.append(item)
             except (OSError, PermissionError):
                 skipped_entries += 1
 
@@ -707,8 +743,10 @@ def _filesystem_error_response(error, *, not_found_message="Directory not found"
             msg += ": " + path_info
         return jsonify({"error": msg}), 404
     if isinstance(error, OSError):
-        return jsonify({"error": str(error)}), 500
-    return jsonify({"error": str(error)}), 500
+        logger.error("Filesystem error: %s", error, exc_info=True)
+        return jsonify({"error": "An error occurred while processing your request"}), 500
+    logger.error("Unexpected error: %s", error, exc_info=True)
+    return jsonify({"error": "An error occurred while processing your request"}), 500
 
 
 @app.route("/api/browse_debug")
@@ -907,7 +945,8 @@ def api_folder_meta():
     try:
         result = scan_folder_metadata(target)
     except Exception as exc:
-        return jsonify({"error": "Metadata scan failed: %s" % exc}), 500
+        logger.error("Metadata scan failed: %s", exc, exc_info=True)
+        return jsonify({"error": "An error occurred while processing your request"}), 500
 
     if result is None:
         return jsonify({"error": "No photos found or exiftool not available"}), 400
@@ -918,6 +957,7 @@ def api_folder_meta():
 @app.route("/api/preflight", methods=["POST"])
 def api_preflight():
     """Check that all required external tools are available for enabled steps."""
+    logger.info("POST /api/preflight")
     data = request.get_json(force=True)
     enabled = [k for k in DEFAULT_STEP_ORDER if data.get(k)]
     if not enabled:
@@ -930,8 +970,9 @@ def api_advisory():
     """Run advisory checks on the photo directory for the enabled steps.
 
     Returns a list of advisory objects with keys: key, level, icon, title,
-    detail.  These are informational — they do not block execution.
+    detail.  These are informational -- they do not block execution.
     """
+    logger.info("POST /api/advisory")
     data = request.get_json(force=True)
     photo_dir = data.get("photo_dir", "").strip()
     if not photo_dir:
@@ -949,6 +990,9 @@ def api_advisory():
 
 @app.route("/api/run", methods=["POST"])
 def api_run():
+    logger.info("POST /api/run")
+    _cleanup_stale_jobs()
+
     data = request.get_json(force=True)
     photo_dir = data.get("photo_dir", "").strip()
     if not photo_dir:
@@ -980,7 +1024,9 @@ def api_run():
             "current_step": 0,
             "steps": [s["label"] for s in steps],
             "pid": None,
+            "created_at": time.time(),
         }
+    logger.info("Job %s created with %d steps for %s", job_id, len(steps), photo_dir)
 
     t = threading.Thread(target=_run_pipeline, args=(job_id, steps, photo_dir))
     t.daemon = True
@@ -1005,6 +1051,7 @@ def api_status(job_id):
 
 @app.route("/api/cancel/<job_id>", methods=["POST"])
 def api_cancel(job_id):
+    logger.info("POST /api/cancel/%s", job_id)
     with jobs_lock:
         job = jobs.get(job_id)
         if not job:
@@ -1025,6 +1072,7 @@ def api_cancel(job_id):
 @app.route("/api/search", methods=["POST"])
 def api_search():
     """Run a standalone EXIF/IPTC metadata search."""
+    logger.info("POST /api/search")
     data = request.get_json(force=True)
     photo_dir = data.get("photo_dir", "").strip()
     query = data.get("search_query", "").strip()
@@ -1056,6 +1104,7 @@ def api_search():
             "current_step": 0,
             "steps": ["Search EXIF/IPTC"],
             "pid": None,
+            "created_at": time.time(),
         }
 
     step = {"label": "Search EXIF/IPTC", "cmd": cmd}
@@ -1126,6 +1175,7 @@ def _human_size(nbytes):
 @app.route("/api/backup/estimate", methods=["POST"])
 def api_backup_estimate():
     """Estimate backup size and available space at the destination."""
+    logger.info("POST /api/backup/estimate")
     data = request.get_json(force=True)
     source = data.get("source", "").strip()
     dest = data.get("dest", "").strip()
@@ -1177,6 +1227,7 @@ def api_backup_estimate():
 @app.route("/api/backup/run", methods=["POST"])
 def api_backup_run():
     """Create a backup archive of the source folder."""
+    logger.info("POST /api/backup/run")
     data = request.get_json(force=True)
     source = data.get("source", "").strip()
     dest = data.get("dest", "").strip()
@@ -1210,6 +1261,7 @@ def api_backup_run():
             "current_step": 0,
             "steps": ["Backup Folder"],
             "pid": None,
+            "created_at": time.time(),
         }
 
     step = {"label": "Backup Folder", "cmd": cmd}

@@ -65,6 +65,16 @@ convert_function() {
     fi
   fi
 
+  # Skip API call if api_key was cleared (placeholder detected)
+  if [ -z "${api_key}" ]; then
+    if [ -n "${OVERRIDE_LOCATION}" ]; then
+      location="${OVERRIDE_LOCATION}"
+    else
+      location="Mystery Town, USA"
+    fi
+    return
+  fi
+
   location="$(curl -s0 -q -k "${apibase}/reverse?q=${coordinates}&api_key=${api_key}&limit=1" | \
     jq -r '.results[]|"\(.formatted_address)"' 2>/dev/null)"
   if [ -z "${location}" ]
@@ -138,22 +148,73 @@ extract_metadata() {
     echo "${date_str}, ${phrase}"
   }
 
-  make="$(exiftool -s -s -s -Make "${file}" 2>/dev/null)"
+  # Batch exiftool: read all needed tags in one call to avoid repeated process spawns
+  local _exif_data
+  _exif_data="$(exiftool -T -n \
+    -Make -Model \
+    -LensModel -Lens -LensID \
+    -ISO \
+    -FNumber -ApertureValue \
+    -ExposureTime -ShutterSpeed \
+    -FocalLength -FocalLengthIn35mmFormat \
+    -WhiteBalance -WhiteBalanceMode \
+    -MeteringMode -Flash -ExposureCompensation \
+    -ImageWidth -ImageHeight -ImageSize -FileSize \
+    -ColorSpace -ProfileDescription -ICCProfileName \
+    -Orientation \
+    -DateTimeOriginal -CreateDate -FileModifyDate -OffsetTimeOriginal \
+    -GPSLatitude -GPSLongitude -GPSAltitude \
+    "${file}" 2>/dev/null)" || true
+
+  local _t_make _t_model \
+    _t_lensmodel _t_lens _t_lensid \
+    _t_iso \
+    _t_fnumber _t_apertureval \
+    _t_exptime _t_shutterspd \
+    _t_focal _t_focal35 \
+    _t_wb _t_wbmode \
+    _t_meter _t_flash _t_expcomp \
+    _t_width _t_height _t_imgsize _t_filesize \
+    _t_colorspace _t_profiledesc _t_iccname \
+    _t_orientation \
+    _t_dto _t_createdate _t_filemoddate _t_offsettime \
+    _t_gpslat _t_gpslon _t_gpsalt
+
+  IFS=$'\t' read -r \
+    _t_make _t_model \
+    _t_lensmodel _t_lens _t_lensid \
+    _t_iso \
+    _t_fnumber _t_apertureval \
+    _t_exptime _t_shutterspd \
+    _t_focal _t_focal35 \
+    _t_wb _t_wbmode \
+    _t_meter _t_flash _t_expcomp \
+    _t_width _t_height _t_imgsize _t_filesize \
+    _t_colorspace _t_profiledesc _t_iccname \
+    _t_orientation \
+    _t_dto _t_createdate _t_filemoddate _t_offsettime \
+    _t_gpslat _t_gpslon _t_gpsalt \
+    <<< "${_exif_data}"
+
+  # Helper: convert exiftool "-" (missing) to empty string
+  _clean() { [[ "$1" == "-" ]] && echo "" || echo "$1"; }
+
+  make="$(_clean "${_t_make}")"
   [ -z "${make}" ] && make="N/A"
 
-  model="$(exiftool -s -s -s -Model "${file}" 2>/dev/null)"
+  model="$(_clean "${_t_model}")"
   [ -z "${model}" ] && model="N/A"
 
-  lens="$(exiftool -s -s -s -LensModel "${file}" 2>/dev/null)"
-  [ -z "${lens}" ] && lens="$(exiftool -s -s -s -Lens "${file}" 2>/dev/null)"
-  [ -z "${lens}" ] && lens="$(exiftool -s -s -s -LensID "${file}" 2>/dev/null)"
+  lens="$(_clean "${_t_lensmodel}")"
+  [ -z "${lens}" ] && lens="$(_clean "${_t_lens}")"
+  [ -z "${lens}" ] && lens="$(_clean "${_t_lensid}")"
   [ -z "${lens}" ] && lens="N/A"
 
-  iso="$(exiftool -s -s -s -ISO "${file}" 2>/dev/null)"
+  iso="$(_clean "${_t_iso}")"
   [ -z "${iso}" ] && iso="N/A"
 
-  aperture="$(exiftool -s -s -s -FNumber "${file}" 2>/dev/null)"
-  [ -z "${aperture}" ] && aperture="$(exiftool -s -s -s -ApertureValue "${file}" 2>/dev/null)"
+  aperture="$(_clean "${_t_fnumber}")"
+  [ -z "${aperture}" ] && aperture="$(_clean "${_t_apertureval}")"
   if [ -n "${aperture}" ]; then
     case "${aperture}" in
       f/*) : ;;
@@ -163,25 +224,25 @@ extract_metadata() {
     aperture="N/A"
   fi
 
-  shutter="$(exiftool -s -s -s -ExposureTime "${file}" 2>/dev/null)"
-  [ -z "${shutter}" ] && shutter="$(exiftool -s -s -s -ShutterSpeed "${file}" 2>/dev/null)"
+  shutter="$(_clean "${_t_exptime}")"
+  [ -z "${shutter}" ] && shutter="$(_clean "${_t_shutterspd}")"
   [ -z "${shutter}" ] && shutter="N/A"
 
-  focal="$(exiftool -s -s -s -FocalLength "${file}" 2>/dev/null)"
-  [ -z "${focal}" ] && focal="$(exiftool -s -s -s -FocalLengthIn35mmFormat "${file}" 2>/dev/null)"
+  focal="$(_clean "${_t_focal}")"
+  [ -z "${focal}" ] && focal="$(_clean "${_t_focal35}")"
   [ -z "${focal}" ] && focal="N/A"
 
-  wb="$(exiftool -s -s -s -WhiteBalance "${file}" 2>/dev/null)"
-  [ -z "${wb}" ] && wb="$(exiftool -s -s -s -WhiteBalanceMode "${file}" 2>/dev/null)"
+  wb="$(_clean "${_t_wb}")"
+  [ -z "${wb}" ] && wb="$(_clean "${_t_wbmode}")"
   [ -z "${wb}" ] && wb="N/A"
 
-  meter="$(exiftool -s -s -s -MeteringMode "${file}" 2>/dev/null)"
+  meter="$(_clean "${_t_meter}")"
   [ -z "${meter}" ] && meter="N/A"
 
-  flash="$(exiftool -s -s -s -Flash "${file}" 2>/dev/null)"
+  flash="$(_clean "${_t_flash}")"
   [ -z "${flash}" ] && flash="N/A"
 
-  exp_comp="$(exiftool -s -s -s -ExposureCompensation "${file}" 2>/dev/null)"
+  exp_comp="$(_clean "${_t_expcomp}")"
   if [ -n "${exp_comp}" ]; then
     case "${exp_comp}" in
       *EV*) : ;;
@@ -191,39 +252,39 @@ extract_metadata() {
     exp_comp="N/A"
   fi
 
-  width="$(exiftool -s -s -s -ImageWidth "${file}" 2>/dev/null)"
-  height="$(exiftool -s -s -s -ImageHeight "${file}" 2>/dev/null)"
+  width="$(_clean "${_t_width}")"
+  height="$(_clean "${_t_height}")"
   if [ -n "${width}" ] && [ -n "${height}" ]; then
     resolution="${width}x${height}"
   else
-    resolution="$(exiftool -s -s -s -ImageSize "${file}" 2>/dev/null)"
+    resolution="$(_clean "${_t_imgsize}")"
   fi
   [ -z "${resolution}" ] && resolution="N/A"
 
-  file_size="$(exiftool -s -s -s -FileSize "${file}" 2>/dev/null)"
+  file_size="$(_clean "${_t_filesize}")"
   [ -z "${file_size}" ] && file_size="N/A"
 
-  color_space="$(exiftool -s -s -s -ColorSpace "${file}" 2>/dev/null)"
-  [ -z "${color_space}" ] && color_space="$(exiftool -s -s -s -ProfileDescription "${file}" 2>/dev/null)"
-  [ -z "${color_space}" ] && color_space="$(exiftool -s -s -s -ICCProfileName "${file}" 2>/dev/null)"
+  color_space="$(_clean "${_t_colorspace}")"
+  [ -z "${color_space}" ] && color_space="$(_clean "${_t_profiledesc}")"
+  [ -z "${color_space}" ] && color_space="$(_clean "${_t_iccname}")"
   [ -z "${color_space}" ] && color_space="N/A"
 
-  orientation="$(exiftool -s -s -s -Orientation "${file}" 2>/dev/null)"
+  orientation="$(_clean "${_t_orientation}")"
   [ -z "${orientation}" ] && orientation="N/A"
 
-  dt="$(exiftool -s -s -s -DateTimeOriginal "${file}" 2>/dev/null)"
-  [ -z "${dt}" ] && dt="$(exiftool -s -s -s -CreateDate "${file}" 2>/dev/null)"
-  [ -z "${dt}" ] && dt="$(exiftool -s -s -s -FileModifyDate "${file}" 2>/dev/null)"
-  offset="$(exiftool -s -s -s -OffsetTimeOriginal "${file}" 2>/dev/null)"
+  dt="$(_clean "${_t_dto}")"
+  [ -z "${dt}" ] && dt="$(_clean "${_t_createdate}")"
+  [ -z "${dt}" ] && dt="$(_clean "${_t_filemoddate}")"
+  offset="$(_clean "${_t_offsettime}")"
   if [ -n "${offset}" ] && ! echo "${dt}" | grep -qE "[+-][0-9]{2}:?[0-9]{2}"; then
     dt="${dt} ${offset}"
   fi
   [ -z "${dt}" ] && dt="N/A"
   dt_human="$(human_time "${dt}")"
 
-  gps_lat="$(exiftool -s -s -s -n -GPSLatitude "${file}" 2>/dev/null)"
-  gps_lon="$(exiftool -s -s -s -n -GPSLongitude "${file}" 2>/dev/null)"
-  gps_alt="$(exiftool -s -s -s -n -GPSAltitude "${file}" 2>/dev/null)"
+  gps_lat="$(_clean "${_t_gpslat}")"
+  gps_lon="$(_clean "${_t_gpslon}")"
+  gps_alt="$(_clean "${_t_gpsalt}")"
   if [ -n "${gps_alt}" ]; then
     gps_alt="${gps_alt} m"
   else
@@ -272,5 +333,16 @@ export -f write_comment
 #                         *---o0o---*
 # ----------------------------------------------------------------------------
 configure
+
+# Early detection of placeholder API key to avoid confusing API errors
+if [[ "${GEOCODIO_API_KEY:-}" == *"Get your"* ]] || [[ "${GEOCODIO_API_KEY:-}" == *"geocod.io"* ]]; then
+    echo "NOTE: GEOCODIO_API_KEY appears to be the default placeholder."
+    echo "      Reverse geocoding will be skipped."
+    echo "      To enable: export GEOCODIO_API_KEY='your-key-here'"
+    echo "      Get a free key at: https://www.geocod.io/"
+    GEOCODIO_API_KEY=""
+    api_key=""
+fi
+
 extract_metadata
 write_comment

@@ -104,28 +104,41 @@ get_tag() {
   exiftool -s3 "-${tag}" "${file}" 2>/dev/null | head -n 1
 }
 
+# Read all needed EXIF tags in one exiftool call to avoid per-tag process spawns
+read_all_tags() {
+    local file="$1"
+    exiftool -T -n -Model -LensModel -Lens -FocalLength -FNumber -ExposureTime -ISO -DateTimeOriginal -CreateDate -GPSLatitude -GPSLongitude "$file" 2>/dev/null
+}
+
 build_exif_summary() {
   local file="$1"
   local model lens aperture shutter iso focal dt
+  local _t_model _t_lensmodel _t_lens _t_focal _t_fnum _t_exp _t_iso _t_dto _t_cdate _t_lat _t_lon
   local -a parts=()
 
-  model="$(normalize_text "$(get_tag "Model" "${file}")")"
-  lens="$(normalize_text "$(get_tag "LensModel" "${file}")")"
+  # Batch read all tags in a single exiftool invocation
+  IFS=$'\t' read -r _t_model _t_lensmodel _t_lens _t_focal _t_fnum _t_exp _t_iso _t_dto _t_cdate _t_lat _t_lon <<< "$(read_all_tags "$file")"
+
+  # Helper: convert exiftool "-" (missing) to empty string
+  _ct() { [[ "$1" == "-" ]] && echo "" || echo "$1"; }
+
+  model="$(normalize_text "$(_ct "${_t_model}")")"
+  lens="$(normalize_text "$(_ct "${_t_lensmodel}")")"
   if [[ -z "${lens}" ]]; then
-    lens="$(normalize_text "$(get_tag "Lens" "${file}")")"
+    lens="$(normalize_text "$(_ct "${_t_lens}")")"
   fi
 
-  aperture="$(normalize_text "$(get_tag "FNumber" "${file}")")"
+  aperture="$(normalize_text "$(_ct "${_t_fnum}")")"
   if [[ -n "${aperture}" && "${aperture}" != f/* ]]; then
     aperture="f/${aperture}"
   fi
 
-  shutter="$(normalize_text "$(get_tag "ExposureTime" "${file}")")"
-  iso="$(normalize_text "$(get_tag "ISO" "${file}")")"
-  focal="$(normalize_text "$(get_tag "FocalLength" "${file}")")"
-  dt="$(normalize_text "$(get_tag "DateTimeOriginal" "${file}")")"
+  shutter="$(normalize_text "$(_ct "${_t_exp}")")"
+  iso="$(normalize_text "$(_ct "${_t_iso}")")"
+  focal="$(normalize_text "$(_ct "${_t_focal}")")"
+  dt="$(normalize_text "$(_ct "${_t_dto}")")"
   if [[ -z "${dt}" ]]; then
-    dt="$(normalize_text "$(get_tag "CreateDate" "${file}")")"
+    dt="$(normalize_text "$(_ct "${_t_cdate}")")"
   fi
 
   [[ -n "${model}" ]] && parts+=("${model}")

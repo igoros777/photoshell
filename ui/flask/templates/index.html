@@ -51,7 +51,7 @@
                 <label class="form-label" for="photo_dir">Photo Directory (absolute path)</label>
                 <div class="input-group">
                     <input type="text" class="form-control" id="photo_dir" name="photo_dir"
-                           placeholder="C:\Photos\2026-03 or /home/user/Pictures">
+                           placeholder="C:\Photos\2026-03 or /home/user/Pictures" required>
                     <button class="btn btn-outline-secondary" type="button" id="btn-browse"
                             title="Browse folders on server">
                         <i class="bi bi-folder2-open"></i>
@@ -499,7 +499,7 @@
                 </div>
                 <div>
                     <label class="form-label">Time Gap (seconds)</label>
-                    <input type="number" class="form-control" name="blur_time_gap" placeholder="5">
+                    <input type="number" class="form-control" name="blur_time_gap" placeholder="5" min="1" max="3600" step="1">
                     <div class="field-help">Scene break threshold</div>
                 </div>
             </div>
@@ -611,7 +611,7 @@
             <div class="field-row">
                 <div>
                     <label class="form-label">Thumbnail Size (px)</label>
-                    <input type="number" class="form-control" name="cs_thumb_size" placeholder="256">
+                    <input type="number" class="form-control" name="cs_thumb_size" placeholder="256" min="32" max="2048" step="1">
                 </div>
                 <div>
                     <label class="form-label">Theme</label>

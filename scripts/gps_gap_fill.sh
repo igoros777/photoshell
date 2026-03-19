@@ -197,13 +197,17 @@ fill_missing_gps() {
     local best_diff=999999999
     local best_k=-1
 
-    # Linear scan for nearest donor
+    # Linear scan for nearest donor (donors are sorted by time)
+    # Early termination: once time difference starts increasing, we've passed the nearest point
     for ((k=0; k<DONOR_COUNT; k++)); do
       local diff=$(( target_epoch - DONOR_EPOCHS[k] ))
       [[ ${diff} -lt 0 ]] && diff=$(( -diff ))
       if [[ ${diff} -lt ${best_diff} ]]; then
         best_diff=${diff}
         best_k=${k}
+      elif [[ ${best_k} -ge 0 && ${DONOR_EPOCHS[k]} -gt ${target_epoch} ]]; then
+        # Donors are sorted by time; once we pass the target and diff is increasing, stop
+        break
       fi
     done
 

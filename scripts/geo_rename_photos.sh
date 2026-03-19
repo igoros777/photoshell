@@ -262,8 +262,16 @@ resolve_collision() {
     ext=".${file##*.}"
   fi
 
+  # Bound the collision loop to prevent infinite iteration
+  local max_attempts=1000
+  local attempt=0
   i=1
   while true; do
+    ((attempt++))
+    if (( attempt > max_attempts )); then
+      echo "ERROR: Could not resolve filename collision after $max_attempts attempts for: $1" >&2
+      return 1
+    fi
     candidate="${dir}/${base}-${i}${ext}"
     if [[ ! -e "${candidate}" || "${source_path}" == "${candidate}" ]]; then
       echo "${candidate}"

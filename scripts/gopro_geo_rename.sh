@@ -104,4 +104,5 @@ convert_function() {
 }
 export -f convert_function
 
-find . -mindepth 1 -maxdepth 1 -type f -name "*\.MP4" | while read -r i; do convert_function "${i}"; done
+# Use process substitution instead of pipe to avoid subshell variable scoping issues
+while IFS= read -r -d '' i; do convert_function "${i}"; done < <(find . -mindepth 1 -maxdepth 1 -type f -name "*\.MP4" -print0)

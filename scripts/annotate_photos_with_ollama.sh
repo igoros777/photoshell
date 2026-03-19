@@ -395,13 +395,25 @@ extract_location_from_user_comment() {
 
 render_prompt_for_file() {
   local file="$1"
-  local rendered_prompt location_value
+  # Accept optional pre-read user_comment to avoid redundant exiftool calls
+  local cached_comment="${2:-}"
+  local rendered_prompt location_value user_comment
 
   rendered_prompt="${PROMPT_TEXT}"
   if [[ "${rendered_prompt}" == *"${LOCATION_PLACEHOLDER}"* || "${WORKFLOW}" == "keywords" ]]; then
-    if ! location_value="$(extract_location_from_user_comment "${file}")"; then
-      location_value="${LOCATION_FALLBACK_TEXT}"
+    # Use cached UserComment if provided, otherwise read it once
+    if [[ -n "${cached_comment}" ]]; then
+      user_comment="${cached_comment}"
+    else
+      user_comment="$(read_exif_user_comment "${file}" 2>/dev/null)" || user_comment=""
     fi
+
+    # Extract location from the cached user comment
+    if [[ -n "${user_comment}" ]]; then
+      location_value="${user_comment##*|}"
+      location_value="$(trim_edges "${location_value}")"
+    fi
+    [[ -z "${location_value:-}" ]] && location_value="${LOCATION_FALLBACK_TEXT}"
 
     if [[ "${rendered_prompt}" == *"${LOCATION_PLACEHOLDER}"* ]]; then
       rendered_prompt="${rendered_prompt//${LOCATION_PLACEHOLDER}/${location_value}}"
@@ -415,9 +427,11 @@ render_prompt_for_file() {
 
 generate_model_output() {
   local file="$1"
+  # Accept optional pre-read user_comment to avoid redundant exiftool calls
+  local cached_comment="${2:-}"
   local output rendered_prompt
 
-  rendered_prompt="$(render_prompt_for_file "${file}")"
+  rendered_prompt="$(render_prompt_for_file "${file}" "${cached_comment}")"
 
   if ! output="$(ollama run "${MODEL}" "${rendered_prompt}" "${file}" 2>/dev/null)"; then
     return 1
@@ -501,7 +515,7 @@ append_keywords_metadata() {
 }
 
 process_description_workflow() {
-  local file total idx base description
+  local file total idx base description cached_comment
   total="${#IMAGE_FILES[@]}"
   idx=0
 
@@ -510,7 +524,10 @@ process_description_workflow() {
     base="$(basename "${file}")"
     log "[${idx}/${total}] ${base}"
 
-    if ! description="$(generate_model_output "${file}")"; then
+    # Cache UserComment once per file to avoid redundant exiftool calls
+    cached_comment="$(read_exif_user_comment "${file}" 2>/dev/null)" || cached_comment=""
+
+    if ! description="$(generate_model_output "${file}" "${cached_comment}")"; then
       warn "skipping ${file}: failed to get description from ollama"
       continue
     fi
@@ -525,7 +542,7 @@ process_description_workflow() {
 }
 
 process_keywords_workflow() {
-  local file total idx base output existing_keywords
+  local file total idx base output existing_keywords cached_comment
   total="${#IMAGE_FILES[@]}"
   idx=0
 
@@ -544,7 +561,10 @@ process_keywords_workflow() {
       continue
     fi
 
-    if ! output="$(generate_model_output "${file}")"; then
+    # Cache UserComment once per file to avoid redundant exiftool calls
+    cached_comment="$(read_exif_user_comment "${file}" 2>/dev/null)" || cached_comment=""
+
+    if ! output="$(generate_model_output "${file}" "${cached_comment}")"; then
       warn "skipping ${file}: failed to get keywords from ollama"
       continue
     fi
