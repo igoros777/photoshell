@@ -130,9 +130,10 @@ def _run_step(job_id, step_index, cmd, cwd):
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            universal_newlines=True,
             cwd=cwd,
             bufsize=1,
+            encoding="utf-8",
+            errors="replace",
         )
         with jobs_lock:
             jobs[job_id]["pid"] = proc.pid
