@@ -1758,6 +1758,11 @@ document.addEventListener("DOMContentLoaded", function() {
         logPanel.classList.add("active");
         progressBar.classList.add("active");
 
+        // Scroll log panel into view so it's immediately visible
+        setTimeout(function() {
+            logPanel.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 100);
+
         // Show header with override notice if applicable
         var header = "Starting pipeline...\n";
         if (orderOverride) {

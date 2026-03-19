@@ -490,7 +490,9 @@ body {
     font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
     font-size: 12px;
     line-height: 1.6;
-    max-height: 400px;
+    min-height: 250px;
+    max-height: none;
+    flex: 1 1 auto;
     overflow-y: auto;
     white-space: pre-wrap;
     word-break: break-all;
@@ -500,6 +502,7 @@ body {
 
 .log-panel.active {
     display: block;
+    border-color: var(--ps-accent);
 }
 
 /* ---- Pipeline progress (legacy, kept for compat) ---- */
