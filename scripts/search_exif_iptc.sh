@@ -570,7 +570,9 @@ for idx in "${!FILES[@]}"; do
         matches="$(apply_fzf_cutoff "$QUERY" "$FZF_CUTOFF" "$matches" || true)"
       fi
     else
-      matches="$(printf '%s\n' "$metadata" | grep -iF -- "$QUERY" || true)"
+      # -a (--text) forces text mode — exiftool output can contain binary-like
+      # bytes (embedded thumbnails, non-UTF8) that cause grep to skip matches
+      matches="$(printf '%s\n' "$metadata" | grep -aiF -- "$QUERY" || true)"
     fi
     [[ -z "$matches" ]] && exit 0
 
