@@ -281,6 +281,7 @@ build_tiles() {
   total="${#IMAGE_FILES[@]}"
   log "Building tiles..."
 
+  local failed=0
   for file in "${IMAGE_FILES[@]}"; do
     base="$(basename "${file}")"
     current=$((index + 1))
@@ -289,15 +290,23 @@ build_tiles() {
     caption="$(caption_for_file "${file}")"
 
     tile="${temp_dir}/tile_$(printf '%05d' "${index}").png"
-    "${CONVERT_CMD[@]}" \
-      \( "${file}" -auto-orient -thumbnail "${THUMB_LONG_EDGE}x${THUMB_LONG_EDGE}>" -background "${TILE_BACKGROUND}" -gravity center -extent "${THUMB_LONG_EDGE}x${THUMB_LONG_EDGE}" \) \
+    # -limit flags prevent IM6 from crashing on very large files (HDR panos, multi-layer TIFFs)
+    if "${CONVERT_CMD[@]}" \
+      -limit memory 1GiB -limit map 2GiB -limit disk 4GiB \
+      \( "${file}"[0] -auto-orient -thumbnail "${THUMB_LONG_EDGE}x${THUMB_LONG_EDGE}>" -background "${TILE_BACKGROUND}" -gravity center -extent "${THUMB_LONG_EDGE}x${THUMB_LONG_EDGE}" \) \
       \( -size "${THUMB_LONG_EDGE}x" -background "${CAPTION_BACKGROUND}" -fill "${TEXT_COLOR}" -gravity northwest -pointsize "${caption_point_size}" -style Italic caption:"${base}" -bordercolor "${CAPTION_BACKGROUND}" -border 6x4 \) \
       \( -size "${THUMB_LONG_EDGE}x" -background "${CAPTION_BACKGROUND}" -fill "${TEXT_COLOR}" -gravity northwest -pointsize "${caption_point_size}" -style Normal caption:"${caption}" -bordercolor "${CAPTION_BACKGROUND}" -border 6x4 \) \
-      -append "${tile}"
-
-    TILE_FILES+=("${tile}")
+      -append "${tile}" 2>&1; then
+      TILE_FILES+=("${tile}")
+    else
+      log "  WARN: skipped ${base} — ImageMagick failed (file may be too large or corrupted)"
+      ((failed++)) || true
+    fi
     index=$((index + 1))
   done
+  if [[ ${failed} -gt 0 ]]; then
+    log "  ${failed} file(s) skipped due to errors"
+  fi
 }
 
 build_contact_sheet() {
