@@ -2349,19 +2349,21 @@ document.addEventListener("DOMContentLoaded", function() {
             inputsDiv.appendChild(maxDate);
 
         } else if (field.type === "select" && field.values && field.values.length > 0) {
-            var sel = document.createElement("select");
-            sel.className = "form-select form-select-sm";
-            sel.multiple = true;
-            sel.dataset.role = "values";
-            sel.style.maxWidth = "300px";
-            sel.style.minHeight = "28px";
+            var cbGroup = document.createElement("div");
+            cbGroup.className = "filter-checkbox-group";
+            cbGroup.dataset.role = "values";
             field.values.forEach(function(v) {
-                var opt = document.createElement("option");
-                opt.value = v;
-                opt.textContent = v;
-                sel.appendChild(opt);
+                var lbl = document.createElement("label");
+                lbl.className = "filter-checkbox-item";
+                var cb = document.createElement("input");
+                cb.type = "checkbox";
+                cb.value = v;
+                cb.className = "form-check-input";
+                lbl.appendChild(cb);
+                lbl.appendChild(document.createTextNode(" " + v));
+                cbGroup.appendChild(lbl);
             });
-            inputsDiv.appendChild(sel);
+            inputsDiv.appendChild(cbGroup);
 
         } else {
             // text type
@@ -2462,14 +2464,12 @@ document.addEventListener("DOMContentLoaded", function() {
                 }
 
             } else if (fieldType === "select") {
-                var selEl = row.querySelector('[data-role="values"]');
-                if (selEl) {
+                var cbGroup = row.querySelector('[data-role="values"]');
+                if (cbGroup) {
                     var selected = [];
-                    for (var i = 0; i < selEl.options.length; i++) {
-                        if (selEl.options[i].selected) {
-                            selected.push(selEl.options[i].value);
-                        }
-                    }
+                    cbGroup.querySelectorAll('input[type="checkbox"]:checked').forEach(function(cb) {
+                        selected.push(cb.value);
+                    });
                     if (selected.length > 0) {
                         filters.push({field: fieldName, op: "in", values: selected});
                     }
