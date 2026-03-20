@@ -1919,5 +1919,16 @@ if __name__ == "__main__":
         host = args.host or "0.0.0.0"
         port = args.port or 5050
 
-    print("Starting PhotoShell on %s:%d" % (host, port))
-    app.run(debug=True, host=host, port=port)
+    # Debug mode only on localhost — exposes Werkzeug interactive debugger
+    # which allows arbitrary code execution from the browser.
+    # On network interfaces: debug off, but auto-reload stays on for dev convenience.
+    is_localhost = host in ("127.0.0.1", "localhost", "::1")
+    use_debug = is_localhost
+    use_reload = True  # auto-restart on file changes (safe on any interface)
+
+    if use_debug:
+        print("Starting PhotoShell on %s:%d (debug mode)" % (host, port))
+    else:
+        print("Starting PhotoShell on %s:%d (debug off — network interface)" % (host, port))
+
+    app.run(debug=use_debug, use_reloader=use_reload, host=host, port=port)
