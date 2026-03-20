@@ -2750,10 +2750,17 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // ---- Photo preview modal ----
 
-    var photoPreviewModal = new bootstrap.Modal(document.getElementById("photoPreviewModal"));
+    var photoPreviewModalEl = document.getElementById("photoPreviewModal");
+    var photoPreviewModal = new bootstrap.Modal(photoPreviewModalEl);
     var photoPreviewImg = document.getElementById("photo-preview-img");
     var photoPreviewTitle = document.getElementById("photo-preview-title");
     var photoPreviewFooter = document.getElementById("photo-preview-footer");
+
+    // Clear image when modal closes to prevent stale flash on next open
+    photoPreviewModalEl.addEventListener("hidden.bs.modal", function() {
+        photoPreviewImg.src = "";
+        photoPreviewImg.style.display = "none";
+    });
 
     function wirePhotoPreviewLinks() {
         searchResultsEl.querySelectorAll(".photo-preview-link").forEach(function(link) {
@@ -2765,6 +2772,12 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     }
 
+    // Loading spinner element for preview modal
+    var photoPreviewSpinner = document.createElement("div");
+    photoPreviewSpinner.className = "preview-loading";
+    photoPreviewSpinner.innerHTML = '<i class="bi bi-arrow-repeat" style="font-size:32px;animation:spin 1s linear infinite;color:var(--ps-accent)"></i>';
+    photoPreviewImg.parentNode.insertBefore(photoPreviewSpinner, photoPreviewImg);
+
     function openPhotoPreview(idx) {
         var files = window._searchFiles || [];
         var metaMap = window._searchMetaMap || {};
@@ -2775,8 +2788,26 @@ document.addEventListener("DOMContentLoaded", function() {
         var fullUrl = "/api/thumbnail?path=" + encodeURIComponent(filepath) + "&size=1600";
 
         photoPreviewTitle.textContent = m.filename;
-        photoPreviewImg.src = fullUrl;
+
+        // Hide old image and show spinner while new one loads
+        photoPreviewImg.style.display = "none";
+        photoPreviewSpinner.style.display = "flex";
         photoPreviewImg.alt = m.filename;
+
+        // Create a new Image to preload — only swap when fully loaded
+        var loader = new Image();
+        loader.onload = function() {
+            photoPreviewImg.src = loader.src;
+            photoPreviewImg.style.display = "block";
+            photoPreviewSpinner.style.display = "none";
+        };
+        loader.onerror = function() {
+            photoPreviewImg.src = "";
+            photoPreviewImg.style.display = "none";
+            photoPreviewSpinner.innerHTML = '<i class="bi bi-x-circle" style="font-size:32px;color:var(--ps-danger)"></i>'
+                + '<div style="color:var(--ps-text-muted);font-size:12px;margin-top:8px">Failed to load image</div>';
+        };
+        loader.src = fullUrl;
 
         // Build footer with metadata
         var footerHtml = '<div class="preview-meta-filename">' + escapeHtml(m.filename) + '</div>';
