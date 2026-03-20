@@ -2217,35 +2217,14 @@ document.addEventListener("DOMContentLoaded", function() {
                 + msg + ' (' + elapsed + 's)</span>';
         }
 
-        // Phase 1: fast file count (respects recursive setting, auto-detects subfolders)
-        updateProgress("Counting files...");
-        fetch("/api/search/count?path=" + encodeURIComponent(dir)
-              + "&recursive=" + (recursive ? "1" : "0"))
-            .then(function(res) { return res.json(); })
-            .then(function(cdata) {
-                var photoCount = cdata.count || 0;
-                var willRecurse = recursive || cdata.auto_recursive;
-                var countMsg = "Scanning metadata";
-                if (photoCount === 0) {
-                    countMsg = "No photos found — checking subfolders";
-                } else if (photoCount > 1000) {
-                    countMsg = "Large collection (" + photoCount.toLocaleString() + " files) — this may take a minute";
-                } else if (photoCount > 500) {
-                    countMsg = "Scanning " + photoCount + " files — may take a moment";
-                } else {
-                    countMsg = "Scanning " + photoCount + " files";
-                }
-                if (cdata.auto_recursive) {
-                    countMsg += " (including subfolders)";
-                }
-                updateProgress(countMsg);
-                progressTimer = setInterval(function() { updateProgress(countMsg); }, 1000);
+        // Single-phase discovery — the endpoint handles counting, auto-recursion, and sampling
+        var scanMsg = recursive ? "Scanning folder tree for photos..." : "Scanning folder for photos...";
+        updateProgress(scanMsg);
+        progressTimer = setInterval(function() { updateProgress(scanMsg); }, 1000);
 
-                // Phase 2: actual field discovery (use the effective recursive setting)
-                var url = "/api/search/discover?path=" + encodeURIComponent(dir)
-                        + "&recursive=" + (willRecurse ? "1" : "0");
-                return fetch(url);
-            })
+        var url = "/api/search/discover?path=" + encodeURIComponent(dir)
+                + "&recursive=" + (recursive ? "1" : "0");
+        fetch(url)
             .then(function(res) { return res.json(); })
             .then(function(data) {
                 if (progressTimer) clearInterval(progressTimer);

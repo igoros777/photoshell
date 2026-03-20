@@ -555,14 +555,14 @@ class TestApplyFiltersKeywordsAll:
 class TestSamplePhotoFiles:
     """Test the sample_photo_files function with mocked filesystem."""
 
-    @mock.patch("functions.structured_search._list_all_photo_files")
+    @mock.patch("functions.structured_search._list_all_photo_files_parallel")
     def test_small_directory_returns_all(self, mock_list):
         mock_list.return_value = ["/photos/a.jpg", "/photos/b.jpg", "/photos/c.jpg"]
         sampled, total = sample_photo_files("/photos", sample_size=10)
         assert total == 3
         assert len(sampled) == 3
 
-    @mock.patch("functions.structured_search._list_all_photo_files")
+    @mock.patch("functions.structured_search._list_all_photo_files_parallel")
     def test_exact_sample_size(self, mock_list):
         files = ["/photos/%02d.jpg" % i for i in range(10)]
         mock_list.return_value = files
@@ -570,7 +570,7 @@ class TestSamplePhotoFiles:
         assert total == 10
         assert len(sampled) == 10
 
-    @mock.patch("functions.structured_search._list_all_photo_files")
+    @mock.patch("functions.structured_search._list_all_photo_files_parallel")
     def test_large_directory_samples_to_limit(self, mock_list):
         files = ["/photos/%04d.jpg" % i for i in range(100)]
         mock_list.return_value = files
@@ -578,7 +578,7 @@ class TestSamplePhotoFiles:
         assert total == 100
         assert len(sampled) <= 10
 
-    @mock.patch("functions.structured_search._list_all_photo_files")
+    @mock.patch("functions.structured_search._list_all_photo_files_parallel")
     def test_stratified_includes_all_extensions(self, mock_list):
         """Every file extension type should be represented in the sample."""
         files = (
@@ -596,7 +596,7 @@ class TestSamplePhotoFiles:
         assert ".nef" in exts
         assert ".tiff" in exts
 
-    @mock.patch("functions.structured_search._list_all_photo_files")
+    @mock.patch("functions.structured_search._list_all_photo_files_parallel")
     def test_single_rare_extension_included(self, mock_list):
         """Even a single file with a unique extension should be sampled."""
         files = (
@@ -608,21 +608,21 @@ class TestSamplePhotoFiles:
         assert total == 100
         assert "/photos/pano.dng" in sampled
 
-    @mock.patch("functions.structured_search._list_all_photo_files")
+    @mock.patch("functions.structured_search._list_all_photo_files_parallel")
     def test_empty_directory(self, mock_list):
         mock_list.return_value = []
         sampled, total = sample_photo_files("/photos", sample_size=10)
         assert total == 0
         assert len(sampled) == 0
 
-    @mock.patch("functions.structured_search._list_all_photo_files")
+    @mock.patch("functions.structured_search._list_all_photo_files_parallel")
     def test_recursive_flag_passed(self, mock_list):
         mock_list.return_value = ["/photos/sub/a.jpg"]
         sampled, total = sample_photo_files("/photos", recursive=True, sample_size=10)
         mock_list.assert_called_once_with("/photos", recursive=True)
         assert total == 1
 
-    @mock.patch("functions.structured_search._list_all_photo_files")
+    @mock.patch("functions.structured_search._list_all_photo_files_parallel")
     def test_seven_files_with_sample_size_ten(self, mock_list):
         """When total < sample_size, return all without sampling."""
         files = ["/photos/%d.jpg" % i for i in range(7)]
@@ -631,7 +631,7 @@ class TestSamplePhotoFiles:
         assert total == 7
         assert len(sampled) == 7
 
-    @mock.patch("functions.structured_search._list_all_photo_files")
+    @mock.patch("functions.structured_search._list_all_photo_files_parallel")
     def test_evenly_spaced_within_extension(self, mock_list):
         """Samples should be evenly spaced, not clustered at start/end."""
         files = ["/photos/%04d.jpg" % i for i in range(100)]

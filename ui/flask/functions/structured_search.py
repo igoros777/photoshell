@@ -84,92 +84,121 @@ def _classify_field(name):
     return "text"
 
 
+def _list_dir_photos(dirpath):
+    """List photo files in a single directory (non-recursive). Thread-safe."""
+    files = []
+    try:
+        with os.scandir(dirpath) as it:
+            for entry in it:
+                try:
+                    if not entry.is_file():
+                        continue
+                except (OSError, PermissionError):
+                    continue
+                ext = os.path.splitext(entry.name)[1].lower()
+                if ext in PHOTO_EXTENSIONS:
+                    files.append(entry.path)
+    except (OSError, PermissionError):
+        pass
+    return files
+
+
+def _list_subdirs(dirpath):
+    """List immediate subdirectories. Thread-safe."""
+    dirs = []
+    try:
+        with os.scandir(dirpath) as it:
+            for entry in it:
+                try:
+                    if entry.is_dir() and not entry.name.startswith("."):
+                        dirs.append(entry.path)
+                except (OSError, PermissionError):
+                    continue
+    except (OSError, PermissionError):
+        pass
+    return dirs
+
+
+def _list_all_photo_files_parallel(photo_dir, recursive=False):
+    """List all photo files, using parallel directory scanning for recursive mode.
+
+    For recursive scans, fans out into subdirectories using a thread pool.
+    Returns a list of absolute file paths.
+    """
+    if not recursive:
+        return _list_dir_photos(photo_dir)
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    all_files = []
+    dirs_to_scan = [photo_dir]
+    scanned = set()
+
+    # BFS with parallel scanning — process directories in batches
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        while dirs_to_scan:
+            batch = []
+            for d in dirs_to_scan:
+                if d not in scanned:
+                    scanned.add(d)
+                    batch.append(d)
+            dirs_to_scan = []
+
+            if not batch:
+                break
+
+            # Scan all directories in this batch in parallel
+            photo_futures = {pool.submit(_list_dir_photos, d): d for d in batch}
+            subdir_futures = {pool.submit(_list_subdirs, d): d for d in batch}
+
+            for f in as_completed(photo_futures):
+                result = f.result()
+                if result:
+                    all_files.extend(result)
+
+            for f in as_completed(subdir_futures):
+                result = f.result()
+                if result:
+                    dirs_to_scan.extend(result)
+
+    return all_files
+
+
 def count_photo_files(photo_dir, recursive=False):
-    """Fast count of photo files without building a full list.
+    """Fast count of photo files using parallel directory scanning.
 
     Also checks subfolders if top-level has 0 and recursive is False,
     returning (count, actually_recursive) so the caller knows if
     auto-recursion would be needed.
     """
-    count = 0
-    actually_recursive = recursive
+    top_files = _list_dir_photos(photo_dir)
+    if not recursive and top_files:
+        return len(top_files), False
 
-    if recursive:
-        for root, _dirs, filenames in os.walk(photo_dir):
-            for fname in filenames:
-                ext = os.path.splitext(fname)[1].lower()
-                if ext in PHOTO_EXTENSIONS:
-                    count += 1
-    else:
-        try:
-            with os.scandir(photo_dir) as it:
-                for entry in it:
-                    try:
-                        if not entry.is_file():
-                            continue
-                    except (OSError, PermissionError):
-                        continue
-                    ext = os.path.splitext(entry.name)[1].lower()
-                    if ext in PHOTO_EXTENSIONS:
-                        count += 1
-        except (OSError, PermissionError):
-            pass
+    if not recursive and not top_files:
+        # Auto-recurse
+        all_files = _list_all_photo_files_parallel(photo_dir, recursive=True)
+        if all_files:
+            return len(all_files), True
+        return 0, False
 
-        # If nothing at top level, check recursively
-        if count == 0:
-            for root, _dirs, filenames in os.walk(photo_dir):
-                for fname in filenames:
-                    ext = os.path.splitext(fname)[1].lower()
-                    if ext in PHOTO_EXTENSIONS:
-                        count += 1
-            if count > 0:
-                actually_recursive = True
-
-    return count, actually_recursive
-
-
-def _list_all_photo_files(photo_dir, recursive=False):
-    """List all photo files in the directory.
-
-    Returns a list of absolute file paths.
-    """
-    files = []
-    if recursive:
-        for root, _dirs, filenames in os.walk(photo_dir):
-            for fname in filenames:
-                ext = os.path.splitext(fname)[1].lower()
-                if ext in PHOTO_EXTENSIONS:
-                    files.append(os.path.join(root, fname))
-    else:
-        try:
-            with os.scandir(photo_dir) as it:
-                for entry in it:
-                    try:
-                        if not entry.is_file():
-                            continue
-                    except (OSError, PermissionError):
-                        continue
-                    ext = os.path.splitext(entry.name)[1].lower()
-                    if ext in PHOTO_EXTENSIONS:
-                        files.append(entry.path)
-        except (OSError, PermissionError):
-            pass
-    return files
+    # Explicit recursive
+    all_files = _list_all_photo_files_parallel(photo_dir, recursive=True)
+    return len(all_files), True
 
 
 def sample_photo_files(photo_dir, recursive=False, sample_size=30):
     """Sample photo files from a directory for field discovery.
 
-    Uses stratified sampling to capture the diversity of a collection:
-    1. Group files by extension (ensures every format is represented)
-    2. From each extension group, pick files at evenly spaced positions
-       (captures different cameras, dates, naming patterns)
-    3. If the stratified set is smaller than sample_size, fill remaining
-       slots with evenly spaced picks from the full sorted list
+    Uses parallel directory scanning and stratified sampling to capture
+    the diversity of a collection quickly:
+    1. List files using parallel scanning (8 threads for recursive)
+    2. Group by extension (ensures every format is represented)
+    3. From each extension group, pick files at evenly spaced positions
 
     Returns (sampled_files, total_count).
     """
-    all_files = _list_all_photo_files(photo_dir, recursive=recursive)
+    all_files = _list_all_photo_files_parallel(photo_dir, recursive=recursive)
     total_count = len(all_files)
 
     if total_count <= sample_size:
@@ -189,16 +218,13 @@ def sample_photo_files(photo_dir, recursive=False, sample_size=30):
     ext_groups = sorted(by_ext.keys())
     remaining = sample_size
     per_ext = {}
-    # First pass: 1 per extension
     for ext in ext_groups:
         per_ext[ext] = 1
         remaining -= 1
-    # Second pass: distribute remaining proportionally
     if remaining > 0:
         for ext in ext_groups:
             share = int(remaining * len(by_ext[ext]) / total_count)
             per_ext[ext] += share
-        # Distribute any leftover to the largest groups
         allocated = sum(per_ext.values())
         leftover = sample_size - allocated
         sizes = sorted(ext_groups, key=lambda e: len(by_ext[e]), reverse=True)
@@ -214,7 +240,6 @@ def sample_photo_files(photo_dir, recursive=False, sample_size=30):
             for f in group:
                 sampled_set.add(f)
         else:
-            # Evenly spaced indices: first, last, and uniform middle
             step = (len(group) - 1) / max(n - 1, 1)
             for i in range(n):
                 idx = min(int(i * step), len(group) - 1)
