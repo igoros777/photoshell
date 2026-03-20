@@ -84,6 +84,50 @@ def _classify_field(name):
     return "text"
 
 
+def count_photo_files(photo_dir, recursive=False):
+    """Fast count of photo files without building a full list.
+
+    Also checks subfolders if top-level has 0 and recursive is False,
+    returning (count, actually_recursive) so the caller knows if
+    auto-recursion would be needed.
+    """
+    count = 0
+    actually_recursive = recursive
+
+    if recursive:
+        for root, _dirs, filenames in os.walk(photo_dir):
+            for fname in filenames:
+                ext = os.path.splitext(fname)[1].lower()
+                if ext in PHOTO_EXTENSIONS:
+                    count += 1
+    else:
+        try:
+            with os.scandir(photo_dir) as it:
+                for entry in it:
+                    try:
+                        if not entry.is_file():
+                            continue
+                    except (OSError, PermissionError):
+                        continue
+                    ext = os.path.splitext(entry.name)[1].lower()
+                    if ext in PHOTO_EXTENSIONS:
+                        count += 1
+        except (OSError, PermissionError):
+            pass
+
+        # If nothing at top level, check recursively
+        if count == 0:
+            for root, _dirs, filenames in os.walk(photo_dir):
+                for fname in filenames:
+                    ext = os.path.splitext(fname)[1].lower()
+                    if ext in PHOTO_EXTENSIONS:
+                        count += 1
+            if count > 0:
+                actually_recursive = True
+
+    return count, actually_recursive
+
+
 def _list_all_photo_files(photo_dir, recursive=False):
     """List all photo files in the directory.
 

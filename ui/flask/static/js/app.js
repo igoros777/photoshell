@@ -2217,24 +2217,33 @@ document.addEventListener("DOMContentLoaded", function() {
                 + msg + ' (' + elapsed + 's)</span>';
         }
 
-        // Phase 1: quick file count to warn about large collections
+        // Phase 1: fast file count (respects recursive setting, auto-detects subfolders)
         updateProgress("Counting files...");
-        fetch("/api/validate_folder?path=" + encodeURIComponent(dir))
+        fetch("/api/search/count?path=" + encodeURIComponent(dir)
+              + "&recursive=" + (recursive ? "1" : "0"))
             .then(function(res) { return res.json(); })
-            .then(function(vdata) {
-                var photoCount = vdata.photo_count || 0;
+            .then(function(cdata) {
+                var photoCount = cdata.count || 0;
+                var willRecurse = recursive || cdata.auto_recursive;
                 var countMsg = "Scanning metadata";
-                if (photoCount > 500) {
-                    countMsg = "Large collection (" + photoCount + " files) — scanning may take a moment";
-                } else if (photoCount > 0) {
+                if (photoCount === 0) {
+                    countMsg = "No photos found — checking subfolders";
+                } else if (photoCount > 1000) {
+                    countMsg = "Large collection (" + photoCount.toLocaleString() + " files) — this may take a minute";
+                } else if (photoCount > 500) {
+                    countMsg = "Scanning " + photoCount + " files — may take a moment";
+                } else {
                     countMsg = "Scanning " + photoCount + " files";
+                }
+                if (cdata.auto_recursive) {
+                    countMsg += " (including subfolders)";
                 }
                 updateProgress(countMsg);
                 progressTimer = setInterval(function() { updateProgress(countMsg); }, 1000);
 
-                // Phase 2: actual field discovery
+                // Phase 2: actual field discovery (use the effective recursive setting)
                 var url = "/api/search/discover?path=" + encodeURIComponent(dir)
-                        + "&recursive=" + (recursive ? "1" : "0");
+                        + "&recursive=" + (willRecurse ? "1" : "0");
                 return fetch(url);
             })
             .then(function(res) { return res.json(); })

@@ -30,7 +30,7 @@ from functions.constants import (
     STEP_TOOL_DEPS,
     TOOL_LABELS,
 )
-from functions.structured_search import discover_fields, structured_search
+from functions.structured_search import count_photo_files, discover_fields, structured_search
 
 logging.basicConfig(
     level=logging.INFO,
@@ -1469,6 +1469,33 @@ def _run_search(job_id, step, cwd):
         else:
             jobs[job_id]["status"] = "failed"
             jobs[job_id]["log"] += "\n*** Search failed ***\n"
+
+
+@app.route("/api/search/count")
+def api_search_count():
+    """Fast photo file count, with auto-recursion detection.
+
+    Query params:
+      path      - directory to count (required)
+      recursive - 0 or 1 (default 0)
+    """
+    path = request.args.get("path", "").strip()
+    if not path:
+        return jsonify({"error": "path is required"}), 400
+    target = _normalize_browser_path(path)
+    if not os.path.isdir(target):
+        return jsonify({"error": "Directory not found"}), 404
+    recursive = request.args.get("recursive", "0") in ("1", "true", "yes")
+    try:
+        count, actually_recursive = count_photo_files(target, recursive=recursive)
+        return jsonify({
+            "count": count,
+            "recursive": actually_recursive,
+            "auto_recursive": actually_recursive and not recursive,
+        })
+    except Exception as exc:
+        logger.error("Count failed: %s", exc)
+        return jsonify({"count": 0, "recursive": recursive, "auto_recursive": False})
 
 
 @app.route("/api/search/discover")
