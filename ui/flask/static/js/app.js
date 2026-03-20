@@ -2658,7 +2658,7 @@ document.addEventListener("DOMContentLoaded", function() {
             var thumbUrl = "/api/thumbnail?path=" + encodeURIComponent(filepath) + "&size=200";
             html += '<div class="search-result-card">';
             html += '<a href="#" class="photo-preview-link" data-idx="' + idx + '">';
-            html += '<img src="' + thumbUrl + '" alt="' + escapeHtml(m.filename || "") + '" loading="lazy">';
+            html += '<img src="' + thumbUrl + '" alt="' + escapeHtml(m.filename || "") + '" loading="eager">';
             html += '</a>';
             html += '<div class="search-result-meta">';
             html += '<div class="search-result-filename" title="' + escapeHtml(filepath) + '">' + escapeHtml(m.filename || "") + '</div>';
