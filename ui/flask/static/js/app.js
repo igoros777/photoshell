@@ -2548,6 +2548,7 @@ document.addEventListener("DOMContentLoaded", function() {
         searchResultsEl.innerHTML = "";
         structuredResultsHeader.style.display = "none";
         _structuredStartTime = Date.now();
+        _prefetchedPages = {};
         window._searchFiles = [];
         window._searchMetaMap = {};
 
@@ -2648,6 +2649,8 @@ document.addEventListener("DOMContentLoaded", function() {
             });
     }
 
+    var _prefetchedPages = {};  // page number -> true (already prefetched)
+
     function renderStructuredPage(files, metaMap, currentPage, totalPages) {
         var html = '<div class="search-results-grid">';
         files.forEach(function(filepath, idx) {
@@ -2699,6 +2702,35 @@ document.addEventListener("DOMContentLoaded", function() {
                     });
             });
         });
+
+        // Prefetch thumbnails for the next 3 pages
+        _prefetchedPages[currentPage] = true;
+        prefetchAheadPages(currentPage, totalPages);
+    }
+
+    function prefetchAheadPages(currentPage, totalPages) {
+        var storedJobId = searchResultsEl.dataset.jobId;
+        if (!storedJobId) return;
+
+        var LOOKAHEAD = 3;
+        for (var ahead = 1; ahead <= LOOKAHEAD; ahead++) {
+            (function(pg) {
+                if (pg > totalPages || _prefetchedPages[pg]) return;
+                _prefetchedPages[pg] = true;
+
+                fetch("/api/search/structured/status/" + storedJobId + "?page=" + pg + "&per_page=" + _structuredPerPage)
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) {
+                        if (!d.results) return;
+                        // Preload each thumbnail into the browser cache
+                        d.results.forEach(function(r) {
+                            var img = new Image();
+                            img.src = "/api/thumbnail?path=" + encodeURIComponent(r.file) + "&size=200";
+                        });
+                    })
+                    .catch(function() {}); // silent — prefetch is best-effort
+            })(currentPage + ahead);
+        }
     }
 
     // Cancel structured search
