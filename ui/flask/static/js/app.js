@@ -2259,11 +2259,13 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     function renderFilterRow(field, group) {
+        var filterMode = field.filter_mode || "";  // "regex", "keywords_all", "select", or ""
         var row = document.createElement("div");
         row.className = "structured-filter-row";
         row.dataset.fieldName = field.name;
         row.dataset.fieldGroup = group;
         row.dataset.fieldType = field.type;
+        row.dataset.filterMode = filterMode;
 
         var nameSpan = document.createElement("span");
         nameSpan.className = "filter-name";
@@ -2273,7 +2275,38 @@ document.addEventListener("DOMContentLoaded", function() {
         var inputsDiv = document.createElement("div");
         inputsDiv.className = "filter-inputs";
 
-        if (field.type === "numeric") {
+        // Special filter modes override the default type-based rendering
+        if (filterMode === "regex") {
+            var regexInput = document.createElement("input");
+            regexInput.type = "text";
+            regexInput.className = "form-control form-control-sm";
+            regexInput.placeholder = "regex pattern (e.g. IMG_\\d{4})";
+            regexInput.dataset.role = "value";
+            regexInput.style.maxWidth = "300px";
+            inputsDiv.appendChild(regexInput);
+            var regexHint = document.createElement("span");
+            regexHint.className = "range-sep";
+            regexHint.textContent = "regex";
+            regexHint.style.fontSize = "9px";
+            regexHint.style.opacity = "0.6";
+            inputsDiv.appendChild(regexHint);
+
+        } else if (filterMode === "keywords_all") {
+            var kwInput = document.createElement("input");
+            kwInput.type = "text";
+            kwInput.className = "form-control form-control-sm";
+            kwInput.placeholder = "space-separated terms (all must match)";
+            kwInput.dataset.role = "value";
+            kwInput.style.maxWidth = "300px";
+            inputsDiv.appendChild(kwInput);
+            var kwHint = document.createElement("span");
+            kwHint.className = "range-sep";
+            kwHint.textContent = "all match, regex";
+            kwHint.style.fontSize = "9px";
+            kwHint.style.opacity = "0.6";
+            inputsDiv.appendChild(kwHint);
+
+        } else if (field.type === "numeric") {
             var minInput = document.createElement("input");
             minInput.type = "number";
             minInput.className = "form-control form-control-sm";
@@ -2405,8 +2438,17 @@ document.addEventListener("DOMContentLoaded", function() {
         rows.forEach(function(row) {
             var fieldName = row.dataset.fieldName;
             var fieldType = row.dataset.fieldType;
+            var filterMode = row.dataset.filterMode || "";
 
-            if (fieldType === "numeric" || fieldType === "date") {
+            // Special filter modes override type-based collection
+            if (filterMode === "regex" || filterMode === "keywords_all") {
+                var valEl = row.querySelector('[data-role="value"]');
+                var val = valEl ? valEl.value.trim() : "";
+                if (val) {
+                    filters.push({field: fieldName, op: filterMode, value: val});
+                }
+
+            } else if (fieldType === "numeric" || fieldType === "date") {
                 var minEl = row.querySelector('[data-role="min"]');
                 var maxEl = row.querySelector('[data-role="max"]');
                 var minVal = minEl ? minEl.value.trim() : "";
@@ -2434,11 +2476,11 @@ document.addEventListener("DOMContentLoaded", function() {
                 }
 
             } else {
-                // text
-                var valEl = row.querySelector('[data-role="value"]');
-                var val = valEl ? valEl.value.trim() : "";
-                if (val) {
-                    filters.push({field: fieldName, op: "contains", value: val});
+                // generic text — default to contains
+                var txtEl = row.querySelector('[data-role="value"]');
+                var txtVal = txtEl ? txtEl.value.trim() : "";
+                if (txtVal) {
+                    filters.push({field: fieldName, op: "contains", value: txtVal});
                 }
             }
         });

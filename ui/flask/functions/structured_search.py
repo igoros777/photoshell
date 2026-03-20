@@ -32,6 +32,15 @@ DATE_FIELDS = {
 # Fields that are always text (file-level metadata, not camera tags)
 FILE_FIELDS = {"FileName", "FileType"}
 
+# Fields with special filter modes (overrides the default for their type)
+# These are communicated to the frontend via the "filter_mode" property
+FIELD_FILTER_MODES = {
+    "FileName": "regex",           # free-form PCRE regex
+    "Caption-Abstract": "regex",   # free-form PCRE regex
+    "Keywords": "keywords_all",    # space-separated, all must match, PCRE each
+    "FileType": "select",          # always multi-select (forced regardless of unique count)
+}
+
 # Default fields to show (most useful for photographers)
 DEFAULT_FIELDS = [
     # EXIF
@@ -282,8 +291,14 @@ def discover_fields(photo_dir, recursive=False, sample_size=10):
             "sample": info["sample"],
         }
 
-        # Mark text fields with <= 20 unique values as "select" type
-        if info["type"] == "text" and info["values"] and len(info["values"]) <= 20:
+        # Apply special filter modes for specific fields
+        if info["name"] in FIELD_FILTER_MODES:
+            entry["filter_mode"] = FIELD_FILTER_MODES[info["name"]]
+            # Force select type for fields that should always be multi-select
+            if FIELD_FILTER_MODES[info["name"]] == "select":
+                entry["type"] = "select"
+        elif info["type"] == "text" and info["values"] and len(info["values"]) <= 20:
+            # Mark text fields with <= 20 unique values as "select" type
             entry["type"] = "select"
 
         if info["group"] == "IPTC":
@@ -305,11 +320,14 @@ def apply_filters(records, filters, logic="AND"):
 
     Each filter dict has:
       - field: str (exiftool field name)
-      - op: str ("range", "eq", "contains", "in")
+      - op: str ("range", "eq", "contains", "in", "regex", "keywords_all")
       - For "range": min and/or max (numeric or date string)
       - For "eq": value (case-insensitive exact match)
       - For "contains": value (case-insensitive substring)
       - For "in": values (list, any match)
+      - For "regex": value (PCRE regex pattern, case-insensitive)
+      - For "keywords_all": value (space-separated terms, ALL must match,
+        each term is a regex pattern matched against the full field value)
 
     With AND logic all filters must pass; with OR any filter must pass.
 
@@ -360,6 +378,10 @@ def _check_filter(rec, field, op, filt):
         return _check_contains(value, filt)
     elif op == "in":
         return _check_in(value, filt)
+    elif op == "regex":
+        return _check_regex(value, filt)
+    elif op == "keywords_all":
+        return _check_keywords_all(value, filt)
 
     return False
 
@@ -427,6 +449,55 @@ def _check_in(value, filt):
     target_values = filt.get("values", [])
     str_val = str(value).strip().lower()
     return any(str_val == str(v).strip().lower() for v in target_values)
+
+
+def _check_regex(value, filt):
+    """Check a regex filter (PCRE pattern, case-insensitive).
+
+    Returns True if the pattern matches anywhere in the value string.
+    Invalid regex patterns return False (no match) rather than crashing.
+    """
+    pattern = filt.get("value", "")
+    if not pattern:
+        return True
+    try:
+        return bool(re.search(pattern, str(value), re.IGNORECASE))
+    except re.error:
+        return False
+
+
+def _check_keywords_all(value, filt):
+    """Check a keywords filter: space-separated terms, ALL must match.
+
+    Each term is treated as a PCRE regex pattern (case-insensitive).
+    The value is the full field content (e.g., a keyword list or caption).
+    For list-type values (exiftool returns Keywords as a list), the terms
+    are matched against the joined string.
+
+    Example: value="mountain, sunset, landscape"
+             filter="mount sun" → True (both match)
+             filter="mount ocean" → False (ocean doesn't match)
+    """
+    raw_terms = filt.get("value", "")
+    if not raw_terms or not raw_terms.strip():
+        return True
+
+    terms = raw_terms.strip().split()
+
+    # If the value is a list (exiftool returns Keywords as list), join it
+    if isinstance(value, list):
+        str_val = ", ".join(str(v) for v in value)
+    else:
+        str_val = str(value)
+
+    for term in terms:
+        try:
+            if not re.search(term, str_val, re.IGNORECASE):
+                return False
+        except re.error:
+            return False
+
+    return True
 
 
 def structured_search(photo_dir, filters, recursive=False, logic="AND"):

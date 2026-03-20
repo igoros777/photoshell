@@ -432,6 +432,122 @@ class TestApplyFiltersNonNumeric:
         assert result[0]["FileName"] == "b.jpg"
 
 
+class TestApplyFiltersRegex:
+    """Test the 'regex' filter operator (PCRE, case-insensitive)."""
+
+    def test_regex_simple_match(self):
+        records = [
+            {"FileName": "IMG_0001.jpg"},
+            {"FileName": "DSC_1234.jpg"},
+            {"FileName": "IMG_0099.jpg"},
+        ]
+        filters = [{"field": "FileName", "op": "regex", "value": "^IMG_"}]
+        result = apply_filters(records, filters)
+        assert len(result) == 2
+
+    def test_regex_case_insensitive(self):
+        records = [
+            {"FileName": "img_0001.jpg"},
+            {"FileName": "IMG_0002.jpg"},
+        ]
+        filters = [{"field": "FileName", "op": "regex", "value": "^img_"}]
+        result = apply_filters(records, filters)
+        assert len(result) == 2
+
+    def test_regex_digit_pattern(self):
+        records = [
+            {"FileName": "IMG_0001.jpg"},
+            {"FileName": "photo.jpg"},
+            {"FileName": "IMG_9999.jpg"},
+        ]
+        filters = [{"field": "FileName", "op": "regex", "value": r"IMG_\d{4}"}]
+        result = apply_filters(records, filters)
+        assert len(result) == 2
+
+    def test_regex_no_match(self):
+        records = [{"FileName": "photo.jpg"}]
+        filters = [{"field": "FileName", "op": "regex", "value": "^DSC_"}]
+        result = apply_filters(records, filters)
+        assert len(result) == 0
+
+    def test_regex_invalid_pattern_returns_no_match(self):
+        records = [{"FileName": "test.jpg"}]
+        filters = [{"field": "FileName", "op": "regex", "value": "[invalid"}]
+        result = apply_filters(records, filters)
+        assert len(result) == 0
+
+    def test_regex_empty_pattern_matches_all(self):
+        records = [{"FileName": "a.jpg"}, {"FileName": "b.jpg"}]
+        filters = [{"field": "FileName", "op": "regex", "value": ""}]
+        result = apply_filters(records, filters)
+        assert len(result) == 2
+
+    def test_regex_on_caption(self):
+        records = [
+            {"Caption-Abstract": "Aerial view of mountains at sunset"},
+            {"Caption-Abstract": "Close-up of flowers in a garden"},
+            {"Caption-Abstract": "Mountain trail with hikers"},
+        ]
+        filters = [{"field": "Caption-Abstract", "op": "regex", "value": "mountain"}]
+        result = apply_filters(records, filters)
+        assert len(result) == 2
+
+
+class TestApplyFiltersKeywordsAll:
+    """Test the 'keywords_all' filter (space-separated, all must match, regex)."""
+
+    def test_single_term_matches(self):
+        records = [
+            {"Keywords": ["mountain", "sunset", "landscape"]},
+            {"Keywords": ["ocean", "beach"]},
+        ]
+        filters = [{"field": "Keywords", "op": "keywords_all", "value": "mount"}]
+        result = apply_filters(records, filters)
+        assert len(result) == 1
+
+    def test_all_terms_must_match(self):
+        records = [
+            {"Keywords": ["mountain", "sunset", "landscape"]},
+            {"Keywords": ["mountain", "river"]},
+        ]
+        filters = [{"field": "Keywords", "op": "keywords_all", "value": "mount sunset"}]
+        result = apply_filters(records, filters)
+        assert len(result) == 1
+
+    def test_term_not_found_excludes(self):
+        records = [{"Keywords": ["mountain", "sunset"]}]
+        filters = [{"field": "Keywords", "op": "keywords_all", "value": "mount ocean"}]
+        result = apply_filters(records, filters)
+        assert len(result) == 0
+
+    def test_regex_terms(self):
+        records = [
+            {"Keywords": ["mountain vista", "golden hour", "landscape"]},
+            {"Keywords": ["city skyline", "night"]},
+        ]
+        filters = [{"field": "Keywords", "op": "keywords_all", "value": r"mount.*vista golden"}]
+        result = apply_filters(records, filters)
+        assert len(result) == 1
+
+    def test_keywords_as_string(self):
+        records = [{"Keywords": "mountain, sunset, landscape"}]
+        filters = [{"field": "Keywords", "op": "keywords_all", "value": "mount land"}]
+        result = apply_filters(records, filters)
+        assert len(result) == 1
+
+    def test_empty_value_matches_all(self):
+        records = [{"Keywords": ["a"]}, {"Keywords": ["b"]}]
+        filters = [{"field": "Keywords", "op": "keywords_all", "value": ""}]
+        result = apply_filters(records, filters)
+        assert len(result) == 2
+
+    def test_invalid_regex_term_excludes(self):
+        records = [{"Keywords": ["test"]}]
+        filters = [{"field": "Keywords", "op": "keywords_all", "value": "[bad"}]
+        result = apply_filters(records, filters)
+        assert len(result) == 0
+
+
 # ---------------------------------------------------------------------------
 # sample_photo_files
 # ---------------------------------------------------------------------------
