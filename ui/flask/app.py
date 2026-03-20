@@ -1478,7 +1478,7 @@ def api_search_discover():
     Query params:
       path        - directory to scan (required)
       recursive   - 0 or 1 (default 0)
-      sample_size - number of files to sample (default 10)
+      sample_size - number of files to sample (default 30)
     """
     logger.info("GET /api/search/discover")
     path = request.args.get("path", "").strip()
@@ -1488,9 +1488,9 @@ def api_search_discover():
     recursive = request.args.get("recursive", "0") in ("1", "true", "yes")
 
     try:
-        sample_size = int(request.args.get("sample_size", 10))
+        sample_size = int(request.args.get("sample_size", 30))
     except (ValueError, TypeError):
-        sample_size = 10
+        sample_size = 30
 
     target = _normalize_browser_path(path)
     if not os.path.isdir(target):

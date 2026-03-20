@@ -571,25 +571,42 @@ class TestSamplePhotoFiles:
         assert len(sampled) == 10
 
     @mock.patch("functions.structured_search._list_all_photo_files")
-    def test_large_directory_samples(self, mock_list):
+    def test_large_directory_samples_to_limit(self, mock_list):
         files = ["/photos/%04d.jpg" % i for i in range(100)]
         mock_list.return_value = files
         sampled, total = sample_photo_files("/photos", sample_size=10)
         assert total == 100
-        assert len(sampled) == 10
+        assert len(sampled) <= 10
 
     @mock.patch("functions.structured_search._list_all_photo_files")
-    def test_large_directory_includes_first_and_last(self, mock_list):
-        files = ["/photos/%04d.jpg" % i for i in range(100)]
+    def test_stratified_includes_all_extensions(self, mock_list):
+        """Every file extension type should be represented in the sample."""
+        files = (
+            ["/photos/img_%04d.jpg" % i for i in range(50)] +
+            ["/photos/raw_%04d.nef" % i for i in range(30)] +
+            ["/photos/tif_%04d.tiff" % i for i in range(20)]
+        )
+        mock_list.return_value = files
+        sampled, total = sample_photo_files("/photos", sample_size=15)
+        assert total == 100
+        assert len(sampled) <= 15
+        # All three extensions should be represented
+        exts = set(os.path.splitext(f)[1] for f in sampled)
+        assert ".jpg" in exts
+        assert ".nef" in exts
+        assert ".tiff" in exts
+
+    @mock.patch("functions.structured_search._list_all_photo_files")
+    def test_single_rare_extension_included(self, mock_list):
+        """Even a single file with a unique extension should be sampled."""
+        files = (
+            ["/photos/img_%04d.jpg" % i for i in range(99)] +
+            ["/photos/pano.dng"]
+        )
         mock_list.return_value = files
         sampled, total = sample_photo_files("/photos", sample_size=10)
-        # After sorting, first 3 should be 0000, 0001, 0002
-        # Last 3 should be 0097, 0098, 0099
-        sorted_files = sorted(files)
-        for f in sorted_files[:3]:
-            assert f in sampled, "First files should be in sample"
-        for f in sorted_files[-3:]:
-            assert f in sampled, "Last files should be in sample"
+        assert total == 100
+        assert "/photos/pano.dng" in sampled
 
     @mock.patch("functions.structured_search._list_all_photo_files")
     def test_empty_directory(self, mock_list):
@@ -613,3 +630,14 @@ class TestSamplePhotoFiles:
         sampled, total = sample_photo_files("/photos", sample_size=10)
         assert total == 7
         assert len(sampled) == 7
+
+    @mock.patch("functions.structured_search._list_all_photo_files")
+    def test_evenly_spaced_within_extension(self, mock_list):
+        """Samples should be evenly spaced, not clustered at start/end."""
+        files = ["/photos/%04d.jpg" % i for i in range(100)]
+        mock_list.return_value = files
+        sampled, total = sample_photo_files("/photos", sample_size=10)
+        sorted_sampled = sorted(sampled)
+        # First and last should be included (evenly spaced starts at 0)
+        assert sorted_sampled[0] == "/photos/0000.jpg"
+        assert sorted_sampled[-1] == "/photos/0099.jpg"

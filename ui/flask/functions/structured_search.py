@@ -113,11 +113,15 @@ def _list_all_photo_files(photo_dir, recursive=False):
     return files
 
 
-def sample_photo_files(photo_dir, recursive=False, sample_size=10):
+def sample_photo_files(photo_dir, recursive=False, sample_size=30):
     """Sample photo files from a directory for field discovery.
 
-    If total > sample_size, pick first 3, last 3, and random middle ones
-    to reach sample_size.
+    Uses stratified sampling to capture the diversity of a collection:
+    1. Group files by extension (ensures every format is represented)
+    2. From each extension group, pick files at evenly spaced positions
+       (captures different cameras, dates, naming patterns)
+    3. If the stratified set is smaller than sample_size, fill remaining
+       slots with evenly spaced picks from the full sorted list
 
     Returns (sampled_files, total_count).
     """
@@ -127,31 +131,81 @@ def sample_photo_files(photo_dir, recursive=False, sample_size=10):
     if total_count <= sample_size:
         return all_files, total_count
 
-    # Sort for deterministic first/last
-    all_files.sort()
+    # Group by extension to ensure every format is represented
+    by_ext = {}
+    for f in all_files:
+        ext = os.path.splitext(f)[1].lower()
+        by_ext.setdefault(ext, []).append(f)
 
-    first_n = 3
-    last_n = 3
-    middle_needed = sample_size - first_n - last_n
+    # Sort each group for deterministic spacing
+    for ext in by_ext:
+        by_ext[ext].sort()
 
-    first = all_files[:first_n]
-    last = all_files[-last_n:]
+    # Allocate samples per extension proportionally, minimum 1 each
+    ext_groups = sorted(by_ext.keys())
+    remaining = sample_size
+    per_ext = {}
+    # First pass: 1 per extension
+    for ext in ext_groups:
+        per_ext[ext] = 1
+        remaining -= 1
+    # Second pass: distribute remaining proportionally
+    if remaining > 0:
+        for ext in ext_groups:
+            share = int(remaining * len(by_ext[ext]) / total_count)
+            per_ext[ext] += share
+        # Distribute any leftover to the largest groups
+        allocated = sum(per_ext.values())
+        leftover = sample_size - allocated
+        sizes = sorted(ext_groups, key=lambda e: len(by_ext[e]), reverse=True)
+        for i in range(max(0, leftover)):
+            per_ext[sizes[i % len(sizes)]] += 1
 
-    # Middle candidates: everything except first_n and last_n
-    middle_candidates = all_files[first_n:-last_n]
-    if middle_needed > 0 and middle_candidates:
-        middle = random.sample(
-            middle_candidates,
-            min(middle_needed, len(middle_candidates)),
-        )
-    else:
-        middle = []
+    # Pick evenly spaced files from each extension group
+    sampled_set = set()
+    for ext in ext_groups:
+        group = by_ext[ext]
+        n = min(per_ext[ext], len(group))
+        if n >= len(group):
+            for f in group:
+                sampled_set.add(f)
+        else:
+            # Evenly spaced indices: first, last, and uniform middle
+            step = (len(group) - 1) / max(n - 1, 1)
+            for i in range(n):
+                idx = min(int(i * step), len(group) - 1)
+                sampled_set.add(group[idx])
 
-    sampled = first + middle + last
+    sampled = sorted(sampled_set)
     return sampled, total_count
 
 
-def discover_fields(photo_dir, recursive=False, sample_size=10):
+def _run_exiftool_batch(files):
+    """Run exiftool -json -n -a -G1 on a batch of files.
+
+    Returns a list of record dicts, or None on failure.
+    Thread-safe — used for parallel batch processing.
+    """
+    if not files:
+        return None
+    cmd = ["exiftool", "-json", "-n", "-a", "-G1"] + files
+    try:
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+        if proc.returncode not in (0, 1) or not proc.stdout:
+            return None
+        return json.loads(proc.stdout)
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError):
+        return None
+
+
+def discover_fields(photo_dir, recursive=False, sample_size=30):
     """Discover available EXIF/IPTC fields by sampling photos.
 
     Runs exiftool on a sample of files to detect field names, types,
@@ -173,26 +227,29 @@ def discover_fields(photo_dir, recursive=False, sample_size=10):
         }
 
     # Run exiftool with group names (-G1) and numeric output (-n)
-    cmd = ["exiftool", "-json", "-n", "-a", "-G1"] + sampled_files
-    try:
-        proc = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            encoding="utf-8",
-            errors="replace",
-            timeout=30,
-        )
-        if proc.returncode not in (0, 1) or not proc.stdout:
-            return {
-                "exif_fields": [],
-                "iptc_fields": [],
-                "sampled": len(sampled_files),
-                "total": total_count,
-                "default_fields": DEFAULT_FIELDS,
-            }
-        records = json.loads(proc.stdout)
-    except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError):
+    # Split into parallel batches for faster processing on large samples
+    batch_size = 10
+    batches = [sampled_files[i:i + batch_size]
+               for i in range(0, len(sampled_files), batch_size)]
+
+    all_records = []
+    if len(batches) == 1:
+        # Single batch — no threading overhead
+        records = _run_exiftool_batch(batches[0])
+        if records is not None:
+            all_records = records
+    else:
+        # Multiple batches — run in parallel threads
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=min(len(batches), 4)) as pool:
+            futures = {pool.submit(_run_exiftool_batch, batch): batch
+                       for batch in batches}
+            for future in as_completed(futures):
+                result = future.result()
+                if result:
+                    all_records.extend(result)
+
+    if not all_records:
         return {
             "exif_fields": [],
             "iptc_fields": [],
@@ -205,7 +262,7 @@ def discover_fields(photo_dir, recursive=False, sample_size=10):
     # field_key -> {group, name, type, values (set), min, max, sample}
     field_info = {}
 
-    for rec in records:
+    for rec in all_records:
         for raw_key, value in rec.items():
             if raw_key == "SourceFile":
                 continue
