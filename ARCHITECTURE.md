@@ -25,12 +25,16 @@ PhotoShell is a local-first photo workflow toolkit. It has two layers: a set of 
 │  /api/prompts     → CRUD for annotation prompt templates     │
 │  /api/search      → standalone EXIF/IPTC metadata search     │
 │  /api/search_meta → batch metadata for search result files   │
+│  /api/search/discover → field discovery with sampling        │
+│  /api/search/structured → structured search (async job)      │
+│  /api/search/count  → fast photo file count                  │
 │  /api/thumbnail   → in-memory thumbnail generation           │
 │  /api/backup      → estimate + run .tar.gz archive           │
 │  /api/docs        → serves markdown docs for in-app reading  │
 │                                                              │
-│  constants.py         → shared PHOTO_EXTENSIONS, labels      │
-│  advisory_checks.py   → metadata pre-flight logic            │
+│  constants.py           → shared PHOTO_EXTENSIONS, labels    │
+│  advisory_checks.py     → metadata pre-flight logic          │
+│  structured_search.py   → field discovery + filtering engine │
 │                                                              │
 │  In-memory: jobs{} (with TTL cleanup)                        │
 │  On-disk:   .photoshell/ (future: presets, undo log, cache)  │

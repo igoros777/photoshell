@@ -36,11 +36,19 @@ Drop a folder from the file manager onto the UI to set the photo directory. Brow
 - **Effort:** S (human: ~3 hours / CC: ~15 min)
 
 ### Integration Tests for Flask Endpoints
-pytest test suite covering all API endpoints — happy path + one error case each. Security tests for path traversal, CSRF, and XSS. Undo system tests.
+pytest test suite covering all API endpoints — happy path + one error case each. Undo system tests. Note: `tests/test_structured_search.py` already has 57 unit tests for the structured search module, and CodeQL path/command line security alerts are fixed.
 - **Priority:** P2
 - **Effort:** S (human: ~1 day / CC: ~15 min)
 
 ## Completed
+
+### Advanced Structured Search
+**Completed:** v1.2.0 (2026-03-20)
+Field discovery, numeric/date range filters, PCRE regex, parallel exiftool, paginated results with thumbnail prefetching.
+
+### CodeQL Security Fixes
+**Completed:** v1.2.0 (2026-03-20)
+Fixed 20 path expression alerts, 1 command line alert, disabled debug mode on network interfaces.
 
 ### Phase 1: Stability, Security, and Performance Hardening
 **Completed:** v1.0.0 (2026-03-19)

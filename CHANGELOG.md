@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.2.0 — 2026-03-20
+
+### Structured Search
+- Search photos by EXIF/IPTC field values: numeric ranges (aperture, focal length, ISO, exposure), date ranges, camera model, lens model, file type, keywords, and captions
+- Field discovery scans a sample of photos to detect available fields, value ranges, and camera models — with stratified sampling across file types and parallel exiftool for speed
+- PCRE regex support for filename, caption, and keyword searches (e.g., `IMG_\d{4}`, space-separated keyword terms with all-must-match logic)
+- Tabbed search UI: "Structured" tab for field-based queries, "Text Search" tab for the original grep-style search
+- Paginated results (50 per page) with Previous/Next navigation — handles thousands of matches without overloading the browser
+- Thumbnail prefetching: current page loads eagerly, next 3 pages preload in the background
+- Cancel button for long-running searches with elapsed time indicator
+- Auto-recursive: discovers photos in subfolders when the selected folder has none at the top level
+
+### Performance
+- Parallel exiftool: structured search splits files across multiple exiftool processes (up to 8 workers) for ~4-6x speedup on multi-core systems
+- Parallel directory scanning: 8-thread BFS for recursive file listing
+- Tiered thumbnail strategy: embedded JPEG for grid (fast), camera preview for modal (sharp), direct serve for small JPEGs
+
+### Security
+- Fixed all 20 CodeQL "Uncontrolled data used in path expression" alerts with path sanitization layer (`_sanitize_path`, `_sanitize_file_path`, `_sanitize_dir_path`)
+- Fixed "Uncontrolled command line" alert: file paths passed via stdin (`-@ -`) instead of command line arguments
+- Flask debug mode disabled on network interfaces (only enabled on localhost)
+- Added PR template and Code of Conduct for GitHub Community Standards
+
+### Bug Fixes
+- Photo preview modal no longer flashes the previous image while loading — shows a spinner until the new image is ready
+- Image cleared from memory when preview modal closes
+
 ## 1.1.0 — 2026-03-19
 
 ### Search & Discovery
