@@ -29,9 +29,17 @@ DATE_FIELDS = {
     "DateCreated", "TimeCreated",
 }
 
+# Fields that are always text (file-level metadata, not camera tags)
+FILE_FIELDS = {"FileName", "FileType"}
+
 # Default fields to show (most useful for photographers)
 DEFAULT_FIELDS = [
+    # EXIF
     "FNumber", "FocalLength", "ISO", "DateTimeOriginal", "Model", "LensModel",
+    # IPTC
+    "Caption-Abstract", "Keywords",
+    # File
+    "FileName", "FileType",
 ]
 
 # Date formats to try when parsing date strings
@@ -442,7 +450,7 @@ def structured_search(photo_dir, filters, recursive=False, logic="AND"):
             filter_fields.add(field)
 
     # Always include standard metadata fields
-    standard_fields = {"SourceFile", "FileName", "UserComment",
+    standard_fields = {"SourceFile", "FileName", "FileType", "UserComment",
                        "Caption-Abstract", "Keywords"}
     all_fields = filter_fields | standard_fields
 
