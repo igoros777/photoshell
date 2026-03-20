@@ -2069,15 +2069,18 @@ document.addEventListener("DOMContentLoaded", function() {
             var metaMap = {};
             results.forEach(function(r) { metaMap[r.file] = r; });
 
+            // Store metadata for modal use
+            window._searchMetaMap = metaMap;
+            window._searchFiles = files;
+
             // Render grid — use original file order
             html += '<div class="search-results-grid">';
-            files.forEach(function(filepath) {
+            files.forEach(function(filepath, idx) {
                 var m = metaMap[filepath] || {filename: filepath.split("/").pop(), comment: "", caption: "", keywords: ""};
                 var thumbUrl = "/api/thumbnail?path=" + encodeURIComponent(filepath) + "&size=200";
-                var fullUrl = "/api/thumbnail?path=" + encodeURIComponent(filepath) + "&size=800";
 
                 html += '<div class="search-result-card">';
-                html += '<a href="' + fullUrl + '" target="_blank">';
+                html += '<a href="#" class="photo-preview-link" data-idx="' + idx + '">';
                 html += '<img src="' + thumbUrl + '" alt="' + escapeHtml(m.filename) + '" loading="lazy">';
                 html += '</a>';
                 html += '<div class="search-result-meta">';
@@ -2096,23 +2099,76 @@ document.addEventListener("DOMContentLoaded", function() {
             html += '</div>';
 
             searchResultsEl.innerHTML = html;
+            wirePhotoPreviewLinks();
         })
         .catch(function() {
             // Fallback: show thumbnails without metadata
+            window._searchMetaMap = {};
+            window._searchFiles = files;
             var html = '<div class="search-results-header">'
                 + '<span><i class="bi bi-images"></i> ' + files.length + ' matches</span></div>';
             html += '<div class="search-results-grid">';
-            files.forEach(function(filepath) {
+            files.forEach(function(filepath, idx) {
                 var fname = filepath.split("/").pop();
                 var thumbUrl = "/api/thumbnail?path=" + encodeURIComponent(filepath) + "&size=200";
                 html += '<div class="search-result-card">';
-                html += '<a href="' + thumbUrl + '" target="_blank"><img src="' + thumbUrl + '" alt="' + escapeHtml(fname) + '" loading="lazy"></a>';
+                html += '<a href="#" class="photo-preview-link" data-idx="' + idx + '"><img src="' + thumbUrl + '" alt="' + escapeHtml(fname) + '" loading="lazy"></a>';
                 html += '<div class="search-result-meta"><div class="search-result-filename">' + escapeHtml(fname) + '</div></div>';
                 html += '</div>';
             });
             html += '</div>';
             searchResultsEl.innerHTML = html;
+            wirePhotoPreviewLinks();
         });
+    }
+
+    // ---- Photo preview modal ----
+
+    var photoPreviewModal = new bootstrap.Modal(document.getElementById("photoPreviewModal"));
+    var photoPreviewImg = document.getElementById("photo-preview-img");
+    var photoPreviewTitle = document.getElementById("photo-preview-title");
+    var photoPreviewFooter = document.getElementById("photo-preview-footer");
+
+    function wirePhotoPreviewLinks() {
+        searchResultsEl.querySelectorAll(".photo-preview-link").forEach(function(link) {
+            link.addEventListener("click", function(e) {
+                e.preventDefault();
+                var idx = parseInt(link.dataset.idx, 10);
+                openPhotoPreview(idx);
+            });
+        });
+    }
+
+    function openPhotoPreview(idx) {
+        var files = window._searchFiles || [];
+        var metaMap = window._searchMetaMap || {};
+        if (idx < 0 || idx >= files.length) return;
+
+        var filepath = files[idx];
+        var m = metaMap[filepath] || {filename: filepath.split("/").pop(), comment: "", caption: "", keywords: ""};
+        var fullUrl = "/api/thumbnail?path=" + encodeURIComponent(filepath) + "&size=1200";
+
+        photoPreviewTitle.textContent = m.filename;
+        photoPreviewImg.src = fullUrl;
+        photoPreviewImg.alt = m.filename;
+
+        // Build footer with metadata
+        var footerHtml = '<div class="preview-meta-filename">' + escapeHtml(m.filename) + '</div>';
+        if (m.caption) {
+            footerHtml += '<div class="preview-meta-field"><span class="preview-meta-label">Caption</span>' + escapeHtml(m.caption) + '</div>';
+        }
+        if (m.comment) {
+            footerHtml += '<div class="preview-meta-field"><span class="preview-meta-label">Summary</span>' + escapeHtml(m.comment) + '</div>';
+        }
+        if (m.keywords) {
+            footerHtml += '<div class="preview-meta-field"><span class="preview-meta-label">Keywords</span>' + escapeHtml(m.keywords) + '</div>';
+        }
+        if (!m.caption && !m.comment && !m.keywords) {
+            footerHtml += '<div class="preview-meta-field" style="color:var(--ps-text-dim)">No metadata available</div>';
+        }
+        photoPreviewFooter.innerHTML = footerHtml;
+
+        photoPreviewModal.show();
     }
 
     // ---- Backup Folder ----

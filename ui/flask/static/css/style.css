@@ -1408,6 +1408,44 @@ body {
     background: var(--ps-text-dim);
 }
 
+/* ---- Photo preview modal ---- */
+
+#photoPreviewModal .modal-content {
+    background: var(--ps-surface) !important;
+    border-color: var(--ps-border) !important;
+}
+
+#photo-preview-footer {
+    background: var(--ps-surface);
+    border-top: 1px solid var(--ps-border);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.preview-meta-filename {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ps-text);
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--ps-border);
+    margin-bottom: 4px;
+}
+
+.preview-meta-field {
+    color: var(--ps-text-muted);
+    margin-bottom: 3px;
+}
+
+.preview-meta-label {
+    color: var(--ps-text-dim);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    font-weight: 600;
+    margin-right: 6px;
+}
+
 /* ---- Modal overrides ---- */
 
 .modal-backdrop {
