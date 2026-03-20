@@ -2613,7 +2613,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
         var filepath = files[idx];
         var m = metaMap[filepath] || {filename: filepath.split("/").pop(), comment: "", caption: "", keywords: ""};
-        var fullUrl = "/api/thumbnail?path=" + encodeURIComponent(filepath) + "&size=1200";
+        var fullUrl = "/api/thumbnail?path=" + encodeURIComponent(filepath) + "&size=1600";
 
         photoPreviewTitle.textContent = m.filename;
         photoPreviewImg.src = fullUrl;

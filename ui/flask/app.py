@@ -1144,15 +1144,19 @@ def api_folder_meta():
 
 @app.route("/api/thumbnail")
 def api_thumbnail():
-    """Serve a thumbnail for a photo file, generated in-memory.
+    """Serve a photo image at the requested size, generated in-memory.
 
-    Uses exiftool to extract the embedded JPEG thumbnail (fastest), with
-    a fallback to reading and resizing the full image via Pillow.
+    Uses a tiered strategy based on requested size:
+    - Small (≤400px): exiftool -b -ThumbnailImage (tiny embedded JPEG, ~50ms)
+    - Medium (≤1600px): exiftool -b -PreviewImage (camera's larger preview,
+      typically 1200-1600px, ~100ms) or Pillow resize
+    - Large (>1600px): Pillow reads the full file and resizes
+
     No temp files are written to disk.
 
     Query params:
       path - absolute path to the photo file (required)
-      size - max thumbnail dimension in pixels (default: 200)
+      size - max dimension in pixels (default: 200, max: 2400)
     """
     import io
     filepath = request.args.get("path", "").strip()
@@ -1168,36 +1172,66 @@ def api_thumbnail():
         size = int(request.args.get("size", 200))
     except (ValueError, TypeError):
         size = 200
-    size = max(32, min(size, 800))
+    size = max(32, min(size, 2400))
 
-    # Strategy 1: extract embedded JPEG thumbnail via exiftool (fast, ~50ms)
-    try:
-        proc = subprocess.run(
-            ["exiftool", "-b", "-ThumbnailImage", filepath],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10,
-        )
-        if proc.returncode == 0 and proc.stdout and len(proc.stdout) > 100:
-            return send_file(
-                io.BytesIO(proc.stdout),
-                mimetype="image/jpeg",
-                max_age=3600,
+    # For small sizes (grid thumbnails), use the tiny embedded thumbnail
+    if size <= 400:
+        try:
+            proc = subprocess.run(
+                ["exiftool", "-b", "-ThumbnailImage", filepath],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10,
             )
-    except Exception:
-        pass
+            if proc.returncode == 0 and proc.stdout and len(proc.stdout) > 100:
+                return send_file(
+                    io.BytesIO(proc.stdout),
+                    mimetype="image/jpeg",
+                    max_age=3600,
+                )
+        except Exception:
+            pass
 
-    # Strategy 2: read with Pillow and resize (slower, works for all formats)
+    # For medium sizes (preview modal), try the camera's larger preview image
+    # Most cameras embed a 1200-1600px JPEG preview alongside the full RAW
+    if size <= 1600:
+        try:
+            proc = subprocess.run(
+                ["exiftool", "-b", "-PreviewImage", filepath],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15,
+            )
+            if proc.returncode == 0 and proc.stdout and len(proc.stdout) > 1000:
+                return send_file(
+                    io.BytesIO(proc.stdout),
+                    mimetype="image/jpeg",
+                    max_age=3600,
+                )
+        except Exception:
+            pass
+
+    # For JPEGs, serve the file directly if it's not too large, or resize
+    ext = os.path.splitext(filepath)[1].lower()
+    if ext in (".jpg", ".jpeg"):
+        try:
+            file_size = os.path.getsize(filepath)
+            # If under 5MB, serve directly (it's already a JPEG)
+            if file_size < 5 * 1024 * 1024:
+                return send_file(filepath, mimetype="image/jpeg", max_age=3600)
+        except OSError:
+            pass
+
+    # Pillow resize — works for all formats including RAW (if Pillow supports it)
     try:
         from PIL import Image
         img = Image.open(filepath)
         img.thumbnail((size, size))
+        quality = 85 if size > 400 else 75
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=75)
+        img.save(buf, format="JPEG", quality=quality)
         buf.seek(0)
         return send_file(buf, mimetype="image/jpeg", max_age=3600)
     except Exception:
         pass
 
-    # Strategy 3: return a 1x1 transparent pixel as fallback
+    # Last resort: return a 1x1 transparent pixel
     return send_file(
         io.BytesIO(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01'
                     b'\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89'
