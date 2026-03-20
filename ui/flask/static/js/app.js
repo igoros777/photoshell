@@ -2205,15 +2205,41 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         var recursive = document.getElementById("search-recursive").checked;
-        discoverStatus.innerHTML = '<span class="text-muted"><i class="bi bi-arrow-repeat"></i> Discovering fields...</span>';
         btnDiscoverFields.disabled = true;
 
-        var url = "/api/search/discover?path=" + encodeURIComponent(dir)
-                + "&recursive=" + (recursive ? "1" : "0");
+        // Show progress indicator with elapsed timer
+        var startTime = Date.now();
+        var progressTimer = null;
+        function updateProgress(msg) {
+            var elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+            discoverStatus.innerHTML = '<span class="text-muted">'
+                + '<i class="bi bi-arrow-repeat" style="animation:spin 1s linear infinite"></i> '
+                + msg + ' (' + elapsed + 's)</span>';
+        }
 
-        fetch(url)
+        // Phase 1: quick file count to warn about large collections
+        updateProgress("Counting files...");
+        fetch("/api/validate_folder?path=" + encodeURIComponent(dir))
+            .then(function(res) { return res.json(); })
+            .then(function(vdata) {
+                var photoCount = vdata.photo_count || 0;
+                var countMsg = "Scanning metadata";
+                if (photoCount > 500) {
+                    countMsg = "Large collection (" + photoCount + " files) — scanning may take a moment";
+                } else if (photoCount > 0) {
+                    countMsg = "Scanning " + photoCount + " files";
+                }
+                updateProgress(countMsg);
+                progressTimer = setInterval(function() { updateProgress(countMsg); }, 1000);
+
+                // Phase 2: actual field discovery
+                var url = "/api/search/discover?path=" + encodeURIComponent(dir)
+                        + "&recursive=" + (recursive ? "1" : "0");
+                return fetch(url);
+            })
             .then(function(res) { return res.json(); })
             .then(function(data) {
+                if (progressTimer) clearInterval(progressTimer);
                 btnDiscoverFields.disabled = false;
 
                 if (data.error) {
@@ -2259,8 +2285,10 @@ document.addEventListener("DOMContentLoaded", function() {
                 // Populate add-field dropdown
                 refreshAddFieldDropdown();
 
+                var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
                 var statusMsg = '<span style="color:var(--ps-success)"><i class="bi bi-check-circle"></i> '
-                    + 'Sampled ' + (data.sampled || 0) + ' of ' + (data.total || 0) + ' files';
+                    + 'Sampled ' + (data.sampled || 0) + ' of ' + (data.total || 0) + ' files'
+                    + ' in ' + elapsed + 's';
                 if (data.auto_recursive) {
                     statusMsg += '</span> <span style="color:var(--ps-warning)"><i class="bi bi-exclamation-triangle"></i> '
                         + 'No photos in top folder — scanned subfolders';
@@ -2272,6 +2300,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 discoverStatus.innerHTML = statusMsg;
             })
             .catch(function(err) {
+                if (progressTimer) clearInterval(progressTimer);
                 btnDiscoverFields.disabled = false;
                 discoverStatus.innerHTML = '<span style="color:var(--ps-danger)"><i class="bi bi-x-circle"></i> ' + escapeHtml(String(err)) + '</span>';
             });
