@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.1.0 — 2026-03-19
+
+### Search & Discovery
+- Search results now display as a thumbnail grid with photo preview modal — click any result to see a larger image with filename, caption, summary, and keywords
+- Thumbnails generated in-memory via exiftool embedded JPEG extraction (no temp files)
+- Metadata coverage panel now includes Keywords alongside GPS, Caption, and UserComment
+- "Scan all" button lets you scan every file in the folder instead of just a sample
+
+### Contact Sheet
+- New `--max-per-sheet N` option splits large collections across numbered sheets (e.g., `proof_1.jpg`, `proof_2.jpg`) — UI auto-defaults to 60 for folders with 60+ photos
+- Fixed crash on large TIFF files (HDR panoramas, multi-layer edits) with ImageMagick memory limits and first-layer-only reading
+- Filename now renders in italic, caption text in normal style, with proper horizontal padding
+
+### Keyboard Shortcuts
+- `V` validates the workflow (tool check + advisory + step ordering)
+- `?` opens an in-app help modal with full documentation and Mermaid pipeline flowchart
+- Completion sounds: ascending chime on success, descending tone on failure
+
+### Bug Fixes
+- Fixed form data collection — step settings were silently ignored because config panels moved outside the `<form>` element when clicked in the sidebar
+- Fixed step config panels destroyed when navigating between steps (now preserved across clicks)
+- Fixed `gps_gap_fill.sh` returning exit code 1 when all photos already have GPS
+- Fixed `sync_exif_and_rename.sh` corrupting paths when multiple originals match the same stem (null bytes can't be stored in bash variables)
+- Fixed `search_exif_iptc.sh` missing matches due to binary data in exiftool output (`grep -a`)
+- Fixed UTF-8 decode crash on Windows-1252 encoded metadata (smart quotes, accented characters)
+- Fixed Windows path normalization for thumbnail and search endpoints on WSL
+- Added cache-busting to static CSS/JS files to prevent stale browser cache
+
+### Ollama Integration
+- Preflight now verifies `ollama serve` is running (not just that the binary exists)
+- Model dropdown auto-discovers installed models and flags vision-capable ones
+- Prompt selector with preview, inline editing, and save-to-file
+
 ## 1.0.0 — 2026-03-19
 
 First versioned release. PhotoShell has been in active development since February 2026 — this release marks the point where the toolkit is stable, documented, and has a web UI.

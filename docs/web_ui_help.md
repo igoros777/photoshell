@@ -83,6 +83,8 @@ The search panel (below the inspector) lets you search metadata text across all 
 
 Matching files can optionally be copied to another directory.
 
+Search results appear as a **thumbnail grid** — click any thumbnail to open a preview modal showing the full image with filename, caption, summary, and keywords.
+
 ## Backup
 
 Create a timestamped `.tar.gz` archive of the photo directory before processing. The **Estimate** button shows the archive size and available disk space before running.

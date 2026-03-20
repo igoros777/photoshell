@@ -175,9 +175,12 @@ Use `--host` and `--port` to customize the bind address (e.g., `python3 app.py -
 - **Advisory pre-flight checks** — detects potential issues before execution (missing GPS, existing metadata that would be overwritten, etc.)
 - **Ollama integration** — auto-discovers installed models, flags vision-capable models, validates that the Ollama server is running
 - **Prompt management** — browse, preview, edit, and save prompts for the Ollama annotation workflows
-- **Metadata search** — search EXIF/IPTC metadata across files with field and media type filters
+- **Metadata search** — search EXIF/IPTC metadata across files with field and media type filters, results shown as thumbnail grid with photo preview modal
+- **Metadata coverage** — shows GPS, Caption, UserComment, and Keywords coverage with option to scan all files (not just a sample)
+- **Contact sheet splitting** — automatically split large collections across multiple sheets (configurable max images per sheet)
 - **Backup** — create timestamped `.tar.gz` archives with size estimation before running
-- **Keyboard shortcuts** — `R` (run), `Esc` (cancel), `/` (focus path input)
+- **Keyboard shortcuts** — `R` (run), `Esc` (cancel), `/` (focus path), `V` (validate), `?` (help)
+- **Completion sounds** — audio notification on pipeline success or failure
 - **Responsive** — works on desktop and mobile viewports
 
 ### Design

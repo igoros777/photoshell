@@ -24,6 +24,8 @@ PhotoShell is a local-first photo workflow toolkit. It has two layers: a set of 
 │  /api/ollama_models → lists installed models + vision flag   │
 │  /api/prompts     → CRUD for annotation prompt templates     │
 │  /api/search      → standalone EXIF/IPTC metadata search     │
+│  /api/search_meta → batch metadata for search result files   │
+│  /api/thumbnail   → in-memory thumbnail generation           │
 │  /api/backup      → estimate + run .tar.gz archive           │
 │  /api/docs        → serves markdown docs for in-app reading  │
 │                                                              │
