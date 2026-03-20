@@ -1328,7 +1328,7 @@ body {
 
 .structured-filter-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--ps-space-sm);
     padding: 4px 0;
     font-size: 12px;
@@ -1336,6 +1336,7 @@ body {
 
 .structured-filter-row .filter-name {
     min-width: 120px;
+    padding-top: 3px;
     color: var(--ps-text-muted);
     font-weight: 600;
     font-family: 'JetBrains Mono', monospace;
