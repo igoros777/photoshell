@@ -2122,6 +2122,431 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     }
 
+    // ---- Structured Search ----
+
+    var btnDiscoverFields      = document.getElementById("btn-discover-fields");
+    var discoverStatus         = document.getElementById("discover-status");
+    var structuredFieldsEl     = document.getElementById("structured-fields");
+    var exifFilterList         = document.getElementById("exif-filter-list");
+    var iptcFilterList         = document.getElementById("iptc-filter-list");
+    var addFieldSelect         = document.getElementById("add-field-select");
+    var btnStructuredSearch    = document.getElementById("btn-structured-search");
+    var structuredSearchStatus = document.getElementById("structured-search-status");
+    var structuredResultsHeader = document.getElementById("structured-results-header");
+
+    // Full schema stored after discover
+    var _discoveredSchema = null;
+
+    // Track active filter field names to avoid duplicates
+    var _activeFilters = {};
+
+    if (btnDiscoverFields) {
+        btnDiscoverFields.addEventListener("click", function() {
+            discoverFields();
+        });
+    }
+
+    if (btnStructuredSearch) {
+        btnStructuredSearch.addEventListener("click", function() {
+            runStructuredSearch();
+        });
+    }
+
+    if (addFieldSelect) {
+        addFieldSelect.addEventListener("change", function() {
+            var val = addFieldSelect.value;
+            if (!val || !_discoveredSchema) return;
+
+            // Find the field in the schema
+            var allFields = (_discoveredSchema.exif_fields || []).concat(_discoveredSchema.iptc_fields || []);
+            var field = null;
+            var group = null;
+            for (var i = 0; i < allFields.length; i++) {
+                if (allFields[i].name === val) {
+                    field = allFields[i];
+                    // Determine group
+                    var isIptc = false;
+                    for (var j = 0; j < (_discoveredSchema.iptc_fields || []).length; j++) {
+                        if (_discoveredSchema.iptc_fields[j].name === val) { isIptc = true; break; }
+                    }
+                    group = isIptc ? "IPTC" : "EXIF";
+                    break;
+                }
+            }
+
+            if (field) {
+                var targetList = group === "IPTC" ? iptcFilterList : exifFilterList;
+                var row = renderFilterRow(field, group);
+                targetList.appendChild(row);
+                _activeFilters[val] = true;
+                refreshAddFieldDropdown();
+            }
+
+            addFieldSelect.value = "";
+        });
+    }
+
+    function discoverFields() {
+        var dir = searchDirInput.value.trim() || photoDirInput.value.trim();
+        if (!dir) {
+            discoverStatus.innerHTML = '<span style="color:var(--ps-danger)">Please specify a directory first.</span>';
+            return;
+        }
+
+        var recursive = document.getElementById("search-recursive").checked;
+        discoverStatus.innerHTML = '<span class="text-muted"><i class="bi bi-arrow-repeat"></i> Discovering fields...</span>';
+        btnDiscoverFields.disabled = true;
+
+        var url = "/api/search/discover?path=" + encodeURIComponent(dir)
+                + "&recursive=" + (recursive ? "1" : "0");
+
+        fetch(url)
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                btnDiscoverFields.disabled = false;
+
+                if (data.error) {
+                    discoverStatus.innerHTML = '<span style="color:var(--ps-danger)"><i class="bi bi-x-circle"></i> ' + escapeHtml(data.error) + '</span>';
+                    return;
+                }
+
+                _discoveredSchema = data;
+
+                // Clear existing filter rows
+                exifFilterList.innerHTML = "";
+                iptcFilterList.innerHTML = "";
+                _activeFilters = {};
+
+                // Populate default fields
+                var defaultFields = data.default_fields || [];
+                var allExif = data.exif_fields || [];
+                var allIptc = data.iptc_fields || [];
+
+                defaultFields.forEach(function(dfName) {
+                    // Find in EXIF first, then IPTC
+                    var field = null;
+                    var group = "EXIF";
+                    for (var i = 0; i < allExif.length; i++) {
+                        if (allExif[i].name === dfName) { field = allExif[i]; break; }
+                    }
+                    if (!field) {
+                        for (var j = 0; j < allIptc.length; j++) {
+                            if (allIptc[j].name === dfName) { field = allIptc[j]; group = "IPTC"; break; }
+                        }
+                    }
+                    if (field) {
+                        var targetList = group === "IPTC" ? iptcFilterList : exifFilterList;
+                        var row = renderFilterRow(field, group);
+                        targetList.appendChild(row);
+                        _activeFilters[dfName] = true;
+                    }
+                });
+
+                // Show the structured fields area
+                structuredFieldsEl.style.display = "block";
+
+                // Populate add-field dropdown
+                refreshAddFieldDropdown();
+
+                var statusMsg = '<span style="color:var(--ps-success)"><i class="bi bi-check-circle"></i> '
+                    + 'Sampled ' + (data.sampled || 0) + ' of ' + (data.total || 0) + ' files</span>';
+                discoverStatus.innerHTML = statusMsg;
+            })
+            .catch(function(err) {
+                btnDiscoverFields.disabled = false;
+                discoverStatus.innerHTML = '<span style="color:var(--ps-danger)"><i class="bi bi-x-circle"></i> ' + escapeHtml(String(err)) + '</span>';
+            });
+    }
+
+    function renderFilterRow(field, group) {
+        var row = document.createElement("div");
+        row.className = "structured-filter-row";
+        row.dataset.fieldName = field.name;
+        row.dataset.fieldGroup = group;
+        row.dataset.fieldType = field.type;
+
+        var nameSpan = document.createElement("span");
+        nameSpan.className = "filter-name";
+        nameSpan.textContent = field.name;
+        row.appendChild(nameSpan);
+
+        var inputsDiv = document.createElement("div");
+        inputsDiv.className = "filter-inputs";
+
+        if (field.type === "numeric") {
+            var minInput = document.createElement("input");
+            minInput.type = "number";
+            minInput.className = "form-control form-control-sm";
+            minInput.placeholder = field.min != null ? String(field.min) : "min";
+            minInput.dataset.role = "min";
+            if (field.min != null) minInput.title = "Min observed: " + field.min;
+            inputsDiv.appendChild(minInput);
+
+            var sep = document.createElement("span");
+            sep.className = "range-sep";
+            sep.textContent = "\u2014";
+            inputsDiv.appendChild(sep);
+
+            var maxInput = document.createElement("input");
+            maxInput.type = "number";
+            maxInput.className = "form-control form-control-sm";
+            maxInput.placeholder = field.max != null ? String(field.max) : "max";
+            maxInput.dataset.role = "max";
+            if (field.max != null) maxInput.title = "Max observed: " + field.max;
+            inputsDiv.appendChild(maxInput);
+
+        } else if (field.type === "date") {
+            var minDate = document.createElement("input");
+            minDate.type = "date";
+            minDate.className = "form-control form-control-sm";
+            minDate.dataset.role = "min";
+            if (field.min) minDate.title = "Earliest: " + field.min;
+            inputsDiv.appendChild(minDate);
+
+            var dateSep = document.createElement("span");
+            dateSep.className = "range-sep";
+            dateSep.textContent = "\u2014";
+            inputsDiv.appendChild(dateSep);
+
+            var maxDate = document.createElement("input");
+            maxDate.type = "date";
+            maxDate.className = "form-control form-control-sm";
+            maxDate.dataset.role = "max";
+            if (field.max) maxDate.title = "Latest: " + field.max;
+            inputsDiv.appendChild(maxDate);
+
+        } else if (field.type === "select" && field.values && field.values.length > 0) {
+            var sel = document.createElement("select");
+            sel.className = "form-select form-select-sm";
+            sel.multiple = true;
+            sel.dataset.role = "values";
+            sel.style.maxWidth = "300px";
+            sel.style.minHeight = "28px";
+            field.values.forEach(function(v) {
+                var opt = document.createElement("option");
+                opt.value = v;
+                opt.textContent = v;
+                sel.appendChild(opt);
+            });
+            inputsDiv.appendChild(sel);
+
+        } else {
+            // text type
+            var textInput = document.createElement("input");
+            textInput.type = "text";
+            textInput.className = "form-control form-control-sm";
+            textInput.placeholder = field.sample ? "e.g. " + field.sample : "contains...";
+            textInput.dataset.role = "value";
+            textInput.style.maxWidth = "300px";
+            inputsDiv.appendChild(textInput);
+        }
+
+        row.appendChild(inputsDiv);
+
+        var removeBtn = document.createElement("button");
+        removeBtn.className = "filter-remove";
+        removeBtn.title = "Remove filter";
+        removeBtn.innerHTML = '<i class="bi bi-x"></i>';
+        removeBtn.addEventListener("click", function() {
+            row.parentNode.removeChild(row);
+            delete _activeFilters[field.name];
+            refreshAddFieldDropdown();
+        });
+        row.appendChild(removeBtn);
+
+        return row;
+    }
+
+    function refreshAddFieldDropdown() {
+        if (!addFieldSelect || !_discoveredSchema) return;
+
+        // Clear existing options
+        addFieldSelect.innerHTML = '<option value="">+ Add field...</option>';
+
+        var allExif = _discoveredSchema.exif_fields || [];
+        var allIptc = _discoveredSchema.iptc_fields || [];
+
+        if (allExif.length > 0) {
+            var exifGroup = document.createElement("optgroup");
+            exifGroup.label = "EXIF";
+            allExif.forEach(function(f) {
+                if (!_activeFilters[f.name]) {
+                    var opt = document.createElement("option");
+                    opt.value = f.name;
+                    opt.textContent = f.name;
+                    exifGroup.appendChild(opt);
+                }
+            });
+            if (exifGroup.children.length > 0) {
+                addFieldSelect.appendChild(exifGroup);
+            }
+        }
+
+        if (allIptc.length > 0) {
+            var iptcGroup = document.createElement("optgroup");
+            iptcGroup.label = "IPTC";
+            allIptc.forEach(function(f) {
+                if (!_activeFilters[f.name]) {
+                    var opt = document.createElement("option");
+                    opt.value = f.name;
+                    opt.textContent = f.name;
+                    iptcGroup.appendChild(opt);
+                }
+            });
+            if (iptcGroup.children.length > 0) {
+                addFieldSelect.appendChild(iptcGroup);
+            }
+        }
+    }
+
+    function collectStructuredFilters() {
+        var filters = [];
+        var rows = document.querySelectorAll(".structured-filter-row");
+        rows.forEach(function(row) {
+            var fieldName = row.dataset.fieldName;
+            var fieldType = row.dataset.fieldType;
+
+            if (fieldType === "numeric" || fieldType === "date") {
+                var minEl = row.querySelector('[data-role="min"]');
+                var maxEl = row.querySelector('[data-role="max"]');
+                var minVal = minEl ? minEl.value.trim() : "";
+                var maxVal = maxEl ? maxEl.value.trim() : "";
+
+                if (minVal || maxVal) {
+                    var filter = {field: fieldName, op: "range"};
+                    if (minVal) filter.min = fieldType === "numeric" ? parseFloat(minVal) : minVal;
+                    if (maxVal) filter.max = fieldType === "numeric" ? parseFloat(maxVal) : maxVal;
+                    filters.push(filter);
+                }
+
+            } else if (fieldType === "select") {
+                var selEl = row.querySelector('[data-role="values"]');
+                if (selEl) {
+                    var selected = [];
+                    for (var i = 0; i < selEl.options.length; i++) {
+                        if (selEl.options[i].selected) {
+                            selected.push(selEl.options[i].value);
+                        }
+                    }
+                    if (selected.length > 0) {
+                        filters.push({field: fieldName, op: "in", values: selected});
+                    }
+                }
+
+            } else {
+                // text
+                var valEl = row.querySelector('[data-role="value"]');
+                var val = valEl ? valEl.value.trim() : "";
+                if (val) {
+                    filters.push({field: fieldName, op: "contains", value: val});
+                }
+            }
+        });
+        return filters;
+    }
+
+    function runStructuredSearch() {
+        var dir = searchDirInput.value.trim() || photoDirInput.value.trim();
+        if (!dir) {
+            structuredSearchStatus.innerHTML = '<span style="color:var(--ps-danger)">Please specify a directory.</span>';
+            return;
+        }
+
+        var filters = collectStructuredFilters();
+        if (filters.length === 0) {
+            structuredSearchStatus.innerHTML = '<span style="color:var(--ps-danger)">Please set at least one filter value.</span>';
+            return;
+        }
+
+        var recursive = document.getElementById("search-recursive").checked;
+
+        btnStructuredSearch.disabled = true;
+        structuredSearchStatus.innerHTML = '<span class="text-muted"><i class="bi bi-arrow-repeat"></i> Searching...</span>';
+        searchResultsEl.style.display = "none";
+        searchResultsEl.innerHTML = "";
+        structuredResultsHeader.style.display = "none";
+
+        fetch("/api/search/structured", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                path: dir,
+                recursive: recursive,
+                filters: filters,
+                logic: "AND"
+            })
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            btnStructuredSearch.disabled = false;
+
+            if (data.error) {
+                structuredSearchStatus.innerHTML = '<span style="color:var(--ps-danger)"><i class="bi bi-x-circle"></i> ' + escapeHtml(data.error) + '</span>';
+                return;
+            }
+
+            var results = data.results || [];
+            var totalScanned = data.total_scanned || 0;
+
+            structuredSearchStatus.innerHTML = '';
+            structuredResultsHeader.style.display = "block";
+            structuredResultsHeader.innerHTML = '<span><i class="bi bi-images"></i> '
+                + results.length + ' match' + (results.length !== 1 ? 'es' : '')
+                + ' of ' + totalScanned + ' scanned</span>';
+
+            if (results.length === 0) {
+                searchResultsEl.style.display = "none";
+                return;
+            }
+
+            // Build file list and meta map for the shared results grid
+            var files = [];
+            var metaMap = {};
+            results.forEach(function(r) {
+                files.push(r.file);
+                metaMap[r.file] = r;
+            });
+
+            window._searchFiles = files;
+            window._searchMetaMap = metaMap;
+
+            // Render the results grid
+            var html = '<div class="search-results-header">'
+                + '<span><i class="bi bi-images"></i> ' + results.length + ' match' + (results.length !== 1 ? 'es' : '') + '</span></div>';
+            html += '<div class="search-results-grid">';
+            files.forEach(function(filepath, idx) {
+                var m = metaMap[filepath] || {filename: filepath.split("/").pop(), comment: "", caption: "", keywords: ""};
+                var thumbUrl = "/api/thumbnail?path=" + encodeURIComponent(filepath) + "&size=200";
+
+                html += '<div class="search-result-card">';
+                html += '<a href="#" class="photo-preview-link" data-idx="' + idx + '">';
+                html += '<img src="' + thumbUrl + '" alt="' + escapeHtml(m.filename) + '" loading="lazy">';
+                html += '</a>';
+                html += '<div class="search-result-meta">';
+                html += '<div class="search-result-filename" title="' + escapeHtml(filepath) + '">' + escapeHtml(m.filename) + '</div>';
+                if (m.caption) {
+                    html += '<div class="search-result-field"><span class="search-result-field-label">Caption:</span> ' + escapeHtml(m.caption) + '</div>';
+                }
+                if (m.comment) {
+                    html += '<div class="search-result-field"><span class="search-result-field-label">Comment:</span> ' + escapeHtml(m.comment) + '</div>';
+                }
+                if (m.keywords) {
+                    html += '<div class="search-result-field"><span class="search-result-field-label">Keywords:</span> ' + escapeHtml(m.keywords) + '</div>';
+                }
+                html += '</div></div>';
+            });
+            html += '</div>';
+
+            searchResultsEl.style.display = "block";
+            searchResultsEl.innerHTML = html;
+            wirePhotoPreviewLinks();
+        })
+        .catch(function(err) {
+            btnStructuredSearch.disabled = false;
+            structuredSearchStatus.innerHTML = '<span style="color:var(--ps-danger)"><i class="bi bi-x-circle"></i> ' + escapeHtml(String(err)) + '</span>';
+        });
+    }
+
     // ---- Photo preview modal ----
 
     var photoPreviewModal = new bootstrap.Modal(document.getElementById("photoPreviewModal"));

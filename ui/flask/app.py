@@ -30,6 +30,7 @@ from functions.constants import (
     STEP_TOOL_DEPS,
     TOOL_LABELS,
 )
+from functions.structured_search import discover_fields, structured_search
 
 logging.basicConfig(
     level=logging.INFO,
@@ -1434,6 +1435,84 @@ def _run_search(job_id, step, cwd):
         else:
             jobs[job_id]["status"] = "failed"
             jobs[job_id]["log"] += "\n*** Search failed ***\n"
+
+
+@app.route("/api/search/discover")
+def api_search_discover():
+    """Discover available EXIF/IPTC fields by sampling photos in a directory.
+
+    Query params:
+      path        - directory to scan (required)
+      recursive   - 0 or 1 (default 0)
+      sample_size - number of files to sample (default 10)
+    """
+    logger.info("GET /api/search/discover")
+    path = request.args.get("path", "").strip()
+    if not path:
+        return jsonify({"error": "path is required"}), 400
+
+    recursive = request.args.get("recursive", "0") in ("1", "true", "yes")
+
+    try:
+        sample_size = int(request.args.get("sample_size", 10))
+    except (ValueError, TypeError):
+        sample_size = 10
+
+    target = _normalize_browser_path(path)
+    if not os.path.isdir(target):
+        return jsonify({"error": "Directory not found: %s" % target}), 404
+
+    try:
+        result = discover_fields(target, recursive=recursive, sample_size=sample_size)
+    except FileNotFoundError:
+        return jsonify({"error": "Directory not found: %s" % target}), 404
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "exiftool timed out while scanning"}), 504
+    except Exception as exc:
+        logger.error("discover_fields failed: %s", exc, exc_info=True)
+        return jsonify({"error": "An error occurred while processing your request"}), 500
+
+    return jsonify(result)
+
+
+@app.route("/api/search/structured", methods=["POST"])
+def api_search_structured():
+    """Run a structured metadata search with field-level filters.
+
+    JSON body: {path, recursive, filters, logic}
+      path      - directory to search (required)
+      recursive - bool (default false)
+      filters   - list of filter dicts [{field, op, ...}, ...]
+      logic     - "AND" or "OR" (default "AND")
+    """
+    logger.info("POST /api/search/structured")
+    data = request.get_json(force=True)
+    path = data.get("path", "").strip()
+    if not path:
+        return jsonify({"error": "path is required"}), 400
+
+    recursive = bool(data.get("recursive", False))
+    filters = data.get("filters", [])
+    logic = data.get("logic", "AND")
+
+    if not filters:
+        return jsonify({"error": "At least one filter is required"}), 400
+
+    target = _normalize_browser_path(path)
+    if not os.path.isdir(target):
+        return jsonify({"error": "Directory not found: %s" % target}), 404
+
+    try:
+        result = structured_search(
+            target, filters, recursive=recursive, logic=logic,
+        )
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "exiftool timed out during search"}), 504
+    except Exception as exc:
+        logger.error("structured_search failed: %s", exc, exc_info=True)
+        return jsonify({"error": "An error occurred while processing your request"}), 500
+
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------
