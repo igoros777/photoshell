@@ -2152,6 +2152,17 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     }
 
+    // Enter key in any structured search input triggers search
+    var structuredFieldsEl = document.getElementById("structured-fields");
+    if (structuredFieldsEl) {
+        structuredFieldsEl.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                runStructuredSearch();
+            }
+        });
+    }
+
     if (addFieldSelect) {
         addFieldSelect.addEventListener("change", function() {
             var val = addFieldSelect.value;
