@@ -1538,13 +1538,10 @@ def api_search_discover():
 
 @app.route("/api/search/structured", methods=["POST"])
 def api_search_structured():
-    """Run a structured metadata search with field-level filters.
+    """Run a structured metadata search as a background job.
 
     JSON body: {path, recursive, filters, logic}
-      path      - directory to search (required)
-      recursive - bool (default false)
-      filters   - list of filter dicts [{field, op, ...}, ...]
-      logic     - "AND" or "OR" (default "AND")
+    Returns: {job_id} — poll /api/search/structured/status/<job_id> for results.
     """
     logger.info("POST /api/search/structured")
     data = request.get_json(force=True)
@@ -1563,17 +1560,95 @@ def api_search_structured():
     if not os.path.isdir(target):
         return jsonify({"error": "Directory not found: %s" % target}), 404
 
-    try:
-        result = structured_search(
-            target, filters, recursive=recursive, logic=logic,
-        )
-    except subprocess.TimeoutExpired:
-        return jsonify({"error": "exiftool timed out during search"}), 504
-    except Exception as exc:
-        logger.error("structured_search failed: %s", exc, exc_info=True)
-        return jsonify({"error": "An error occurred while processing your request"}), 500
+    job_id = str(uuid.uuid4())[:8]
+    with jobs_lock:
+        jobs[job_id] = {
+            "status": "running",
+            "log": "",
+            "current_step": 0,
+            "steps": ["Structured Search"],
+            "pid": None,
+            "created_at": time.time(),
+            "search_result": None,
+        }
+    logger.info("Structured search job %s started for %s", job_id, target)
 
-    return jsonify(result)
+    def _run():
+        try:
+            result = structured_search(
+                target, filters, recursive=recursive, logic=logic,
+            )
+            with jobs_lock:
+                jobs[job_id]["search_result"] = result
+                jobs[job_id]["status"] = "done"
+                jobs[job_id]["log"] = "Search complete: %d matches of %d scanned" % (
+                    result.get("matches", 0), result.get("total_scanned", 0))
+        except Exception as exc:
+            logger.error("structured_search job %s failed: %s", job_id, exc, exc_info=True)
+            with jobs_lock:
+                jobs[job_id]["status"] = "failed"
+                jobs[job_id]["log"] = "Error: %s" % str(exc)
+                jobs[job_id]["search_result"] = {
+                    "matches": 0, "total_scanned": 0, "results": [],
+                    "error": str(exc)}
+
+    t = threading.Thread(target=_run)
+    t.daemon = True
+    t.start()
+
+    return jsonify({"job_id": job_id})
+
+
+@app.route("/api/search/structured/status/<job_id>")
+def api_search_structured_status(job_id):
+    """Poll structured search job status. Returns results when done.
+
+    Query params:
+      page     - result page (1-based, default 1)
+      per_page - results per page (default 50, max 200)
+    """
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    status = job["status"]
+    response = {"status": status, "log": job.get("log", "")}
+
+    if status == "done" and job.get("search_result"):
+        result = job["search_result"]
+        all_results = result.get("results", [])
+        total_matches = len(all_results)
+
+        # Pagination
+        try:
+            page = max(1, int(request.args.get("page", 1)))
+        except (ValueError, TypeError):
+            page = 1
+        try:
+            per_page = min(200, max(1, int(request.args.get("per_page", 50))))
+        except (ValueError, TypeError):
+            per_page = 50
+
+        start = (page - 1) * per_page
+        end = start + per_page
+        page_results = all_results[start:end]
+        total_pages = (total_matches + per_page - 1) // per_page if total_matches > 0 else 0
+
+        response["matches"] = total_matches
+        response["total_scanned"] = result.get("total_scanned", 0)
+        response["results"] = page_results
+        response["page"] = page
+        response["per_page"] = per_page
+        response["total_pages"] = total_pages
+        if result.get("error"):
+            response["error"] = result["error"]
+
+    elif status == "failed":
+        result = job.get("search_result") or {}
+        response["error"] = result.get("error", "Search failed")
+
+    return jsonify(response)
 
 
 # ---------------------------------------------------------------------------

@@ -2523,6 +2523,11 @@ document.addEventListener("DOMContentLoaded", function() {
         return filters;
     }
 
+    var _structuredJobId = null;
+    var _structuredPollTimer = null;
+    var _structuredStartTime = null;
+    var _structuredPerPage = 50;
+
     function runStructuredSearch() {
         var dir = searchDirInput.value.trim() || photoDirInput.value.trim();
         if (!dir) {
@@ -2539,89 +2544,175 @@ document.addEventListener("DOMContentLoaded", function() {
         var recursive = document.getElementById("search-recursive").checked;
 
         btnStructuredSearch.disabled = true;
-        structuredSearchStatus.innerHTML = '<span class="text-muted"><i class="bi bi-arrow-repeat"></i> Searching...</span>';
         searchResultsEl.style.display = "none";
         searchResultsEl.innerHTML = "";
         structuredResultsHeader.style.display = "none";
+        _structuredStartTime = Date.now();
+        window._searchFiles = [];
+        window._searchMetaMap = {};
+
+        // Show cancel button
+        var cancelBtn = document.getElementById("btn-structured-cancel");
+        if (cancelBtn) cancelBtn.style.display = "";
+
+        function updateSearchProgress() {
+            var elapsed = ((Date.now() - _structuredStartTime) / 1000).toFixed(0);
+            structuredSearchStatus.innerHTML = '<span class="text-muted">'
+                + '<i class="bi bi-arrow-repeat" style="animation:spin 1s linear infinite"></i> '
+                + 'Searching... (' + elapsed + 's)</span>';
+        }
+        updateSearchProgress();
+        _structuredPollTimer = setInterval(updateSearchProgress, 1000);
 
         fetch("/api/search/structured", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({
-                path: dir,
-                recursive: recursive,
-                filters: filters,
-                logic: "AND"
-            })
+            body: JSON.stringify({ path: dir, recursive: recursive, filters: filters, logic: "AND" })
         })
         .then(function(res) { return res.json(); })
         .then(function(data) {
-            btnStructuredSearch.disabled = false;
-
             if (data.error) {
+                if (_structuredPollTimer) clearInterval(_structuredPollTimer);
+                btnStructuredSearch.disabled = false;
+                if (cancelBtn) cancelBtn.style.display = "none";
                 structuredSearchStatus.innerHTML = '<span style="color:var(--ps-danger)"><i class="bi bi-x-circle"></i> ' + escapeHtml(data.error) + '</span>';
                 return;
             }
-
-            var results = data.results || [];
-            var totalScanned = data.total_scanned || 0;
-
-            structuredSearchStatus.innerHTML = '';
-            structuredResultsHeader.style.display = "block";
-            structuredResultsHeader.innerHTML = '<span><i class="bi bi-images"></i> '
-                + results.length + ' match' + (results.length !== 1 ? 'es' : '')
-                + ' of ' + totalScanned + ' scanned</span>';
-
-            if (results.length === 0) {
-                searchResultsEl.style.display = "none";
-                return;
-            }
-
-            // Build file list and meta map for the shared results grid
-            var files = [];
-            var metaMap = {};
-            results.forEach(function(r) {
-                files.push(r.file);
-                metaMap[r.file] = r;
-            });
-
-            window._searchFiles = files;
-            window._searchMetaMap = metaMap;
-
-            // Render the results grid
-            var html = '<div class="search-results-header">'
-                + '<span><i class="bi bi-images"></i> ' + results.length + ' match' + (results.length !== 1 ? 'es' : '') + '</span></div>';
-            html += '<div class="search-results-grid">';
-            files.forEach(function(filepath, idx) {
-                var m = metaMap[filepath] || {filename: filepath.split("/").pop(), comment: "", caption: "", keywords: ""};
-                var thumbUrl = "/api/thumbnail?path=" + encodeURIComponent(filepath) + "&size=200";
-
-                html += '<div class="search-result-card">';
-                html += '<a href="#" class="photo-preview-link" data-idx="' + idx + '">';
-                html += '<img src="' + thumbUrl + '" alt="' + escapeHtml(m.filename) + '" loading="lazy">';
-                html += '</a>';
-                html += '<div class="search-result-meta">';
-                html += '<div class="search-result-filename" title="' + escapeHtml(filepath) + '">' + escapeHtml(m.filename) + '</div>';
-                if (m.caption) {
-                    html += '<div class="search-result-field"><span class="search-result-field-label">Caption:</span> ' + escapeHtml(m.caption) + '</div>';
-                }
-                if (m.comment) {
-                    html += '<div class="search-result-field"><span class="search-result-field-label">Comment:</span> ' + escapeHtml(m.comment) + '</div>';
-                }
-                if (m.keywords) {
-                    html += '<div class="search-result-field"><span class="search-result-field-label">Keywords:</span> ' + escapeHtml(m.keywords) + '</div>';
-                }
-                html += '</div></div>';
-            });
-            html += '</div>';
-
-            searchResultsEl.style.display = "block";
-            searchResultsEl.innerHTML = html;
-            wirePhotoPreviewLinks();
+            _structuredJobId = data.job_id;
+            pollStructuredSearch(1);
         })
         .catch(function(err) {
+            if (_structuredPollTimer) clearInterval(_structuredPollTimer);
             btnStructuredSearch.disabled = false;
+            if (cancelBtn) cancelBtn.style.display = "none";
             structuredSearchStatus.innerHTML = '<span style="color:var(--ps-danger)"><i class="bi bi-x-circle"></i> ' + escapeHtml(String(err)) + '</span>';
+        });
+    }
+
+    function pollStructuredSearch(page) {
+        if (!_structuredJobId) return;
+        fetch("/api/search/structured/status/" + _structuredJobId + "?page=" + page + "&per_page=" + _structuredPerPage)
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.status === "running") {
+                    setTimeout(function() { pollStructuredSearch(page); }, 1000);
+                    return;
+                }
+
+                if (_structuredPollTimer) clearInterval(_structuredPollTimer);
+                btnStructuredSearch.disabled = false;
+                var cancelBtn = document.getElementById("btn-structured-cancel");
+                if (cancelBtn) cancelBtn.style.display = "none";
+                // Keep job_id for pagination — store separately
+                searchResultsEl.dataset.jobId = _structuredJobId;
+                _structuredJobId = null;
+
+                if (data.status === "failed" || data.error) {
+                    structuredSearchStatus.innerHTML = '<span style="color:var(--ps-danger)"><i class="bi bi-x-circle"></i> ' + escapeHtml(data.error || "Search failed") + '</span>';
+                    return;
+                }
+
+                var elapsed = ((Date.now() - _structuredStartTime) / 1000).toFixed(1);
+                var results = data.results || [];
+                var totalMatches = data.matches || 0;
+                var totalScanned = data.total_scanned || 0;
+                var totalPages = data.total_pages || 1;
+                var currentPage = data.page || 1;
+
+                structuredSearchStatus.innerHTML = '';
+                structuredResultsHeader.style.display = "block";
+                var headerMsg = '<span><i class="bi bi-images"></i> '
+                    + totalMatches.toLocaleString() + ' match' + (totalMatches !== 1 ? 'es' : '')
+                    + ' of ' + totalScanned.toLocaleString() + ' scanned (' + elapsed + 's)</span>';
+                if (totalPages > 1) {
+                    headerMsg += ' <span class="text-muted" style="margin-left:8px">Page ' + currentPage + ' of ' + totalPages + '</span>';
+                }
+                structuredResultsHeader.innerHTML = headerMsg;
+
+                if (results.length === 0 && currentPage === 1) {
+                    searchResultsEl.style.display = "none";
+                    return;
+                }
+
+                // Build file list and meta map for this page
+                var files = [];
+                var metaMap = {};
+                results.forEach(function(r) { files.push(r.file); metaMap[r.file] = r; });
+                window._searchFiles = files;
+                window._searchMetaMap = metaMap;
+
+                renderStructuredPage(files, metaMap, currentPage, totalPages);
+            })
+            .catch(function() {
+                setTimeout(function() { pollStructuredSearch(page); }, 2000);
+            });
+    }
+
+    function renderStructuredPage(files, metaMap, currentPage, totalPages) {
+        var html = '<div class="search-results-grid">';
+        files.forEach(function(filepath, idx) {
+            var m = metaMap[filepath] || {filename: filepath.split("/").pop()};
+            var thumbUrl = "/api/thumbnail?path=" + encodeURIComponent(filepath) + "&size=200";
+            html += '<div class="search-result-card">';
+            html += '<a href="#" class="photo-preview-link" data-idx="' + idx + '">';
+            html += '<img src="' + thumbUrl + '" alt="' + escapeHtml(m.filename || "") + '" loading="lazy">';
+            html += '</a>';
+            html += '<div class="search-result-meta">';
+            html += '<div class="search-result-filename" title="' + escapeHtml(filepath) + '">' + escapeHtml(m.filename || "") + '</div>';
+            if (m.caption) html += '<div class="search-result-field"><span class="search-result-field-label">Caption:</span> ' + escapeHtml(m.caption) + '</div>';
+            if (m.comment) html += '<div class="search-result-field"><span class="search-result-field-label">Comment:</span> ' + escapeHtml(m.comment) + '</div>';
+            if (m.keywords) html += '<div class="search-result-field"><span class="search-result-field-label">Keywords:</span> ' + escapeHtml(m.keywords) + '</div>';
+            html += '</div></div>';
+        });
+        html += '</div>';
+
+        if (totalPages > 1) {
+            html += '<div class="d-flex justify-content-center gap-2 mt-3 align-items-center">';
+            if (currentPage > 1)
+                html += '<button class="btn btn-sm btn-photoshell structured-page-btn" data-page="' + (currentPage - 1) + '"><i class="bi bi-chevron-left"></i> Prev</button>';
+            html += '<span class="text-muted" style="font-size:12px">Page ' + currentPage + ' of ' + totalPages + '</span>';
+            if (currentPage < totalPages)
+                html += '<button class="btn btn-sm btn-photoshell structured-page-btn" data-page="' + (currentPage + 1) + '">Next <i class="bi bi-chevron-right"></i></button>';
+            html += '</div>';
+        }
+
+        searchResultsEl.innerHTML = html;
+        searchResultsEl.style.display = "block";
+        wirePhotoPreviewLinks();
+
+        searchResultsEl.querySelectorAll(".structured-page-btn").forEach(function(btn) {
+            btn.addEventListener("click", function() {
+                var pg = parseInt(btn.dataset.page, 10);
+                var storedJobId = searchResultsEl.dataset.jobId;
+                if (!storedJobId) return;
+                fetch("/api/search/structured/status/" + storedJobId + "?page=" + pg + "&per_page=" + _structuredPerPage)
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) {
+                        if (d.results) {
+                            var f2 = [], m2 = {};
+                            d.results.forEach(function(r) { f2.push(r.file); m2[r.file] = r; });
+                            window._searchFiles = f2;
+                            window._searchMetaMap = m2;
+                            renderStructuredPage(f2, m2, d.page, d.total_pages);
+                            searchResultsEl.scrollIntoView({behavior: "smooth", block: "start"});
+                        }
+                    });
+            });
+        });
+    }
+
+    // Cancel structured search
+    var btnStructuredCancel = document.getElementById("btn-structured-cancel");
+    if (btnStructuredCancel) {
+        btnStructuredCancel.addEventListener("click", function() {
+            if (_structuredJobId) {
+                fetch("/api/cancel/" + _structuredJobId, {method: "POST"});
+                _structuredJobId = null;
+            }
+            if (_structuredPollTimer) clearInterval(_structuredPollTimer);
+            btnStructuredSearch.disabled = false;
+            btnStructuredCancel.style.display = "none";
+            structuredSearchStatus.innerHTML = '<span style="color:var(--ps-warning)"><i class="bi bi-x-circle"></i> Cancelled</span>';
         });
     }
 

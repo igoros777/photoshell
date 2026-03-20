@@ -675,24 +675,22 @@ def structured_search(photo_dir, filters, recursive=False, logic="AND"):
 
     # Use -@ - to read file paths from stdin (avoids "Argument list too long"
     # OS error when passing thousands of file paths on the command line)
+    # No hard timeout — the caller (Flask job system) handles cancellation
     cmd = ["exiftool", "-json", "-n", "-@", "-"] + tag_args
     file_list_input = "\n".join(all_files) + "\n"
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
-            input=file_list_input,
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             encoding="utf-8",
             errors="replace",
-            timeout=300,
         )
-        if proc.returncode not in (0, 1) or not proc.stdout:
+        stdout, _stderr = proc.communicate(input=file_list_input)
+        if proc.returncode not in (0, 1) or not stdout:
             return {"matches": 0, "total_scanned": len(all_files), "results": []}
-        records = json.loads(proc.stdout)
-    except subprocess.TimeoutExpired:
-        return {"matches": 0, "total_scanned": len(all_files), "results": [],
-                "error": "exiftool timed out"}
+        records = json.loads(stdout)
     except (json.JSONDecodeError, OSError) as exc:
         return {"matches": 0, "total_scanned": len(all_files), "results": [],
                 "error": str(exc)}
