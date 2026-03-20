@@ -652,7 +652,7 @@ def structured_search(photo_dir, filters, recursive=False, logic="AND"):
 
     Returns dict with matches count, total_scanned count, and results list.
     """
-    all_files = _list_all_photo_files(photo_dir, recursive=recursive)
+    all_files = _list_all_photo_files_parallel(photo_dir, recursive=recursive)
     if not all_files:
         return {"matches": 0, "total_scanned": 0, "results": []}
 
