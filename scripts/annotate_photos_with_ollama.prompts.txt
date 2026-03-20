@@ -1,2 +1,2 @@
 # Format: <integer>|<prompt text>
-1|Provide a concise description about the scene and photographic aspects. Include some details about the photo's location: LOCATION. Do not include any formatting or commentary.
+1|Provide a concise description of the scene and photographic aspects. Include some details about the photo's location: LOCATION. Do not include any formatting or commentary.
