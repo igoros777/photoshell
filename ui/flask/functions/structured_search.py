@@ -211,18 +211,33 @@ def discover_fields(photo_dir, recursive=False, sample_size=30):
     Runs exiftool on a sample of files to detect field names, types,
     value ranges, and unique values for text fields.
 
+    If no photos are found at the top level and recursive is False,
+    automatically retries with recursive=True and sets auto_recursive
+    in the response so the UI can inform the user.
+
     Returns a dict with exif_fields, iptc_fields, sampled count,
     total count, and default_fields.
     """
+    auto_recursive = False
     sampled_files, total_count = sample_photo_files(
         photo_dir, recursive=recursive, sample_size=sample_size,
     )
+
+    # If no photos at top level and not already recursive, fan out into subfolders
+    if not sampled_files and not recursive:
+        sampled_files, total_count = sample_photo_files(
+            photo_dir, recursive=True, sample_size=sample_size,
+        )
+        if sampled_files:
+            auto_recursive = True
+
     if not sampled_files:
         return {
             "exif_fields": [],
             "iptc_fields": [],
             "sampled": 0,
             "total": total_count,
+            "auto_recursive": auto_recursive,
             "default_fields": DEFAULT_FIELDS,
         }
 
@@ -255,6 +270,7 @@ def discover_fields(photo_dir, recursive=False, sample_size=30):
             "iptc_fields": [],
             "sampled": len(sampled_files),
             "total": total_count,
+            "auto_recursive": auto_recursive,
             "default_fields": DEFAULT_FIELDS,
         }
 
@@ -368,6 +384,7 @@ def discover_fields(photo_dir, recursive=False, sample_size=30):
         "iptc_fields": iptc_fields,
         "sampled": len(sampled_files),
         "total": total_count,
+        "auto_recursive": auto_recursive,
         "default_fields": DEFAULT_FIELDS,
     }
 

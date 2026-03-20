@@ -2260,7 +2260,15 @@ document.addEventListener("DOMContentLoaded", function() {
                 refreshAddFieldDropdown();
 
                 var statusMsg = '<span style="color:var(--ps-success)"><i class="bi bi-check-circle"></i> '
-                    + 'Sampled ' + (data.sampled || 0) + ' of ' + (data.total || 0) + ' files</span>';
+                    + 'Sampled ' + (data.sampled || 0) + ' of ' + (data.total || 0) + ' files';
+                if (data.auto_recursive) {
+                    statusMsg += '</span> <span style="color:var(--ps-warning)"><i class="bi bi-exclamation-triangle"></i> '
+                        + 'No photos in top folder — scanned subfolders';
+                    // Auto-check the recursive checkbox so the search also recurses
+                    var recCheckbox = document.getElementById("search-recursive");
+                    if (recCheckbox && !recCheckbox.checked) recCheckbox.checked = true;
+                }
+                statusMsg += '</span>';
                 discoverStatus.innerHTML = statusMsg;
             })
             .catch(function(err) {
