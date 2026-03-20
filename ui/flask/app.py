@@ -1258,11 +1258,15 @@ def api_search_meta():
     files = [_normalize_browser_path(f) for f in raw_files[:200]]
 
     try:
+        # Use -@ - to read file paths from stdin instead of command line
+        # to prevent user-supplied paths from being interpreted as arguments
         cmd = ["exiftool", "-json", "-charset", "exif=UTF8", "-charset", "iptc=UTF8",
                "-UserComment", "-IPTC:Caption-Abstract", "-IPTC:Keywords",
-               "-FileName"] + files
+               "-FileName", "-@", "-"]
+        file_list_input = "\n".join(files) + "\n"
         proc = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            cmd, input=file_list_input,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             timeout=60, encoding="utf-8", errors="replace",
         )
         if proc.returncode not in (0, 1) or not proc.stdout:
