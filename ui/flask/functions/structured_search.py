@@ -673,15 +673,19 @@ def structured_search(photo_dir, filters, recursive=False, logic="AND"):
     for field in sorted(all_fields):
         tag_args.append("-" + field)
 
-    cmd = ["exiftool", "-json", "-n"] + tag_args + all_files
+    # Use -@ - to read file paths from stdin (avoids "Argument list too long"
+    # OS error when passing thousands of file paths on the command line)
+    cmd = ["exiftool", "-json", "-n", "-@", "-"] + tag_args
+    file_list_input = "\n".join(all_files) + "\n"
     try:
         proc = subprocess.run(
             cmd,
+            input=file_list_input,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             encoding="utf-8",
             errors="replace",
-            timeout=120,
+            timeout=300,
         )
         if proc.returncode not in (0, 1) or not proc.stdout:
             return {"matches": 0, "total_scanned": len(all_files), "results": []}
