@@ -643,12 +643,39 @@ def _check_keywords_all(value, filt):
     return True
 
 
+def _run_exiftool_search_batch(files, tag_args):
+    """Run exiftool on a batch of files for structured search. Thread-safe.
+
+    Uses -@ - to pass file paths via stdin.
+    Returns list of parsed JSON records, or empty list on failure.
+    """
+    if not files:
+        return []
+    cmd = ["exiftool", "-json", "-n", "-@", "-"] + tag_args
+    file_list_input = "\n".join(files) + "\n"
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            encoding="utf-8",
+            errors="replace",
+        )
+        stdout, _stderr = proc.communicate(input=file_list_input)
+        if proc.returncode not in (0, 1) or not stdout:
+            return []
+        return json.loads(stdout)
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
 def structured_search(photo_dir, filters, recursive=False, logic="AND"):
     """Run a structured metadata search across all photos in a directory.
 
-    Lists all photo files, runs exiftool to extract fields referenced in
-    the filters (plus standard metadata fields), applies filters, and
-    returns matching results.
+    Lists all photo files, splits them into batches, runs multiple exiftool
+    processes in parallel to saturate available CPU cores, applies filters,
+    and returns matching results.
 
     Returns dict with matches count, total_scanned count, and results list.
     """
@@ -673,27 +700,35 @@ def structured_search(photo_dir, filters, recursive=False, logic="AND"):
     for field in sorted(all_fields):
         tag_args.append("-" + field)
 
-    # Use -@ - to read file paths from stdin (avoids "Argument list too long"
-    # OS error when passing thousands of file paths on the command line)
-    # No hard timeout — the caller (Flask job system) handles cancellation
-    cmd = ["exiftool", "-json", "-n", "-@", "-"] + tag_args
-    file_list_input = "\n".join(all_files) + "\n"
+    # Split files into batches and run exiftool in parallel
+    # Use CPU count to determine parallelism, capped at 8
     try:
-        proc = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            encoding="utf-8",
-            errors="replace",
-        )
-        stdout, _stderr = proc.communicate(input=file_list_input)
-        if proc.returncode not in (0, 1) or not stdout:
-            return {"matches": 0, "total_scanned": len(all_files), "results": []}
-        records = json.loads(stdout)
-    except (json.JSONDecodeError, OSError) as exc:
+        num_workers = min(os.cpu_count() or 4, 8)
+    except (AttributeError, TypeError):
+        num_workers = 4
+
+    # Each batch should have at least 50 files to amortize exiftool startup
+    batch_size = max(50, len(all_files) // num_workers + 1)
+    batches = [all_files[i:i + batch_size]
+               for i in range(0, len(all_files), batch_size)]
+
+    records = []
+    if len(batches) == 1:
+        # Single batch — no threading overhead
+        records = _run_exiftool_search_batch(batches[0], tag_args)
+    else:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=num_workers) as pool:
+            futures = {pool.submit(_run_exiftool_search_batch, batch, tag_args): batch
+                       for batch in batches}
+            for future in as_completed(futures):
+                result = future.result()
+                if result:
+                    records.extend(result)
+
+    if not records:
         return {"matches": 0, "total_scanned": len(all_files), "results": [],
-                "error": str(exc)}
+                "error": "exiftool returned no results"}
 
     # Apply filters
     matched = apply_filters(records, filters, logic=logic)
