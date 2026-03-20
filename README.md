@@ -7,7 +7,7 @@ The scripts are designed for batch processing in a working directory and are bui
 
 And in case you like photography, here are some of mine: https://fieldexposure.com/
 
-![](https://github.com/igoros777/photoshell/blob/main/images/d41k59go09e2ntacd5r2jzjoecg.png?raw=true)
+![](https://github.com/igoros777/photoshell/blob/main/images/aaqduotbsealmsv3j3poxesw0uf.jpg?raw=true)
 
 ## Example Workflow: Back From A Trip (Mixed GPS + Non-GPS Cameras)
 Scenario:
