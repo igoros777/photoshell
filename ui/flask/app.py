@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 
 from flask import Flask, jsonify, render_template, request, send_file
 
-from functions.advisory_checks import run_advisory_checks, scan_folder_metadata
+from functions.advisory_checks import run_advisory_checks, scan_folder_metadata, extract_gps_data
 from functions.constants import (
     DEFAULT_STEP_ORDER,
     PHOTO_EXTENSIONS,
@@ -1089,6 +1089,53 @@ def api_browse():
     return jsonify(payload)
 
 
+@app.route("/api/photos")
+def api_photos():
+    """List photo files in a directory with pagination."""
+    path = request.args.get("path", "")
+    page = max(1, int(request.args.get("page", 1)))
+    per_page = min(120, max(1, int(request.args.get("per_page", 60))))
+
+    target, error = _resolve_directory(path)
+    if error:
+        return _filesystem_error_response(error)
+
+    def _list_photos():
+        photos = []
+        with os.scandir(target) as it:
+            for entry in it:
+                try:
+                    if not entry.is_file():
+                        continue
+                except (OSError, PermissionError):
+                    continue
+                ext = os.path.splitext(entry.name)[1].lower()
+                if ext in PHOTO_EXTENSIONS:
+                    photos.append({
+                        "name": entry.name,
+                        "path": os.path.normpath(os.path.join(target, entry.name)),
+                        "ext": ext,
+                    })
+        photos.sort(key=lambda f: f["name"].casefold())
+        return photos
+
+    all_photos, error = _fs_op_with_timeout(_list_photos, timeout=FS_TIMEOUT_SECONDS)
+    if error:
+        return _filesystem_error_response(error)
+
+    total = len(all_photos)
+    start = (page - 1) * per_page
+    page_files = all_photos[start:start + per_page]
+
+    return jsonify({
+        "files": page_files,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "has_more": start + per_page < total,
+    })
+
+
 @app.route("/api/validate_folder")
 def api_validate_folder():
     """Check if the folder exists and contains photo files."""
@@ -1187,6 +1234,173 @@ def api_folder_meta():
         return jsonify({"error": "No photos found or exiftool not available"}), 400
 
     return jsonify(result)
+
+
+@app.route("/api/gps_data")
+def api_gps_data():
+    """Return per-file GPS coordinates and metadata for map display."""
+    path = request.args.get("path", "").strip()
+    if not path:
+        return jsonify({"error": "No path specified"}), 400
+
+    try:
+        limit = int(request.args.get("limit", 500))
+    except (ValueError, TypeError):
+        limit = 500
+
+    target, error = _resolve_directory(path)
+    if error:
+        return jsonify({"error": "Directory not accessible: %s" % path}), 400
+
+    try:
+        result = extract_gps_data(target, limit=limit)
+    except Exception as exc:
+        logger.error("GPS data extraction failed: %s", exc, exc_info=True)
+        return jsonify({"error": "An error occurred while processing your request"}), 500
+
+    return jsonify(result)
+
+
+@app.route("/api/blur_results")
+def api_blur_results():
+    """Return structured blur detection results from the analyzed/scenes/selected dirs."""
+    path = request.args.get("path", "").strip()
+    if not path:
+        return jsonify({"error": "No path specified"}), 400
+
+    target, error = _resolve_directory(path)
+    if error:
+        return jsonify({"error": "Directory not accessible"}), 400
+
+    analyzed_dir = os.path.join(target, "analyzed")
+    scenes_dir = os.path.join(target, "scenes")
+    selected_dir = os.path.join(target, "selected")
+
+    if not os.path.isdir(analyzed_dir):
+        return jsonify({"has_results": False})
+
+    # Parse analyzed/ directory: files named NNNN_<original>
+    analyzed = []
+    try:
+        for entry in os.scandir(analyzed_dir):
+            if not entry.is_file():
+                continue
+            name = entry.name
+            # Pattern: 4-digit score prefix + underscore + original filename
+            if len(name) > 5 and name[4] == "_" and name[:4].isdigit():
+                score = int(name[:4])
+                orig = name[5:]
+                ext = os.path.splitext(orig)[1].lower()
+                if ext in PHOTO_EXTENSIONS:
+                    analyzed.append({
+                        "score": score,
+                        "filename": orig,
+                        "path": os.path.normpath(entry.path),
+                    })
+    except (OSError, PermissionError):
+        pass
+
+    analyzed.sort(key=lambda x: x["score"])
+
+    # Parse scenes/ directory
+    scenes = []
+    if os.path.isdir(scenes_dir):
+        try:
+            scene_dirs = sorted(
+                [e.name for e in os.scandir(scenes_dir)
+                 if e.is_dir() and e.name.startswith("scene_")]
+            )
+        except (OSError, PermissionError):
+            scene_dirs = []
+
+        # Build set of selected filenames
+        selected_names = set()
+        if os.path.isdir(selected_dir):
+            try:
+                selected_names = {
+                    e.name for e in os.scandir(selected_dir) if e.is_file()
+                }
+            except (OSError, PermissionError):
+                pass
+
+        for scene_name in scene_dirs:
+            scene_path = os.path.join(scenes_dir, scene_name)
+            scene_analyzed_dir = os.path.join(scene_path, "analyzed")
+
+            # Photos in the scene
+            scene_photos = []
+            try:
+                for entry in os.scandir(scene_path):
+                    if not entry.is_file():
+                        continue
+                    ext = os.path.splitext(entry.name)[1].lower()
+                    if ext in PHOTO_EXTENSIONS:
+                        scene_photos.append({
+                            "filename": entry.name,
+                            "path": os.path.normpath(entry.path),
+                        })
+            except (OSError, PermissionError):
+                pass
+            scene_photos.sort(key=lambda x: x["filename"].casefold())
+
+            # Analyzed photos within the scene
+            scene_analyzed = []
+            if os.path.isdir(scene_analyzed_dir):
+                try:
+                    for entry in os.scandir(scene_analyzed_dir):
+                        if not entry.is_file():
+                            continue
+                        name = entry.name
+                        if len(name) > 5 and name[4] == "_" and name[:4].isdigit():
+                            score = int(name[:4])
+                            orig = name[5:]
+                            ext = os.path.splitext(orig)[1].lower()
+                            if ext in PHOTO_EXTENSIONS:
+                                scene_analyzed.append({
+                                    "score": score,
+                                    "filename": orig,
+                                    "path": os.path.normpath(entry.path),
+                                })
+                except (OSError, PermissionError):
+                    pass
+                scene_analyzed.sort(key=lambda x: x["score"])
+
+            # Identify selected photo for this scene
+            scene_selected = None
+            for p in scene_photos:
+                if p["filename"] in selected_names:
+                    scene_selected = p["filename"]
+                    break
+
+            scenes.append({
+                "scene_id": scene_name,
+                "photos": scene_photos,
+                "analyzed": scene_analyzed,
+                "selected": scene_selected,
+            })
+
+    # Selected photos
+    selected = []
+    if os.path.isdir(selected_dir):
+        try:
+            for entry in os.scandir(selected_dir):
+                if not entry.is_file():
+                    continue
+                ext = os.path.splitext(entry.name)[1].lower()
+                if ext in PHOTO_EXTENSIONS:
+                    selected.append({
+                        "filename": entry.name,
+                        "path": os.path.normpath(entry.path),
+                    })
+        except (OSError, PermissionError):
+            pass
+
+    return jsonify({
+        "has_results": True,
+        "analyzed": analyzed,
+        "scenes": scenes,
+        "selected": selected,
+    })
 
 
 @app.route("/api/thumbnail")
@@ -1447,6 +1661,25 @@ def api_status(job_id):
         "current_step": job["current_step"],
         "steps": job["steps"],
         "log": job["log"],
+    })
+
+
+@app.route("/api/log/<job_id>")
+def api_log(job_id):
+    """Return new log content since a given byte offset."""
+    offset = max(0, int(request.args.get("offset", 0)))
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "not found"}), 404
+    log_text = job["log"]
+    new_content = log_text[offset:] if offset < len(log_text) else ""
+    return jsonify({
+        "log": new_content,
+        "offset": len(log_text),
+        "status": job["status"],
+        "current_step": job["current_step"],
+        "total_steps": len(job["steps"]),
     })
 
 

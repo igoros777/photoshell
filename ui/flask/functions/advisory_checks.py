@@ -18,6 +18,7 @@ import json
 import os
 import re
 import subprocess
+from collections import defaultdict
 
 from functions.constants import PHOTO_EXTENSIONS
 
@@ -515,7 +516,8 @@ def scan_folder_metadata(photo_dir, limit=_SAMPLE_LIMIT):
     data = _run_exiftool_json(
         files,
         ["-GPSLatitude", "-GPSLongitude",
-         "-IPTC:Caption-Abstract", "-UserComment", "-IPTC:Keywords"],
+         "-IPTC:Caption-Abstract", "-UserComment", "-IPTC:Keywords",
+         "-Model", "-DateTimeOriginal"],
     )
     if not data:
         return None
@@ -524,6 +526,9 @@ def scan_folder_metadata(photo_dir, limit=_SAMPLE_LIMIT):
     has_caption = 0
     has_comment = 0
     has_keywords = 0
+    cameras = defaultdict(int)
+    date_min = None
+    date_max = None
 
     for rec in data:
         lat = rec.get("GPSLatitude")
@@ -546,6 +551,17 @@ def scan_folder_metadata(photo_dir, limit=_SAMPLE_LIMIT):
             elif isinstance(kw, str) and kw.strip():
                 has_keywords += 1
 
+        model = rec.get("Model") or ""
+        if isinstance(model, str) and model.strip():
+            cameras[model.strip()] += 1
+
+        dto = rec.get("DateTimeOriginal") or ""
+        if isinstance(dto, str) and dto.strip() and not dto.startswith("0000"):
+            if date_min is None or dto < date_min:
+                date_min = dto
+            if date_max is None or dto > date_max:
+                date_max = dto
+
     sampled = len(data)
     return {
         "sampled": sampled,
@@ -558,6 +574,58 @@ def scan_folder_metadata(photo_dir, limit=_SAMPLE_LIMIT):
         "pct_caption": _pct(has_caption, sampled),
         "pct_comment": _pct(has_comment, sampled),
         "pct_keywords": _pct(has_keywords, sampled),
+        "cameras": dict(cameras),
+        "date_min": date_min,
+        "date_max": date_max,
+    }
+
+
+def extract_gps_data(photo_dir, limit=500):
+    """Extract per-file GPS coordinates and metadata for map display.
+
+    Returns a dict with total_photos, gps_photos, and a markers list.
+    Each marker has lat, lng, filename, path, camera, and date.
+    """
+    total = _count_photo_files(photo_dir)
+    if total == 0:
+        return {"total_photos": 0, "gps_photos": 0, "markers": []}
+
+    cap = total if limit <= 0 else min(limit, total)
+    files = _list_photo_files(photo_dir, limit=cap)
+    if not files:
+        return {"total_photos": total, "gps_photos": 0, "markers": []}
+
+    data = _run_exiftool_json(
+        files,
+        ["-GPSLatitude", "-GPSLongitude", "-Model", "-DateTimeOriginal",
+         "-FileName"],
+    )
+    if not data:
+        return {"total_photos": total, "gps_photos": 0, "markers": []}
+
+    markers = []
+    for rec in data:
+        lat = rec.get("GPSLatitude")
+        lng = rec.get("GPSLongitude")
+        if lat is None or lng is None:
+            continue
+        # Skip zero/zero coordinates (often invalid)
+        if lat == 0 and lng == 0:
+            continue
+        fname = rec.get("FileName", "")
+        markers.append({
+            "lat": lat,
+            "lng": lng,
+            "filename": fname,
+            "path": os.path.join(photo_dir, fname),
+            "camera": (rec.get("Model") or "").strip() or None,
+            "date": (rec.get("DateTimeOriginal") or "").strip() or None,
+        })
+
+    return {
+        "total_photos": total,
+        "gps_photos": len(markers),
+        "markers": markers,
     }
 
 

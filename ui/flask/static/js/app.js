@@ -33,12 +33,46 @@ document.addEventListener("DOMContentLoaded", function() {
     var docsLoading  = document.getElementById("docs-loading");
     var docsContent  = document.getElementById("docs-content");
 
+    // Photo thumbnail grid elements
+    var photoThumbsContainer = document.getElementById("photo-thumbs");
+    var photoThumbsHeader = document.getElementById("photo-thumbs-header");
+    var photoThumbsGrid = document.getElementById("photo-thumbs-grid");
+    var photoThumbsFooter = document.getElementById("photo-thumbs-footer");
+
     var currentJobId = null;
     var pollTimer    = null;
     var folderValid  = false;
     var validateTimer = null;
     var pendingMermaidDivs = null; // mermaid divs waiting for modal shown event
     var orderOverride = false; // user acknowledged ordering concerns
+
+    // Thumbnail grid state
+    var currentThumbPath = "";
+    var currentThumbPage = 1;
+    var thumbFiles = [];   // all loaded file objects for preview modal
+    var thumbObserver = null;
+
+    // Streaming log state
+    var logOffset = 0;
+    var logLineCount = 0;
+    var logAutoScroll = true;
+
+    // Map view state
+    var mapInstance = null;
+    var mapMarkers = null;
+    var mapInitialized = false;
+    var currentMapPath = "";
+    var cameraColorMap = {};
+    var cameraColorIndex = 0;
+
+    // Content view state
+    var activeContentView = "thumbs";
+    var contentViewTabs = document.getElementById("content-view-tabs");
+
+    // Blur view state
+    var blurScenes = [];
+    var currentBlurScene = 0;
+    var blurSliderDragging = false;
 
     // ---- Notification sounds (Web Audio API — no external files) ----
 
@@ -677,6 +711,13 @@ document.addEventListener("DOMContentLoaded", function() {
             gpsEl.textContent = stats.pct_gps + '% GPS';
             meta.appendChild(gpsEl);
         }
+        // Date range
+        if (stats.date_min && stats.date_max) {
+            var dateEl = document.createElement('span');
+            dateEl.className = 'header-meta-item';
+            dateEl.textContent = formatExifDateRange(stats.date_min, stats.date_max);
+            meta.appendChild(dateEl);
+        }
     }
 
     // ---- Pipeline strip ----
@@ -704,7 +745,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 node.classList.add('failed');
                 node.innerHTML = '<i class="bi bi-x-circle-fill"></i> ' + escapeHtml(steps[i]);
             } else {
-                node.textContent = steps[i];
+                node.innerHTML = '&#9675; ' + escapeHtml(steps[i]);
             }
             strip.appendChild(node);
         }
@@ -729,6 +770,8 @@ document.addEventListener("DOMContentLoaded", function() {
 
         setFolderStatus('<i class="bi bi-hourglass-split"></i> Checking...', "text-secondary");
         hideFolderMetaStats();
+        hidePhotoThumbs();
+        hideContentViewTabs();
 
         fetch("/api/validate_folder?path=" + encodeURIComponent(path))
             .then(function(res) { return res.json(); })
@@ -742,6 +785,8 @@ document.addEventListener("DOMContentLoaded", function() {
                     photoDirInput.classList.add("is-invalid");
                     folderValid = false;
                     updateHeaderMeta(null);
+                    hidePhotoThumbs();
+                    hideContentViewTabs();
                 } else if (data.warning) {
                     setFolderStatus(
                         '<i class="bi bi-exclamation-triangle-fill"></i> ' + data.warning +
@@ -753,6 +798,10 @@ document.addEventListener("DOMContentLoaded", function() {
                     folderValid = true;
                     autoDefaultMaxPerSheet(data.photo_count);
                     fetchFolderMetaStats(data.path);
+                    fetchPhotoThumbs(data.path, 1);
+                    showContentViewTabs();
+                    resetMapState();
+                    checkBlurResultsAvailable(data.path);
                 } else {
                     setFolderStatus(
                         '<i class="bi bi-check-circle-fill"></i> ' +
@@ -765,6 +814,10 @@ document.addEventListener("DOMContentLoaded", function() {
                     folderValid = true;
                     autoDefaultMaxPerSheet(data.photo_count);
                     fetchFolderMetaStats(data.path);
+                    fetchPhotoThumbs(data.path, 1);
+                    showContentViewTabs();
+                    resetMapState();
+                    checkBlurResultsAvailable(data.path);
                 }
             })
             .catch(function() {
@@ -774,6 +827,8 @@ document.addEventListener("DOMContentLoaded", function() {
                 );
                 folderValid = false;
                 updateHeaderMeta(null);
+                hidePhotoThumbs();
+                hideContentViewTabs();
             });
     }
 
@@ -848,12 +903,28 @@ document.addEventListener("DOMContentLoaded", function() {
         label.textContent = "Metadata coverage" + sampleNote + ":";
         folderMetaStats.appendChild(label);
 
-        folderMetaStats.insertAdjacentHTML("beforeend",
+        var statsHtml =
             renderMetaStat("bi-geo-alt-fill", "GPS", d.has_gps, d.sampled, d.pct_gps) +
             renderMetaStat("bi-card-text", "IPTC Caption", d.has_caption, d.sampled, d.pct_caption) +
             renderMetaStat("bi-chat-square-text", "UserComment", d.has_comment, d.sampled, d.pct_comment) +
-            renderMetaStat("bi-tags-fill", "Keywords", d.has_keywords || 0, d.sampled, d.pct_keywords || 0)
-        );
+            renderMetaStat("bi-tags-fill", "Keywords", d.has_keywords || 0, d.sampled, d.pct_keywords || 0);
+
+        // Date range
+        if (d.date_min && d.date_max) {
+            var dateStr = formatExifDateRange(d.date_min, d.date_max);
+            statsHtml += '<span class="fms-stat" style="color:var(--ps-text)">'
+                + '<i class="bi bi-calendar-range"></i> ' + dateStr + '</span>';
+        }
+
+        // Camera breakdown
+        if (d.cameras && Object.keys(d.cameras).length > 0) {
+            var cameraStr = formatCameraBreakdown(d.cameras);
+            statsHtml += '<span class="fms-stat" style="color:var(--ps-text)" title="'
+                + formatCameraFull(d.cameras) + '">'
+                + '<i class="bi bi-camera"></i> ' + cameraStr + '</span>';
+        }
+
+        folderMetaStats.insertAdjacentHTML("beforeend", statsHtml);
 
         // Show "Scan all" button if this was a sample
         if (isSampled && lastMetaPath) {
@@ -885,6 +956,53 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
+    function formatExifDate(dto) {
+        // EXIF format: "YYYY:MM:DD HH:MM:SS" → "Mon DD, YYYY"
+        if (!dto) return "";
+        var parts = dto.split(" ")[0].split(":");
+        if (parts.length < 3) return dto;
+        var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        var m = parseInt(parts[1], 10) - 1;
+        var d = parseInt(parts[2], 10);
+        return months[m] + " " + d + ", " + parts[0];
+    }
+
+    function formatExifDateRange(dmin, dmax) {
+        var minDate = dmin.split(" ")[0];
+        var maxDate = dmax.split(" ")[0];
+        if (minDate === maxDate) return formatExifDate(dmin);
+        // Same year? Shorten
+        var minParts = minDate.split(":");
+        var maxParts = maxDate.split(":");
+        var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        var mMin = parseInt(minParts[1], 10) - 1;
+        var dMin = parseInt(minParts[2], 10);
+        var mMax = parseInt(maxParts[1], 10) - 1;
+        var dMax = parseInt(maxParts[2], 10);
+        if (minParts[0] === maxParts[0]) {
+            return months[mMin] + " " + dMin + " \u2013 " + months[mMax] + " " + dMax + ", " + minParts[0];
+        }
+        return formatExifDate(dmin) + " \u2013 " + formatExifDate(dmax);
+    }
+
+    function formatCameraBreakdown(cameras) {
+        var sorted = Object.keys(cameras).sort(function(a, b) { return cameras[b] - cameras[a]; });
+        var parts = [];
+        var shown = Math.min(sorted.length, 2);
+        for (var i = 0; i < shown; i++) {
+            parts.push(sorted[i] + " (" + cameras[sorted[i]] + ")");
+        }
+        if (sorted.length > shown) {
+            parts.push("+" + (sorted.length - shown) + " more");
+        }
+        return parts.join(", ");
+    }
+
+    function formatCameraFull(cameras) {
+        var sorted = Object.keys(cameras).sort(function(a, b) { return cameras[b] - cameras[a]; });
+        return sorted.map(function(m) { return m + ": " + cameras[m]; }).join(", ");
+    }
+
     function renderMetaStat(icon, label, count, total, pct) {
         var cls = "fms-none";
         if (pct >= 80) cls = "fms-good";
@@ -895,6 +1013,446 @@ document.addEventListener("DOMContentLoaded", function() {
             + ' <small>(' + pct + '%)</small>'
             + '</span>';
     }
+
+    // ---- Photo thumbnail grid ----
+
+    var RAW_EXTENSIONS = [".dng",".nef",".cr2",".cr3",".arw",".orf",".rw2",".srw",".raf",".pef",".x3f"];
+
+    function initThumbObserver() {
+        if (thumbObserver) return;
+        thumbObserver = new IntersectionObserver(function(entries) {
+            entries.forEach(function(entry) {
+                if (entry.isIntersecting) {
+                    var img = entry.target;
+                    img.src = img.dataset.src;
+                    thumbObserver.unobserve(img);
+                }
+            });
+        }, { rootMargin: "200px" });
+    }
+
+    function hidePhotoThumbs() {
+        photoThumbsContainer.style.display = "none";
+        photoThumbsGrid.innerHTML = "";
+        photoThumbsFooter.innerHTML = "";
+        thumbFiles = [];
+        currentThumbPath = "";
+        currentThumbPage = 1;
+    }
+
+    function fetchPhotoThumbs(resolvedPath, page) {
+        if (!page) page = 1;
+        currentThumbPath = resolvedPath;
+        currentThumbPage = page;
+
+        if (page === 1) {
+            photoThumbsGrid.innerHTML = "";
+            photoThumbsFooter.innerHTML = "";
+            thumbFiles = [];
+            photoThumbsHeader.textContent = "Loading thumbnails\u2026";
+            photoThumbsContainer.style.display = "block";
+        }
+
+        fetch("/api/photos?path=" + encodeURIComponent(resolvedPath) + "&page=" + page + "&per_page=60")
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    photoThumbsHeader.textContent = data.error;
+                    return;
+                }
+                photoThumbsHeader.textContent = "Photos (" + data.total + ")";
+                renderPhotoThumbGrid(data.files, page > 1);
+                thumbFiles = thumbFiles.concat(data.files);
+
+                // Load more button
+                photoThumbsFooter.innerHTML = "";
+                if (data.has_more) {
+                    var btn = document.createElement("button");
+                    btn.type = "button";
+                    btn.className = "btn-load-more";
+                    btn.textContent = "Load more (" + (data.total - thumbFiles.length) + " remaining)";
+                    btn.addEventListener("click", function() {
+                        fetchPhotoThumbs(resolvedPath, page + 1);
+                    });
+                    photoThumbsFooter.appendChild(btn);
+                }
+            })
+            .catch(function(err) {
+                photoThumbsHeader.textContent = "Failed to load photos";
+            });
+    }
+
+    function renderPhotoThumbGrid(files, append) {
+        initThumbObserver();
+        var frag = document.createDocumentFragment();
+        var startIdx = thumbFiles.length;  // index offset for preview modal
+
+        files.forEach(function(file, i) {
+            var item = document.createElement("div");
+            item.className = "photo-thumb-item";
+            item.dataset.idx = startIdx + i;
+            item.title = file.name;
+
+            var isRaw = RAW_EXTENSIONS.indexOf(file.ext) !== -1;
+            var img = document.createElement("img");
+            img.alt = file.name;
+            img.dataset.src = "/api/thumbnail?path=" + encodeURIComponent(file.path) + "&size=200";
+            img.src = "";
+            img.loading = "lazy";
+            item.appendChild(img);
+            thumbObserver.observe(img);
+
+            if (isRaw) {
+                var badge = document.createElement("span");
+                badge.className = "thumb-badge";
+                badge.textContent = file.ext.substring(1).toUpperCase();
+                item.appendChild(badge);
+            }
+
+            item.addEventListener("click", function() {
+                openThumbPreview(parseInt(item.dataset.idx, 10));
+            });
+
+            frag.appendChild(item);
+        });
+
+        photoThumbsGrid.appendChild(frag);
+    }
+
+    function openThumbPreview(idx) {
+        if (idx < 0 || idx >= thumbFiles.length) return;
+        var file = thumbFiles[idx];
+        var modalEl = document.getElementById("photoPreviewModal");
+        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        var previewImg = modalEl.querySelector(".modal-body img");
+        var footer = modalEl.querySelector(".modal-footer");
+
+        // Show spinner while loading
+        previewImg.src = "";
+        previewImg.alt = file.name;
+
+        var loader = new Image();
+        loader.onload = function() { previewImg.src = loader.src; };
+        loader.onerror = function() { previewImg.alt = "Failed to load: " + file.name; };
+        loader.src = "/api/thumbnail?path=" + encodeURIComponent(file.path) + "&size=1200";
+
+        // Footer metadata
+        footer.innerHTML = "";
+        var nameEl = document.createElement("span");
+        nameEl.className = "preview-meta-filename";
+        nameEl.textContent = file.name;
+        footer.appendChild(nameEl);
+
+        modal.show();
+    }
+
+    // ---- Content View Tabs ----
+
+    function initContentViewTabs() {
+        document.querySelectorAll(".content-tab").forEach(function(tab) {
+            tab.addEventListener("click", function() {
+                if (tab.disabled) return;
+                switchContentView(tab.dataset.view);
+            });
+        });
+    }
+
+    function switchContentView(view) {
+        activeContentView = view;
+        document.querySelectorAll(".content-tab").forEach(function(t) {
+            t.classList.toggle("active", t.dataset.view === view);
+        });
+        document.getElementById("photo-thumbs").style.display = (view === "thumbs") ? "block" : "none";
+        document.getElementById("map-view").style.display = (view === "map") ? "block" : "none";
+        document.getElementById("blur-view").style.display = (view === "blur") ? "block" : "none";
+
+        if (view === "map" && !mapInitialized && currentThumbPath) {
+            initMap();
+            loadMapData(currentThumbPath);
+        }
+        if (view === "map" && mapInstance) {
+            mapInstance.invalidateSize();
+        }
+        if (view === "blur" && currentThumbPath) {
+            loadBlurResults(currentThumbPath);
+        }
+    }
+
+    function showContentViewTabs() {
+        contentViewTabs.style.display = "flex";
+    }
+
+    function hideContentViewTabs() {
+        contentViewTabs.style.display = "none";
+        activeContentView = "thumbs";
+        document.querySelectorAll(".content-tab").forEach(function(t) {
+            t.classList.toggle("active", t.dataset.view === "thumbs");
+        });
+        document.getElementById("map-view").style.display = "none";
+        document.getElementById("blur-view").style.display = "none";
+    }
+
+    initContentViewTabs();
+
+    // ---- GPS Map View ----
+
+    var CAMERA_COLORS = [
+        "#d4845e", "#e09570", "#c9a227", "#6b9b6b", "#7ba3c9",
+        "#b07bc9", "#c97b8e", "#8bc97b", "#c9b07b", "#7bc9c2"
+    ];
+
+    function getCameraColor(camera) {
+        if (!camera) camera = "Unknown";
+        if (!cameraColorMap[camera]) {
+            cameraColorMap[camera] = CAMERA_COLORS[cameraColorIndex % CAMERA_COLORS.length];
+            cameraColorIndex++;
+        }
+        return cameraColorMap[camera];
+    }
+
+    function createColoredIcon(color) {
+        return L.divIcon({
+            className: "ps-map-marker",
+            html: '<div style="background:' + color + ';width:12px;height:12px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.4)"></div>',
+            iconSize: [12, 12],
+            iconAnchor: [6, 6]
+        });
+    }
+
+    function resetMapState() {
+        mapInitialized = false;
+        currentMapPath = "";
+        cameraColorMap = {};
+        cameraColorIndex = 0;
+        if (mapMarkers) mapMarkers.clearLayers();
+        if (mapInstance) { mapInstance.remove(); mapInstance = null; mapMarkers = null; }
+    }
+
+    function initMap() {
+        var container = document.getElementById("map-container");
+        mapInstance = L.map(container).setView([20, 0], 2);
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+            attribution: '\u00a9 <a href="https://www.openstreetmap.org/copyright">OSM</a> \u00a9 <a href="https://carto.com/">CARTO</a>',
+            maxZoom: 19,
+            subdomains: "abcd"
+        }).addTo(mapInstance);
+        mapMarkers = L.markerClusterGroup();
+        mapInstance.addLayer(mapMarkers);
+        mapInitialized = true;
+    }
+
+    function loadMapData(resolvedPath) {
+        if (currentMapPath === resolvedPath && mapMarkers && mapMarkers.getLayers().length > 0) return;
+        currentMapPath = resolvedPath;
+
+        var banner = document.getElementById("map-coverage-banner");
+        banner.textContent = "Loading GPS data\u2026";
+
+        fetch("/api/gps_data?path=" + encodeURIComponent(resolvedPath))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    banner.textContent = data.error;
+                    return;
+                }
+                banner.textContent = data.gps_photos + " of " + data.total_photos + " photos have GPS coordinates";
+
+                var badge = document.getElementById("map-count-badge");
+                badge.textContent = data.gps_photos;
+                badge.style.display = data.gps_photos > 0 ? "inline" : "none";
+
+                renderMapMarkers(data.markers);
+            })
+            .catch(function() {
+                banner.textContent = "Failed to load GPS data";
+            });
+    }
+
+    function renderMapMarkers(markers) {
+        mapMarkers.clearLayers();
+        if (markers.length === 0) return;
+
+        var bounds = [];
+        markers.forEach(function(m) {
+            var color = getCameraColor(m.camera);
+            var icon = createColoredIcon(color);
+            var marker = L.marker([m.lat, m.lng], { icon: icon });
+
+            var tooltipHtml = '<div class="ps-map-tooltip">'
+                + '<img src="/api/thumbnail?path=' + encodeURIComponent(m.path) + '&size=120" '
+                + 'style="width:120px;border-radius:3px;margin-bottom:4px;display:block">'
+                + '<div style="font-weight:600;font-size:11px">' + escapeHtml(m.filename) + '</div>'
+                + (m.date ? '<div style="font-size:10px;color:#888">' + escapeHtml(formatExifDate(m.date)) + '</div>' : '')
+                + (m.camera ? '<div style="font-size:10px;color:#888">' + escapeHtml(m.camera) + '</div>' : '')
+                + '</div>';
+
+            marker.bindPopup(tooltipHtml, { maxWidth: 160, className: "ps-map-popup" });
+            mapMarkers.addLayer(marker);
+            bounds.push([m.lat, m.lng]);
+        });
+
+        if (bounds.length > 0) {
+            mapInstance.fitBounds(bounds, { padding: [30, 30] });
+        }
+    }
+
+    function checkBlurResultsAvailable(resolvedPath) {
+        fetch("/api/blur_results?path=" + encodeURIComponent(resolvedPath))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                document.getElementById("tab-blur").disabled = !data.has_results;
+            })
+            .catch(function() {
+                document.getElementById("tab-blur").disabled = true;
+            });
+    }
+
+    // ---- Blur Before/After ----
+
+    function loadBlurResults(resolvedPath) {
+        fetch("/api/blur_results?path=" + encodeURIComponent(resolvedPath))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (!data.has_results || !data.scenes || data.scenes.length === 0) {
+                    document.getElementById("blur-empty-state").style.display = "flex";
+                    document.getElementById("blur-comparison").style.display = "none";
+                    return;
+                }
+                document.getElementById("blur-empty-state").style.display = "none";
+                document.getElementById("blur-comparison").style.display = "block";
+                blurScenes = data.scenes.filter(function(s) {
+                    return s.analyzed && s.analyzed.length >= 2;
+                });
+                if (blurScenes.length === 0) {
+                    document.getElementById("blur-empty-state").style.display = "flex";
+                    document.getElementById("blur-comparison").style.display = "none";
+                    return;
+                }
+                renderBlurSceneNav();
+                renderBlurScene(0);
+            })
+            .catch(function() {
+                document.getElementById("blur-empty-state").style.display = "flex";
+                document.getElementById("blur-comparison").style.display = "none";
+            });
+    }
+
+    function renderBlurSceneNav() {
+        var nav = document.getElementById("blur-scene-nav");
+        nav.innerHTML = "";
+        if (blurScenes.length <= 1) return;
+        blurScenes.forEach(function(scene, i) {
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "blur-scene-btn" + (i === 0 ? " active" : "");
+            btn.textContent = "Scene " + (i + 1) + " (" + scene.analyzed.length + ")";
+            btn.addEventListener("click", function() {
+                nav.querySelectorAll(".blur-scene-btn").forEach(function(b) { b.classList.remove("active"); });
+                btn.classList.add("active");
+                renderBlurScene(i);
+            });
+            nav.appendChild(btn);
+        });
+    }
+
+    function renderBlurScene(sceneIndex) {
+        currentBlurScene = sceneIndex;
+        var scene = blurScenes[sceneIndex];
+        if (!scene || !scene.analyzed || scene.analyzed.length < 2) return;
+
+        var sorted = scene.analyzed.slice().sort(function(a, b) { return a.score - b.score; });
+        var blurriest = sorted[0];
+        var sharpest = sorted[sorted.length - 1];
+
+        document.getElementById("blur-img-left").src = "/api/thumbnail?path=" + encodeURIComponent(blurriest.path) + "&size=800";
+        document.getElementById("blur-img-right").src = "/api/thumbnail?path=" + encodeURIComponent(sharpest.path) + "&size=800";
+
+        setBlurSliderPosition(50);
+        renderBlurFilmstrip(scene);
+    }
+
+    function renderBlurFilmstrip(scene) {
+        var filmstrip = document.getElementById("blur-filmstrip");
+        filmstrip.innerHTML = "";
+        if (!scene.analyzed) return;
+
+        var sorted = scene.analyzed.slice().sort(function(a, b) { return a.score - b.score; });
+        sorted.forEach(function(item) {
+            var thumb = document.createElement("div");
+            thumb.className = "blur-filmstrip-item";
+            if (item.filename === scene.selected) {
+                thumb.classList.add("selected");
+            }
+
+            var img = document.createElement("img");
+            img.src = "/api/thumbnail?path=" + encodeURIComponent(item.path) + "&size=120";
+            img.alt = item.filename;
+            thumb.appendChild(img);
+
+            var scoreBadge = document.createElement("span");
+            scoreBadge.className = "blur-score-badge";
+            scoreBadge.textContent = item.score;
+            thumb.appendChild(scoreBadge);
+
+            thumb.addEventListener("click", function() {
+                // Click filmstrip item to set as right (sharp) comparison image
+                document.getElementById("blur-img-right").src = "/api/thumbnail?path=" + encodeURIComponent(item.path) + "&size=800";
+            });
+
+            filmstrip.appendChild(thumb);
+        });
+    }
+
+    function setBlurSliderPosition(pct) {
+        pct = Math.max(0, Math.min(100, pct));
+        document.getElementById("blur-slider-handle").style.left = pct + "%";
+        document.getElementById("blur-slider-right").style.clipPath = "inset(0 0 0 " + pct + "%)";
+    }
+
+    function initBlurSlider() {
+        var handle = document.getElementById("blur-slider-handle");
+        var container = document.getElementById("blur-slider-container");
+
+        function onMove(clientX) {
+            var rect = container.getBoundingClientRect();
+            var pct = ((clientX - rect.left) / rect.width) * 100;
+            setBlurSliderPosition(pct);
+        }
+
+        handle.addEventListener("mousedown", function(e) {
+            e.preventDefault();
+            blurSliderDragging = true;
+        });
+
+        document.addEventListener("mousemove", function(e) {
+            if (!blurSliderDragging) return;
+            onMove(e.clientX);
+        });
+
+        document.addEventListener("mouseup", function() {
+            blurSliderDragging = false;
+        });
+
+        handle.addEventListener("touchstart", function() {
+            blurSliderDragging = true;
+        }, { passive: true });
+
+        document.addEventListener("touchmove", function(e) {
+            if (!blurSliderDragging) return;
+            onMove(e.touches[0].clientX);
+        }, { passive: true });
+
+        document.addEventListener("touchend", function() {
+            blurSliderDragging = false;
+        });
+
+        container.addEventListener("click", function(e) {
+            if (e.target === handle || handle.contains(e.target)) return;
+            onMove(e.clientX);
+        });
+    }
+
+    initBlurSlider();
 
     // Validate on button click
     btnValidate.addEventListener("click", function() {
@@ -1814,12 +2372,18 @@ document.addEventListener("DOMContentLoaded", function() {
             logPanel.scrollIntoView({ behavior: "smooth", block: "center" });
         }, 100);
 
+        // Reset log state
+        logOffset = 0;
+        logLineCount = 0;
+        logAutoScroll = true;
+        logPanel.innerHTML = "";
+
         // Show header with override notice if applicable
         var header = "Starting pipeline...\n";
         if (orderOverride) {
             header += "NOTE: Running with user-overridden step order.\n";
         }
-        logPanel.textContent = header;
+        appendLogLines(header);
 
         fetch("/api/run", {
             method: "POST",
@@ -1829,7 +2393,8 @@ document.addEventListener("DOMContentLoaded", function() {
         .then(function(res) { return res.json(); })
         .then(function(body) {
             if (body.error) {
-                logPanel.textContent = "Error: " + body.error;
+                logPanel.innerHTML = "";
+                appendLogLines("Error: " + body.error + "\n");
                 btnRun.disabled = false;
                 btnCancel.style.display = "none";
                 return;
@@ -1844,7 +2409,8 @@ document.addEventListener("DOMContentLoaded", function() {
             startPolling();
         })
         .catch(function(err) {
-            logPanel.textContent = "Request failed: " + err;
+            logPanel.innerHTML = "";
+            appendLogLines("Request failed: " + err + "\n");
             btnRun.disabled = false;
             btnCancel.style.display = "none";
         });
@@ -1862,12 +2428,19 @@ document.addEventListener("DOMContentLoaded", function() {
     function startPolling() {
         pollTimer = setInterval(function() {
             if (!currentJobId) return;
-            fetch("/api/status/" + currentJobId)
+            fetch("/api/log/" + currentJobId + "?offset=" + logOffset)
                 .then(function(res) { return res.json(); })
                 .then(function(data) {
-                    logPanel.textContent = data.log;
-                    logPanel.scrollTop = logPanel.scrollHeight;
-                    updateStepBadges(data);
+                    if (data.log) {
+                        appendLogLines(data.log);
+                        logOffset = data.offset;
+                    }
+
+                    // Update step badges with status info
+                    updateStepBadges({
+                        status: data.status,
+                        current_step: data.current_step,
+                    });
 
                     // Update pipeline strip
                     if (pipelineStepLabels.length > 0) {
@@ -1887,6 +2460,82 @@ document.addEventListener("DOMContentLoaded", function() {
                 .catch(function() { /* ignore transient errors */ });
         }, 1000);
     }
+
+    // ---- Log formatting ----
+
+    function appendLogLines(text) {
+        if (!text) return;
+        var lines = text.split("\n");
+        // If text ends with newline, remove trailing empty string
+        if (lines.length > 0 && lines[lines.length - 1] === "") {
+            lines.pop();
+        }
+        var frag = document.createDocumentFragment();
+        for (var i = 0; i < lines.length; i++) {
+            logLineCount++;
+            var line = lines[i];
+            var div = document.createElement("div");
+            div.className = "log-line";
+
+            // Detect step headers
+            if (/^\[Step \d+\]/.test(line) || /^={10,}$/.test(line)) {
+                div.className += " log-step-header";
+            }
+
+            var numSpan = document.createElement("span");
+            numSpan.className = "log-line-num";
+            numSpan.textContent = logLineCount;
+
+            var textSpan = document.createElement("span");
+            textSpan.className = "log-line-text";
+            textSpan.textContent = line;
+
+            div.appendChild(numSpan);
+            div.appendChild(textSpan);
+            frag.appendChild(div);
+        }
+
+        // Remove scroll lock indicator if present before appending
+        var lockEl = logPanel.querySelector(".log-scroll-lock");
+        if (lockEl) lockEl.remove();
+
+        logPanel.appendChild(frag);
+
+        // Re-add scroll lock indicator if not auto-scrolling
+        if (!logAutoScroll) {
+            showScrollLockIndicator();
+        }
+
+        if (logAutoScroll) {
+            logPanel.scrollTop = logPanel.scrollHeight;
+        }
+    }
+
+    function showScrollLockIndicator() {
+        if (logPanel.querySelector(".log-scroll-lock")) return;
+        var lockDiv = document.createElement("div");
+        lockDiv.className = "log-scroll-lock";
+        var badge = document.createElement("span");
+        badge.className = "log-scroll-lock-badge";
+        badge.textContent = "\u2193 Scroll locked \u2014 click to resume";
+        badge.addEventListener("click", function() {
+            logAutoScroll = true;
+            logPanel.scrollTop = logPanel.scrollHeight;
+            lockDiv.remove();
+        });
+        lockDiv.appendChild(badge);
+        logPanel.appendChild(lockDiv);
+    }
+
+    // Detect user scrolling up in log panel
+    logPanel.addEventListener("scroll", function() {
+        var atBottom = logPanel.scrollHeight - logPanel.scrollTop - logPanel.clientHeight < 30;
+        logAutoScroll = atBottom;
+        if (atBottom) {
+            var lockEl = logPanel.querySelector(".log-scroll-lock");
+            if (lockEl) lockEl.remove();
+        }
+    });
 
     // ---- Step badges ----
 
