@@ -177,7 +177,16 @@ Use `--host` and `--port` to customize the bind address (e.g., `python3 app.py -
 - **Prompt management** — browse, preview, edit, and save prompts for the Ollama annotation workflows
 - **Structured search** — discover available EXIF/IPTC fields from your photos, then search by numeric ranges (aperture, focal length, ISO), date ranges, camera model, lens, file type, keywords, and captions with PCRE regex support. Parallel exiftool processing for large collections. Paginated results with thumbnail prefetching.
 - **Text search** — grep-style metadata search across files with field and media type filters, results shown as thumbnail grid with photo preview modal
-- **Metadata coverage** — shows GPS, Caption, UserComment, and Keywords coverage with option to scan all files (not just a sample)
+- **Photo thumbnails** — browse photos as a lazy-loaded thumbnail grid with "Load more" pagination, click to preview full-size images
+- **Streaming logs** — offset-based log streaming with line numbers, step header highlighting, and scroll-lock indicator
+- **Metadata coverage** — shows GPS, Caption, UserComment, Keywords coverage, camera model breakdown, and date range with option to scan all files
+- **GPS map** — interactive Leaflet.js map with clustered markers colored by camera model, click markers for thumbnail + metadata popup (CartoDB dark tiles, vendored for offline use)
+- **Blur comparison** — before/after slider comparing blurriest vs sharpest photos per scene, with filmstrip navigation and blur score badges
+- **Content view tabs** — toggle between Thumbnails, Map, and Blur Comparison views
+- **Workflow presets** — save, load, and delete named workflow configurations as JSON presets
+- **Undo/revert** — restore metadata from exiftool `_original` backup files with one click
+- **Multi-folder project mode** — auto-detect subfolders with photos, run the full pipeline across all subfolders sequentially, skip failures and continue
+- **Drag-and-drop** — drop a folder onto the UI to set the photo directory
 - **Contact sheet splitting** — automatically split large collections across multiple sheets (configurable max images per sheet)
 - **Backup** — create timestamped `.tar.gz` archives with size estimation before running
 - **Keyboard shortcuts** — `R` (run), `Esc` (cancel), `/` (focus path), `V` (validate), `?` (help)

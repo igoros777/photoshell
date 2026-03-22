@@ -29,15 +29,21 @@ PhotoShell is a local-first photo workflow toolkit. It has two layers: a set of 
 │  /api/search/structured → structured search (async job)      │
 │  /api/search/count  → fast photo file count                  │
 │  /api/thumbnail   → in-memory thumbnail generation           │
+│  /api/photos      → paginated photo file listing             │
+│  /api/log         → offset-based streaming log               │
+│  /api/gps_data    → per-file GPS coordinates for map         │
+│  /api/blur_results → blur detection output (scenes/scores)   │
+│  /api/presets     → CRUD for workflow presets (JSON files)    │
+│  /api/undo        → restore exiftool _original backups       │
 │  /api/backup      → estimate + run .tar.gz archive           │
 │  /api/docs        → serves markdown docs for in-app reading  │
 │                                                              │
 │  constants.py           → shared PHOTO_EXTENSIONS, labels    │
-│  advisory_checks.py     → metadata pre-flight logic          │
+│  advisory_checks.py     → metadata pre-flight + GPS extract  │
 │  structured_search.py   → field discovery + filtering engine │
 │                                                              │
 │  In-memory: jobs{} (with TTL cleanup)                        │
-│  On-disk:   .photoshell/ (future: presets, undo log, cache)  │
+│  On-disk:   .photoshell/presets/ and operations.jsonl         │
 └──────────────────────────┬──────────────────────────────────┘
                            │ subprocess.Popen (list args, no shell)
 ┌──────────────────────────▼──────────────────────────────────┐
@@ -87,7 +93,8 @@ photoshell/
 │   │   └── index.html          # Single-page application
 │   └── static/
 │       ├── css/style.css       # DaVinci Resolve-inspired theme
-│       └── js/app.js           # Frontend logic (vanilla JS)
+│       ├── js/app.js           # Frontend logic (vanilla JS)
+│       └── vendor/leaflet/     # Leaflet.js + MarkerCluster (vendored)
 ├── docs/                       # Per-script documentation (markdown)
 ├── images/                     # README screenshots
 ├── DESIGN.md                   # Design system specification
