@@ -1541,8 +1541,8 @@ document.addEventListener("DOMContentLoaded", function() {
         var blurriest = sorted[0];
         var sharpest = sorted[sorted.length - 1];
 
-        document.getElementById("blur-img-left").src = "/api/thumbnail?path=" + encodeURIComponent(blurriest.path) + "&size=800";
-        document.getElementById("blur-img-right").src = "/api/thumbnail?path=" + encodeURIComponent(sharpest.path) + "&size=800";
+        document.getElementById("blur-img-left").src = "/api/thumbnail?path=" + encodeURIComponent(blurriest.path) + "&size=2400";
+        document.getElementById("blur-img-right").src = "/api/thumbnail?path=" + encodeURIComponent(sharpest.path) + "&size=2400";
 
         setBlurSliderPosition(50);
         renderBlurFilmstrip(scene);
@@ -1573,7 +1573,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
             thumb.addEventListener("click", function() {
                 // Click filmstrip item to set as right (sharp) comparison image
-                document.getElementById("blur-img-right").src = "/api/thumbnail?path=" + encodeURIComponent(item.path) + "&size=800";
+                document.getElementById("blur-img-right").src = "/api/thumbnail?path=" + encodeURIComponent(item.path) + "&size=2400";
             });
 
             filmstrip.appendChild(thumb);
