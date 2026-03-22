@@ -8,9 +8,10 @@
 #                               igor@igoros.com
 #                                 2026-02-19
 # ----------------------------------------------------------------------------
-# Generate photo metadata with Ollama using one of two workflows:
+# Generate photo metadata with Ollama using one of three workflows:
 #   1) Description workflow: replace EXIF ImageDescription and IPTC Caption-Abstract
 #   2) Keywords workflow: populate IPTC Keywords only when currently empty
+#   3) Headline workflow: populate IPTC Headline only when currently empty
 # ----------------------------------------------------------------------------
 
 set -euo pipefail
@@ -30,8 +31,10 @@ PROMPT_FILE_OVERRIDE=""
 
 DESCRIPTION_DEFAULT_PROMPT_TEXT="Provide a concise description about the scene and photographic aspects. Include some details about the photo's location: LOCATION. Do not include any formatting or commentary."
 KEYWORDS_DEFAULT_PROMPT_TEXT="Generate 8 to 15 concise, search-friendly keywords for this photo. Focus on subject, scene type, location, lighting, weather, mood, and photographic technique. Incorporate the location naturally: LOCATION. Return keywords only as a comma-separated list. No numbering, quotes, or commentary."
+HEADLINE_DEFAULT_PROMPT_TEXT="Write a short, punchy headline (8 words max) for this photo. Capture the essence of the scene in the style of a newspaper photo caption. Location context: LOCATION. Return only the headline text — no quotes, no commentary."
 DESCRIPTION_PROMPT_FILE_DEFAULT="${SCRIPT_DIR}/annotate_photos_with_ollama.prompts.txt"
 KEYWORDS_PROMPT_FILE_DEFAULT="${SCRIPT_DIR}/annotate_photos_with_ollama.keywords.prompts.txt"
+HEADLINE_PROMPT_FILE_DEFAULT="${SCRIPT_DIR}/annotate_photos_with_ollama.headline.prompts.txt"
 LOCATION_PLACEHOLDER="LOCATION"
 LOCATION_FALLBACK_TEXT="not available"
 
@@ -61,6 +64,10 @@ Purpose:
        - Skip files with populated IPTC Keywords
        - Generate keywords with Ollama
        - Populate IPTC Keywords when empty
+    4) Headline workflow (--headline):
+       - Skip files with populated IPTC Headline
+       - Generate a short headline with Ollama
+       - Populate IPTC Headline when empty
 
 Options:
   -r, --recursive            Include subfolders
@@ -70,6 +77,7 @@ Options:
   -m, --model NAME           Ollama model (default: ${MODEL})
       --description          Use description workflow (default)
       --keywords             Use keywords workflow
+      --headline             Use headline workflow
   -p, --prompt-id ID         Use prompt ID from active workflow prompt file
                              (0 = built-in fallback)
       --list-prompts         List prompts from active workflow prompt file and exit
@@ -140,6 +148,11 @@ select_workflow_settings() {
       WORKFLOW_LABEL="keywords"
       DEFAULT_PROMPT_TEXT="${KEYWORDS_DEFAULT_PROMPT_TEXT}"
       PROMPT_FILE="${KEYWORDS_PROMPT_FILE_DEFAULT}"
+      ;;
+    headline)
+      WORKFLOW_LABEL="headline"
+      DEFAULT_PROMPT_TEXT="${HEADLINE_DEFAULT_PROMPT_TEXT}"
+      PROMPT_FILE="${HEADLINE_PROMPT_FILE_DEFAULT}"
       ;;
     *)
       die "unsupported workflow: ${WORKFLOW}"
@@ -583,6 +596,64 @@ process_keywords_workflow() {
   done
 }
 
+read_existing_iptc_headline() {
+  local file="$1"
+  local value
+
+  if ! value="$(exiftool -s3 "-IPTC:Headline" "${file}" 2>/dev/null)"; then
+    return 1
+  fi
+
+  value="$(trim_text "${value}")"
+  printf '%s' "${value}"
+}
+
+append_headline_metadata() {
+  local file="$1"
+  local headline="$2"
+
+  exiftool -overwrite_original \
+    "-IPTC:Headline=${headline}" \
+    "${file}" >/dev/null
+}
+
+process_headline_workflow() {
+  local file total idx base headline existing_headline cached_comment
+  total="${#IMAGE_FILES[@]}"
+  idx=0
+
+  for file in "${IMAGE_FILES[@]}"; do
+    idx=$((idx + 1))
+    base="$(basename "${file}")"
+    log "[${idx}/${total}] ${base}"
+
+    if ! existing_headline="$(read_existing_iptc_headline "${file}")"; then
+      warn "skipping ${file}: failed to read IPTC Headline"
+      continue
+    fi
+
+    if [[ -n "${existing_headline}" ]]; then
+      log "  skipped: IPTC Headline already populated"
+      continue
+    fi
+
+    # Cache UserComment once per file to avoid redundant exiftool calls
+    cached_comment="$(read_exif_user_comment "${file}" 2>/dev/null)" || cached_comment=""
+
+    if ! headline="$(generate_model_output "${file}" "${cached_comment}")"; then
+      warn "skipping ${file}: failed to get headline from ollama"
+      continue
+    fi
+
+    if ! append_headline_metadata "${file}" "${headline}"; then
+      warn "failed to write IPTC Headline for ${file}"
+      continue
+    fi
+
+    log "  populated IPTC Headline"
+  done
+}
+
 process_images() {
   case "${WORKFLOW}" in
     description)
@@ -590,6 +661,9 @@ process_images() {
       ;;
     keywords)
       process_keywords_workflow
+      ;;
+    headline)
+      process_headline_workflow
       ;;
     *)
       die "unsupported workflow: ${WORKFLOW}"
@@ -628,6 +702,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --keywords)
       set_workflow_from_flag "keywords"
+      shift
+      ;;
+    --headline)
+      set_workflow_from_flag "headline"
       shift
       ;;
     -p|--prompt-id)

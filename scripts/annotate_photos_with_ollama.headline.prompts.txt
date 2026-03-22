@@ -1,0 +1,2 @@
+# Format: <integer>|<prompt text>
+1|Write a short, punchy headline (8 words max) for this photo. Capture the essence of the scene in the style of a newspaper photo caption. Location context: LOCATION. Return only the headline text — no quotes, no commentary.

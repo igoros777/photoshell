@@ -145,6 +145,19 @@
                         </span>
                     </div>
 
+                    <div class="sidebar-step" data-step="hl">
+                        <input class="form-check-input section-toggle" type="checkbox"
+                               id="chk-hl" name="enable_annotate_hl" data-section="sec-hl">
+                        <span class="sidebar-step-label"><i class="bi bi-newspaper"></i> Annotate - Headline</span>
+                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_annotate_hl">Step</span>
+                        <span class="sidebar-step-actions">
+                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                               data-bs-toggle="popover" data-bs-trigger="hover focus"
+                               data-bs-content="Uses Ollama LLM to generate a short, punchy headline for each photo and writes it to the IPTC Headline metadata field."></i>
+                            <i class="bi bi-book step-docs-link" data-doc="annotate_hl" title="Full documentation"></i>
+                        </span>
+                    </div>
+
                     <div class="sidebar-step" data-step="blur">
                         <input class="form-check-input section-toggle" type="checkbox"
                                id="chk-blur" name="enable_blur" data-section="sec-blur">
@@ -383,6 +396,56 @@
                 <div class="form-check mt-2">
                     <input class="form-check-input" type="checkbox" name="kw_recursive" id="kw-rec">
                     <label class="form-check-label" for="kw-rec">Include subfolders</label>
+                </div>
+            </div>
+
+            <!-- 5b. Annotate - Headline -->
+            <div class="step-config" id="config-hl" style="display:none">
+                <p class="section-desc">
+                    Generates a short headline via Ollama LLM and writes it to the IPTC Headline field.
+                    Skips files where the headline is already populated.
+                </p>
+                <div class="field-row">
+                    <div>
+                        <label class="form-label">Ollama Model</label>
+                        <select class="form-select ollama-model-select" name="hl_model" id="hl-model-select">
+                            <option value="gemma3:27b" selected>gemma3:27b</option>
+                        </select>
+                        <div class="field-help ollama-model-status" id="hl-model-status"></div>
+                    </div>
+                    <div>
+                        <label class="form-label">Prompt</label>
+                        <select class="form-select prompt-select" name="hl_prompt_id" id="hl-prompt-select"
+                                data-workflow="headline">
+                            <option value="1" selected>1 — (loading...)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <label class="form-label">Prompt Text</label>
+                    <textarea class="form-control prompt-text-area" id="hl-prompt-text" rows="3"
+                              style="font-size:12px;line-height:1.5" readonly></textarea>
+                    <div class="d-flex gap-2 mt-1 align-items-center">
+                        <button type="button" class="btn btn-sm btn-photoshell prompt-edit-btn"
+                                id="hl-prompt-edit" data-workflow="headline">
+                            <i class="bi bi-pencil"></i> Edit
+                        </button>
+                        <button type="button" class="btn btn-sm btn-photoshell prompt-save-btn"
+                                id="hl-prompt-save" data-workflow="headline" style="display:none">
+                            <i class="bi bi-save"></i> Save to file
+                        </button>
+                        <span class="prompt-save-status field-help" id="hl-prompt-status"></span>
+                    </div>
+                </div>
+                <div class="field-row mt-2">
+                    <div>
+                        <label class="form-label">Single file (optional)</label>
+                        <input type="text" class="form-control" name="hl_file" placeholder="Process all if empty">
+                    </div>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" name="hl_recursive" id="hl-rec">
+                    <label class="form-check-label" for="hl-rec">Include subfolders</label>
                 </div>
             </div>
 

@@ -250,11 +250,12 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_extract_summary":  3,
         "enable_annotate_desc":    4,
         "enable_annotate_kw":      5,
-        "enable_geo_rename":       6,
-        "enable_gopro":            7,
-        "enable_blur":             8,
-        "enable_contact_sheet":    9,
-        "enable_scrub":           10
+        "enable_annotate_hl":      6,
+        "enable_geo_rename":       7,
+        "enable_gopro":            8,
+        "enable_blur":             9,
+        "enable_contact_sheet":   10,
+        "enable_scrub":           11
     };
 
     var STEP_LABELS = {
@@ -263,6 +264,7 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_extract_summary": "Extract Photo Summary",
         "enable_annotate_desc":   "Annotate - Description",
         "enable_annotate_kw":     "Annotate - Keywords",
+        "enable_annotate_hl":     "Annotate - Headline",
         "enable_blur":            "Detect Blurry Photos",
         "enable_geo_rename":      "Geo Rename Photos",
         "enable_gopro":           "GoPro Geo Rename",
@@ -277,6 +279,7 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_extract_summary": "config-summary",
         "enable_annotate_desc":   "config-desc",
         "enable_annotate_kw":     "config-kw",
+        "enable_annotate_hl":     "config-hl",
         "enable_blur":            "config-blur",
         "enable_geo_rename":      "config-geo",
         "enable_gopro":           "config-gopro",
@@ -291,6 +294,7 @@ document.addEventListener("DOMContentLoaded", function() {
         "summary": "enable_extract_summary",
         "desc":    "enable_annotate_desc",
         "kw":      "enable_annotate_kw",
+        "hl":      "enable_annotate_hl",
         "blur":    "enable_blur",
         "geo":     "enable_geo_rename",
         "gopro":   "enable_gopro",
@@ -348,6 +352,21 @@ document.addEventListener("DOMContentLoaded", function() {
             before: "enable_annotate_desc",
             after: "enable_annotate_kw",
             reason: "The keyword prompt reads the generated description to produce more relevant keywords. Descriptions must be written first."
+        },
+        {
+            before: "enable_gps_gap_fill",
+            after: "enable_annotate_hl",
+            reason: "Headlines reference location context. GPS must be filled first so the LLM prompt includes accurate location data."
+        },
+        {
+            before: "enable_extract_summary",
+            after: "enable_annotate_hl",
+            reason: "Extract Summary writes technical metadata that the headline prompt uses for context."
+        },
+        {
+            before: "enable_annotate_desc",
+            after: "enable_annotate_hl",
+            reason: "Headlines work best after descriptions are written, giving the LLM more context about the scene."
         },
         {
             before: "enable_extract_summary",

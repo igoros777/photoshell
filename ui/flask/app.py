@@ -313,6 +313,18 @@ def _build_step(key, data):
             cmd += ["--file", data["kw_file"]]
         return {"label": "Annotate (Keywords)", "cmd": cmd}
 
+    if key == "enable_annotate_hl" and data.get(key):
+        cmd = ["bash", _script("annotate_photos_with_ollama.sh"), "--headline"]
+        if data.get("hl_model"):
+            cmd += ["-m", data["hl_model"]]
+        if data.get("hl_prompt_id"):
+            cmd += ["--prompt-id", data["hl_prompt_id"]]
+        if data.get("hl_recursive"):
+            cmd.append("--recursive")
+        if data.get("hl_file"):
+            cmd += ["--file", data["hl_file"]]
+        return {"label": "Annotate (Headline)", "cmd": cmd}
+
     if key == "enable_blur" and data.get(key):
         cmd = ["bash", _script("detect_blurry_photos.sh")]
         if data.get("blur_mode"):
@@ -499,6 +511,7 @@ DOCS_MAP = {
     "extract_photo_summary": "extract_photo_summary.md",
     "annotate_desc": "annotate_photos_with_ollama.md",
     "annotate_kw": "annotate_photos_with_ollama.md",
+    "annotate_hl": "annotate_photos_with_ollama.md",
     "detect_blurry": "detect_blurry_photos.md",
     "geo_rename": "geo_rename_photos.md",
     "gopro_geo_rename": "gopro_geo_rename.md",
@@ -513,6 +526,7 @@ DOCS_MAP = {
 PROMPTS_FILES = {
     "description": os.path.join(SCRIPTS_DIR, "annotate_photos_with_ollama.prompts.txt"),
     "keywords": os.path.join(SCRIPTS_DIR, "annotate_photos_with_ollama.keywords.prompts.txt"),
+    "headline": os.path.join(SCRIPTS_DIR, "annotate_photos_with_ollama.headline.prompts.txt"),
 }
 
 BUILTIN_PROMPTS = {

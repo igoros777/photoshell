@@ -14,6 +14,7 @@ STEP_PREFLIGHT_LABELS = {
     "enable_extract_summary": "Extract Photo Summary",
     "enable_annotate_desc":   "Annotate (Description)",
     "enable_annotate_kw":     "Annotate (Keywords)",
+    "enable_annotate_hl":     "Annotate (Headline)",
     "enable_blur":            "Detect Blurry Photos",
     "enable_geo_rename":      "Geo Rename Photos",
     "enable_gopro":           "GoPro Geo Rename",
@@ -28,6 +29,7 @@ STEP_TOOL_DEPS = {
     "enable_extract_summary": ["exiftool", "curl", "jq"],
     "enable_annotate_desc":   ["exiftool", "ollama"],
     "enable_annotate_kw":     ["exiftool", "ollama"],
+    "enable_annotate_hl":     ["exiftool", "ollama"],
     "enable_blur":            ["exiftool", "imagemagick"],
     "enable_geo_rename":      ["exiftool", "curl", "jq"],
     "enable_gopro":           ["exiftool", "curl", "jq"],
@@ -47,7 +49,7 @@ TOOL_LABELS = {
 # Default step order (used when client doesn't send step_order).
 DEFAULT_STEP_ORDER = [
     "enable_sync_exif", "enable_gps_gap_fill", "enable_extract_summary",
-    "enable_annotate_desc", "enable_annotate_kw",
+    "enable_annotate_desc", "enable_annotate_kw", "enable_annotate_hl",
     "enable_geo_rename", "enable_gopro", "enable_blur",
     "enable_contact_sheet", "enable_scrub",
 ]
