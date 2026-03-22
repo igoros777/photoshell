@@ -63,6 +63,18 @@
 
             <hr class="sidebar-divider">
 
+            <!-- Workflow Presets -->
+            <div class="sidebar-section preset-controls" id="preset-controls" style="display:none">
+                <label class="sidebar-section-label">Preset</label>
+                <div style="display:flex;gap:4px;align-items:center">
+                    <select id="preset-select" class="form-select form-select-sm" style="flex:1">
+                        <option value="">— No preset —</option>
+                    </select>
+                    <button type="button" id="btn-preset-save" class="btn btn-sm btn-photoshell" title="Save current settings as preset"><i class="bi bi-floppy"></i></button>
+                    <button type="button" id="btn-preset-delete" class="btn btn-sm" title="Delete preset" style="color:var(--ps-text-dim)"><i class="bi bi-trash"></i></button>
+                </div>
+            </div>
+
             <!-- Step checklist -->
             <div class="sidebar-section">
                 <label class="sidebar-section-label">Workflow Steps</label>
@@ -214,6 +226,10 @@
                 <button type="button" class="btn btn-secondary-ps" id="btn-validate-workflow"
                         title="Check folder, steps, and ordering before running">
                     <i class="bi bi-clipboard-check"></i> Validate
+                </button>
+                <button type="button" class="btn btn-secondary-ps" id="btn-undo"
+                        title="Restore metadata from exiftool backup files" style="display:none">
+                    <i class="bi bi-arrow-counterclockwise"></i> Undo
                 </button>
             </div>
 
@@ -915,6 +931,13 @@
 </script>
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.markercluster.js') }}"></script>
+<!-- Drag-and-drop overlay -->
+<div id="drop-overlay" class="drop-overlay">
+    <div class="drop-overlay-inner">
+        <i class="bi bi-folder-plus" style="font-size:48px"></i>
+        <div>Drop folder here</div>
+    </div>
+</div>
 <script src="{{ url_for('static', filename='js/app.js') }}?v={{ range(100000) | random }}"></script>
 </body>
 </html>

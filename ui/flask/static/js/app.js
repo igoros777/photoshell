@@ -69,6 +69,9 @@ document.addEventListener("DOMContentLoaded", function() {
     var activeContentView = "thumbs";
     var contentViewTabs = document.getElementById("content-view-tabs");
 
+    // Multi-folder project mode state
+    var detectedSubfolders = [];
+
     // Blur view state
     var blurScenes = [];
     var currentBlurScene = 0;
@@ -815,12 +818,26 @@ document.addEventListener("DOMContentLoaded", function() {
                     autoDefaultMaxPerSheet(data.photo_count);
                     showContentViewTabs();
 
+                    // Store detected subfolders for project mode
+                    detectedSubfolders = data.subfolders || [];
+                    if (detectedSubfolders.length > 0 && data.photo_count === 0) {
+                        var totalSub = detectedSubfolders.reduce(function(s, f) { return s + f.photo_count; }, 0);
+                        setFolderStatus(
+                            '<i class="bi bi-folder2-open"></i> Project folder: ' +
+                            detectedSubfolders.length + ' subfolder' + (detectedSubfolders.length !== 1 ? 's' : '') +
+                            ' with ' + totalSub + ' total photos' +
+                            ' <span class="text-muted">(resolved: ' + resolvedPath + ')</span>',
+                            "text-success"
+                        );
+                    }
+
                     // Only reload data if the resolved path actually changed
                     if (isNewPath) {
                         fetchFolderMetaStats(resolvedPath);
                         fetchPhotoThumbs(resolvedPath, 1);
                         resetMapState();
                         checkBlurResultsAvailable(resolvedPath);
+                        checkUndoAvailable(resolvedPath);
                     }
                 }
             })
@@ -1018,6 +1035,143 @@ document.addEventListener("DOMContentLoaded", function() {
             + ' <small>(' + pct + '%)</small>'
             + '</span>';
     }
+
+    // ---- Workflow Presets ----
+
+    var presetSelect = document.getElementById("preset-select");
+    var presetControls = document.getElementById("preset-controls");
+    var btnPresetSave = document.getElementById("btn-preset-save");
+    var btnPresetDelete = document.getElementById("btn-preset-delete");
+
+    function fetchPresets() {
+        fetch("/api/presets")
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                presetSelect.innerHTML = '<option value="">— No preset —</option>';
+                (data.presets || []).forEach(function(name) {
+                    var opt = document.createElement("option");
+                    opt.value = name;
+                    opt.textContent = name;
+                    presetSelect.appendChild(opt);
+                });
+                presetControls.style.display = "";
+            })
+            .catch(function() { /* presets unavailable */ });
+    }
+
+    presetSelect.addEventListener("change", function() {
+        var name = presetSelect.value;
+        if (!name) return;
+        fetch("/api/presets/" + encodeURIComponent(name))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.error) return;
+                applyPreset(data.config || {});
+            });
+    });
+
+    function applyPreset(config) {
+        // Fill form fields from preset config
+        Object.keys(config).forEach(function(key) {
+            var el = document.querySelector('[name="' + key + '"]');
+            if (!el) return;
+            if (el.type === "checkbox") {
+                el.checked = !!config[key];
+            } else {
+                el.value = config[key] || "";
+            }
+        });
+    }
+
+    btnPresetSave.addEventListener("click", function() {
+        var name = prompt("Preset name (letters, numbers, hyphens, underscores):");
+        if (!name) return;
+        name = name.trim().replace(/\s+/g, "-");
+        if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+            alert("Invalid name. Use only letters, numbers, hyphens, underscores.");
+            return;
+        }
+        var config = collectFormData();
+        delete config.photo_dir;
+        delete config.step_order;
+
+        fetch("/api/presets", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({name: name, config: config})
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.ok) {
+                fetchPresets();
+                presetSelect.value = name;
+            } else {
+                alert(data.error || "Failed to save preset");
+            }
+        });
+    });
+
+    btnPresetDelete.addEventListener("click", function() {
+        var name = presetSelect.value;
+        if (!name) return;
+        if (!confirm("Delete preset \"" + name + "\"?")) return;
+        fetch("/api/presets/" + encodeURIComponent(name), {method: "DELETE"})
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.ok) fetchPresets();
+            });
+    });
+
+    // Load presets on page load
+    fetchPresets();
+
+    // ---- Undo / Revert ----
+
+    var btnUndo = document.getElementById("btn-undo");
+
+    function checkUndoAvailable(resolvedPath) {
+        fetch("/api/undo/check?path=" + encodeURIComponent(resolvedPath))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                btnUndo.style.display = data.available ? "" : "none";
+            })
+            .catch(function() {
+                btnUndo.style.display = "none";
+            });
+    }
+
+    btnUndo.addEventListener("click", function() {
+        var path = lastResolvedPath;
+        if (!path) return;
+        if (!confirm("Restore metadata from backup files in this folder?\nThis will undo the last exiftool changes.")) return;
+
+        btnUndo.disabled = true;
+        btnUndo.innerHTML = '<i class="bi bi-hourglass-split"></i> Restoring...';
+
+        fetch("/api/undo", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({path: path})
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            btnUndo.disabled = false;
+            btnUndo.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Undo';
+            if (data.ok) {
+                alert("Restored " + data.files_restored + " file(s) from backup.");
+                btnUndo.style.display = "none";
+                // Refresh metadata stats
+                if (lastResolvedPath) fetchFolderMetaStats(lastResolvedPath);
+            } else {
+                alert(data.error || "Undo failed");
+            }
+        })
+        .catch(function() {
+            btnUndo.disabled = false;
+            btnUndo.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Undo';
+            alert("Undo request failed");
+        });
+    });
 
     // ---- Photo thumbnail grid ----
 
@@ -2410,6 +2564,12 @@ document.addEventListener("DOMContentLoaded", function() {
         }
         appendLogLines(header);
 
+        // Project mode: include subfolder paths if the current folder has subfolders
+        if (detectedSubfolders.length > 0) {
+            data.project_folders = detectedSubfolders.map(function(f) { return f.path; });
+            appendLogLines("Project mode: " + detectedSubfolders.length + " subfolders\n");
+        }
+
         fetch("/api/run", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
@@ -3640,6 +3800,70 @@ document.addEventListener("DOMContentLoaded", function() {
                 .catch(function() { /* ignore transient errors */ });
         }, 1000);
     }
+
+    // ---- Drag-and-Drop folder selection ----
+
+    var dropOverlay = document.getElementById("drop-overlay");
+    var dragCounter = 0;
+
+    document.addEventListener("dragenter", function(e) {
+        e.preventDefault();
+        dragCounter++;
+        if (dragCounter === 1) {
+            dropOverlay.classList.add("active");
+        }
+    });
+
+    document.addEventListener("dragover", function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+    });
+
+    document.addEventListener("dragleave", function(e) {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+            dragCounter = 0;
+            dropOverlay.classList.remove("active");
+        }
+    });
+
+    document.addEventListener("drop", function(e) {
+        e.preventDefault();
+        dragCounter = 0;
+        dropOverlay.classList.remove("active");
+
+        // Try to extract a folder path from the dropped items
+        var items = e.dataTransfer.items;
+        if (items && items.length > 0) {
+            var entry = items[0].webkitGetAsEntry && items[0].webkitGetAsEntry();
+            if (entry && entry.isDirectory) {
+                // Directory dropped — fullPath gives the relative path
+                // For local Flask, we need the absolute path from the file list
+                photoDirInput.value = entry.fullPath;
+                validateFolder(entry.fullPath);
+                return;
+            }
+        }
+
+        // Fallback: extract directory from dropped files' webkitRelativePath
+        var files = e.dataTransfer.files;
+        if (files && files.length > 0) {
+            var relPath = files[0].webkitRelativePath;
+            if (relPath) {
+                // webkitRelativePath is "folder/subfolder/file.jpg" — extract the top folder
+                var parts = relPath.split("/");
+                if (parts.length > 1) {
+                    photoDirInput.value = parts[0];
+                    validateFolder(parts[0]);
+                    return;
+                }
+            }
+            // Last resort: show a hint
+            photoDirInput.focus();
+            photoDirInput.placeholder = "Paste the folder path here (browser security prevents auto-fill)";
+        }
+    });
 
     // ---- Keyboard shortcuts ----
 

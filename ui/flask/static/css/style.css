@@ -2035,3 +2035,37 @@ body {
         max-height: 300px;
     }
 }
+
+/* ---- Drag-and-Drop Overlay ---- */
+
+.drop-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 9999;
+    background: rgba(212, 132, 94, 0.08);
+    backdrop-filter: blur(2px);
+}
+
+.drop-overlay.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.drop-overlay-inner {
+    border: 2px dashed var(--ps-accent);
+    border-radius: var(--ps-radius-lg);
+    padding: 60px 80px;
+    text-align: center;
+    color: var(--ps-accent);
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}

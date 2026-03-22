@@ -98,6 +98,10 @@ def _no_cache_html(response):
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPTS_DIR = str(REPO_ROOT / "scripts")
 DOCS_DIR = str(REPO_ROOT / "docs")
+PRESETS_DIR = str(REPO_ROOT / ".photoshell" / "presets")
+PHOTOSHELL_DIR = str(REPO_ROOT / ".photoshell")
+
+_PRESET_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 # In-memory job store: job_id -> {status, log, current_step, steps, pid, created_at}
 jobs = {}
@@ -191,6 +195,62 @@ def _run_pipeline(job_id, steps, cwd):
         jobs[job_id]["status"] = "done"
         jobs[job_id]["log"] += "\n*** All steps completed successfully ***\n"
     logger.info("Job %s completed successfully", job_id)
+
+
+def _run_project_pipeline(job_id, data, folders):
+    """Run the full pipeline for each folder in sequence.
+
+    Skips failed folders and continues with the next. Updates
+    job["folders"] with per-folder status.
+    """
+    total = len(folders)
+    failed_folders = []
+    for fi, folder in enumerate(folders):
+        folder_name = os.path.basename(folder)
+        with jobs_lock:
+            job = jobs[job_id]
+            job["current_folder"] = fi
+            job["log"] += "\n" + "#" * 60 + "\n"
+            job["log"] += "# Folder %d/%d: %s\n" % (fi + 1, total, folder_name)
+            job["log"] += "#" * 60 + "\n"
+            job["folders"][fi]["status"] = "running"
+
+        # Build pipeline for this folder
+        folder_data = dict(data)
+        folder_data["photo_dir"] = folder
+        steps = build_pipeline(folder_data)
+        if not steps:
+            with jobs_lock:
+                jobs[job_id]["log"] += "\n*** No steps to run for %s ***\n" % folder_name
+                jobs[job_id]["folders"][fi]["status"] = "skipped"
+            continue
+
+        folder_failed = False
+        for i, step in enumerate(steps):
+            with jobs_lock:
+                jobs[job_id]["current_step"] = i
+            rc = _run_step(job_id, i, step["cmd"], folder)
+            if rc != 0:
+                with jobs_lock:
+                    jobs[job_id]["log"] += "\n*** Folder %s failed at step %d — skipping ***\n" % (folder_name, i)
+                    jobs[job_id]["folders"][fi]["status"] = "failed"
+                failed_folders.append(folder_name)
+                folder_failed = True
+                break
+
+        if not folder_failed:
+            with jobs_lock:
+                jobs[job_id]["folders"][fi]["status"] = "done"
+
+    with jobs_lock:
+        if failed_folders:
+            jobs[job_id]["status"] = "done"
+            jobs[job_id]["log"] += "\n*** Project completed with %d failed folder(s): %s ***\n" % (
+                len(failed_folders), ", ".join(failed_folders))
+        else:
+            jobs[job_id]["status"] = "done"
+            jobs[job_id]["log"] += "\n*** All %d folders completed successfully ***\n" % total
+    logger.info("Project job %s completed (%d folders, %d failed)", job_id, total, len(failed_folders))
 
 
 # ---------------------------------------------------------------------------
@@ -1197,19 +1257,30 @@ def api_validate_folder():
         else:
             warning = no_photo_msg
 
-    if warning:
-        return jsonify({
-            "valid": True,
-            "warning": warning,
-            "photo_count": photo_count,
-            "path": target,
-        })
+    # Detect subfolders with photos (for project mode)
+    subfolders = []
+    try:
+        for entry in os.scandir(target):
+            if not entry.is_dir() or entry.name.startswith("."):
+                continue
+            sub_count = _count_photos_in_directory(entry.path)
+            if sub_count > 0:
+                subfolders.append({"name": entry.name, "path": entry.path, "photo_count": sub_count})
+    except (OSError, PermissionError):
+        pass
+    subfolders.sort(key=lambda s: s["name"].casefold())
 
-    return jsonify({
+    result = {
         "valid": True,
         "photo_count": photo_count,
         "path": target,
-    })
+    }
+    if warning:
+        result["warning"] = warning
+    if subfolders:
+        result["subfolders"] = subfolders
+
+    return jsonify(result)
 
 
 @app.route("/api/folder_meta")
@@ -1243,6 +1314,171 @@ def api_folder_meta():
         return jsonify({"error": "No photos found or exiftool not available"}), 400
 
     return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Workflow Presets
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/presets")
+def api_presets_list():
+    """List saved workflow presets."""
+    os.makedirs(PRESETS_DIR, exist_ok=True)
+    presets = []
+    for entry in os.scandir(PRESETS_DIR):
+        if entry.is_file() and entry.name.endswith(".json"):
+            presets.append(entry.name[:-5])  # strip .json
+    presets.sort(key=str.casefold)
+    return jsonify({"presets": presets})
+
+
+@app.route("/api/presets/<name>")
+def api_presets_get(name):
+    """Load a saved preset by name."""
+    if not _PRESET_NAME_RE.match(name):
+        return jsonify({"error": "Invalid preset name"}), 400
+    filepath = os.path.join(PRESETS_DIR, name + ".json")
+    if not os.path.isfile(filepath):
+        return jsonify({"error": "Preset not found"}), 404
+    try:
+        with open(filepath, "r") as f:
+            data = json.load(f)
+        return jsonify(data)
+    except Exception as exc:
+        logger.error("Failed to load preset %s: %s", name, exc)
+        return jsonify({"error": "Failed to load preset"}), 500
+
+
+@app.route("/api/presets", methods=["POST"])
+def api_presets_save():
+    """Save a workflow preset."""
+    body = request.get_json(silent=True) or {}
+    name = (body.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "Preset name is required"}), 400
+    if not _PRESET_NAME_RE.match(name):
+        return jsonify({"error": "Preset name must contain only letters, numbers, hyphens, and underscores"}), 400
+    config = body.get("config", {})
+    os.makedirs(PRESETS_DIR, exist_ok=True)
+    filepath = os.path.join(PRESETS_DIR, name + ".json")
+    try:
+        with open(filepath, "w") as f:
+            json.dump({"name": name, "config": config}, f, indent=2)
+        logger.info("Saved preset: %s", name)
+        return jsonify({"ok": True, "name": name})
+    except Exception as exc:
+        logger.error("Failed to save preset %s: %s", name, exc)
+        return jsonify({"error": "Failed to save preset"}), 500
+
+
+@app.route("/api/presets/<name>", methods=["DELETE"])
+def api_presets_delete(name):
+    """Delete a saved preset."""
+    if not _PRESET_NAME_RE.match(name):
+        return jsonify({"error": "Invalid preset name"}), 400
+    filepath = os.path.join(PRESETS_DIR, name + ".json")
+    if not os.path.isfile(filepath):
+        return jsonify({"error": "Preset not found"}), 404
+    try:
+        os.remove(filepath)
+        logger.info("Deleted preset: %s", name)
+        return jsonify({"ok": True})
+    except Exception as exc:
+        logger.error("Failed to delete preset %s: %s", name, exc)
+        return jsonify({"error": "Failed to delete preset"}), 500
+
+
+# ---------------------------------------------------------------------------
+# Undo / Revert
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/undo/check")
+def api_undo_check():
+    """Check if _original backup files exist for a directory."""
+    path = request.args.get("path", "").strip()
+    if not path:
+        return jsonify({"available": False})
+    target, error = _resolve_directory(path)
+    if error:
+        return jsonify({"available": False})
+
+    count = 0
+    try:
+        with os.scandir(target) as it:
+            for entry in it:
+                if entry.name.endswith("_original") and entry.is_file():
+                    count += 1
+                    if count >= 1:
+                        break
+    except (OSError, PermissionError):
+        pass
+
+    return jsonify({"available": count > 0, "count": count})
+
+
+@app.route("/api/undo", methods=["POST"])
+def api_undo():
+    """Restore _original backup files in a directory using exiftool."""
+    body = request.get_json(silent=True) or {}
+    path = (body.get("path") or "").strip()
+    if not path:
+        return jsonify({"error": "No path specified"}), 400
+
+    target, error = _resolve_directory(path)
+    if error:
+        return jsonify({"error": "Directory not accessible"}), 400
+
+    # Count _original files first
+    originals = []
+    try:
+        with os.scandir(target) as it:
+            for entry in it:
+                if entry.name.endswith("_original") and entry.is_file():
+                    originals.append(entry.name)
+    except (OSError, PermissionError):
+        return jsonify({"error": "Cannot read directory"}), 500
+
+    if not originals:
+        return jsonify({"error": "No backup files found to restore"}), 400
+
+    # Run exiftool -restore_original
+    cmd = ["exiftool", "-restore_original", target]
+    try:
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=120,
+            encoding="utf-8",
+            errors="replace",
+        )
+        output = proc.stdout or ""
+        logger.info("Undo in %s: exiftool exit %d, %d originals", target, proc.returncode, len(originals))
+
+        # Log the undo operation
+        ops_file = os.path.join(PHOTOSHELL_DIR, "operations.jsonl")
+        os.makedirs(PHOTOSHELL_DIR, exist_ok=True)
+        entry = json.dumps({
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "action": "undo",
+            "photo_dir": target,
+            "files_restored": len(originals),
+        })
+        with open(ops_file, "a") as f:
+            f.write(entry + "\n")
+
+        return jsonify({
+            "ok": proc.returncode == 0,
+            "files_restored": len(originals),
+            "output": output,
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Undo timed out"}), 504
+    except Exception as exc:
+        logger.error("Undo failed: %s", exc)
+        return jsonify({"error": "Undo failed"}), 500
 
 
 @app.route("/api/gps_data")
@@ -1640,6 +1876,46 @@ def api_run():
                 m["label"], ", ".join(m["needed_by"])))
         return jsonify({"error": "\n".join(lines)}), 400
 
+    # Project mode: run pipeline across multiple subfolders
+    project_folders = data.get("project_folders")
+    if project_folders and isinstance(project_folders, list) and len(project_folders) > 0:
+        # Validate all folder paths
+        valid_folders = []
+        for fp in project_folders:
+            fp = _normalize_browser_path(fp)
+            if os.path.isdir(fp):
+                valid_folders.append(fp)
+        if not valid_folders:
+            return jsonify({"error": "No valid subfolders found"}), 400
+
+        job_id = str(uuid.uuid4())[:8]
+        folder_info = [{"path": fp, "name": os.path.basename(fp), "status": "pending"}
+                       for fp in valid_folders]
+        with jobs_lock:
+            jobs[job_id] = {
+                "status": "running",
+                "log": "Project mode: %d folders, %d steps each\n" % (len(valid_folders), len(steps)),
+                "current_step": 0,
+                "current_folder": 0,
+                "steps": [s["label"] for s in steps],
+                "folders": folder_info,
+                "pid": None,
+                "created_at": time.time(),
+            }
+        logger.info("Project job %s: %d folders, %d steps", job_id, len(valid_folders), len(steps))
+
+        t = threading.Thread(target=_run_project_pipeline, args=(job_id, data, valid_folders))
+        t.daemon = True
+        t.start()
+
+        return jsonify({
+            "job_id": job_id,
+            "steps": [s["label"] for s in steps],
+            "folders": folder_info,
+            "project": True,
+        })
+
+    # Single-folder mode
     job_id = str(uuid.uuid4())[:8]
     with jobs_lock:
         jobs[job_id] = {
@@ -1665,12 +1941,16 @@ def api_status(job_id):
         job = jobs.get(job_id)
     if not job:
         return jsonify({"error": "not found"}), 404
-    return jsonify({
+    result = {
         "status": job["status"],
         "current_step": job["current_step"],
         "steps": job["steps"],
         "log": job["log"],
-    })
+    }
+    if "folders" in job:
+        result["folders"] = job["folders"]
+        result["current_folder"] = job.get("current_folder", 0)
+    return jsonify(result)
 
 
 @app.route("/api/log/<job_id>")
@@ -1683,13 +1963,17 @@ def api_log(job_id):
         return jsonify({"error": "not found"}), 404
     log_text = job["log"]
     new_content = log_text[offset:] if offset < len(log_text) else ""
-    return jsonify({
+    result = {
         "log": new_content,
         "offset": len(log_text),
         "status": job["status"],
         "current_step": job["current_step"],
         "total_steps": len(job["steps"]),
-    })
+    }
+    if "folders" in job:
+        result["folders"] = job["folders"]
+        result["current_folder"] = job.get("current_folder", 0)
+    return jsonify(result)
 
 
 @app.route("/api/cancel/<job_id>", methods=["POST"])
