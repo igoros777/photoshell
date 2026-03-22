@@ -1165,6 +1165,11 @@ def api_photos():
     page = max(1, int(request.args.get("page", 1)))
     per_page = min(120, max(1, int(request.args.get("per_page", 60))))
 
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
     target, error = _resolve_directory(path)
     if error:
         return _filesystem_error_response(error)
@@ -1211,6 +1216,11 @@ def api_validate_folder():
     path = request.args.get("path", "").strip()
     if not path:
         return jsonify({"valid": False, "reason": "No path specified"})
+
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError as exc:
+        return jsonify({"valid": False, "reason": str(exc)})
 
     target, error = _resolve_directory(path)
     if error == "timeout":
@@ -1300,6 +1310,11 @@ def api_folder_meta():
     except (ValueError, TypeError):
         limit = 30
 
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError:
+        return jsonify({"error": "Invalid path"}), 400
+
     target, error = _resolve_directory(path)
     if error:
         return jsonify({"error": "Directory not accessible: %s" % path}), 400
@@ -1338,7 +1353,7 @@ def api_presets_get(name):
     """Load a saved preset by name."""
     if not _PRESET_NAME_RE.match(name):
         return jsonify({"error": "Invalid preset name"}), 400
-    filepath = os.path.join(PRESETS_DIR, name + ".json")
+    filepath = _sanitize_path(os.path.join(PRESETS_DIR, name + ".json"))
     if not os.path.isfile(filepath):
         return jsonify({"error": "Preset not found"}), 404
     try:
@@ -1361,7 +1376,7 @@ def api_presets_save():
         return jsonify({"error": "Preset name must contain only letters, numbers, hyphens, and underscores"}), 400
     config = body.get("config", {})
     os.makedirs(PRESETS_DIR, exist_ok=True)
-    filepath = os.path.join(PRESETS_DIR, name + ".json")
+    filepath = _sanitize_path(os.path.join(PRESETS_DIR, name + ".json"))
     try:
         with open(filepath, "w") as f:
             json.dump({"name": name, "config": config}, f, indent=2)
@@ -1377,7 +1392,7 @@ def api_presets_delete(name):
     """Delete a saved preset."""
     if not _PRESET_NAME_RE.match(name):
         return jsonify({"error": "Invalid preset name"}), 400
-    filepath = os.path.join(PRESETS_DIR, name + ".json")
+    filepath = _sanitize_path(os.path.join(PRESETS_DIR, name + ".json"))
     if not os.path.isfile(filepath):
         return jsonify({"error": "Preset not found"}), 404
     try:
@@ -1399,6 +1414,10 @@ def api_undo_check():
     """Check if _original backup files exist for a directory."""
     path = request.args.get("path", "").strip()
     if not path:
+        return jsonify({"available": False})
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError:
         return jsonify({"available": False})
     target, error = _resolve_directory(path)
     if error:
@@ -1426,14 +1445,22 @@ def api_undo():
     if not path:
         return jsonify({"error": "No path specified"}), 400
 
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError:
+        return jsonify({"error": "Invalid path"}), 400
+
     target, error = _resolve_directory(path)
     if error:
         return jsonify({"error": "Directory not accessible"}), 400
 
+    # Validate target is a real directory (defense-in-depth for command injection)
+    sanitized_target = _sanitize_dir_path(target)
+
     # Count _original files first
     originals = []
     try:
-        with os.scandir(target) as it:
+        with os.scandir(sanitized_target) as it:
             for entry in it:
                 if entry.name.endswith("_original") and entry.is_file():
                     originals.append(entry.name)
@@ -1443,8 +1470,8 @@ def api_undo():
     if not originals:
         return jsonify({"error": "No backup files found to restore"}), 400
 
-    # Run exiftool -restore_original
-    cmd = ["exiftool", "-restore_original", target]
+    # Run exiftool -restore_original (list args, no shell interpolation)
+    cmd = ["exiftool", "-restore_original", sanitized_target]
     try:
         proc = subprocess.run(
             cmd,
@@ -1489,6 +1516,11 @@ def api_gps_data():
         return jsonify({"error": "No path specified"}), 400
 
     try:
+        path = _sanitize_dir_path(path)
+    except ValueError:
+        return jsonify({"error": "Invalid path"}), 400
+
+    try:
         limit = int(request.args.get("limit", 500))
     except (ValueError, TypeError):
         limit = 500
@@ -1513,13 +1545,18 @@ def api_blur_results():
     if not path:
         return jsonify({"error": "No path specified"}), 400
 
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError:
+        return jsonify({"error": "Invalid path"}), 400
+
     target, error = _resolve_directory(path)
     if error:
         return jsonify({"error": "Directory not accessible"}), 400
 
-    analyzed_dir = os.path.join(target, "analyzed")
-    scenes_dir = os.path.join(target, "scenes")
-    selected_dir = os.path.join(target, "selected")
+    analyzed_dir = _sanitize_dir_path(os.path.join(target, "analyzed"))
+    scenes_dir = _sanitize_dir_path(os.path.join(target, "scenes"))
+    selected_dir = _sanitize_dir_path(os.path.join(target, "selected"))
 
     if not os.path.isdir(analyzed_dir):
         return jsonify({"has_results": False})
@@ -1569,8 +1606,8 @@ def api_blur_results():
                 pass
 
         for scene_name in scene_dirs:
-            scene_path = os.path.join(scenes_dir, scene_name)
-            scene_analyzed_dir = os.path.join(scene_path, "analyzed")
+            scene_path = _sanitize_dir_path(os.path.join(scenes_dir, scene_name))
+            scene_analyzed_dir = _sanitize_dir_path(os.path.join(scene_path, "analyzed"))
 
             # Photos in the scene
             scene_photos = []
@@ -1882,7 +1919,10 @@ def api_run():
         # Validate all folder paths
         valid_folders = []
         for fp in project_folders:
-            fp = _normalize_browser_path(fp)
+            try:
+                fp = _sanitize_dir_path(fp)
+            except ValueError:
+                continue
             if os.path.isdir(fp):
                 valid_folders.append(fp)
         if not valid_folders:
