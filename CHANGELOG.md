@@ -1,5 +1,56 @@
 # Changelog
 
+## 1.3.0 — 2026-03-22
+
+### Photo Browsing
+- Photo thumbnail grid with lazy loading via IntersectionObserver and "Load more" pagination — browse your photos visually after selecting a folder
+- Click any thumbnail to open a full-size preview modal with filename
+- Content view tabs let you switch between Thumbnails, Map, and Blur Comparison views
+
+### GPS Map
+- Interactive Leaflet.js map with clustered markers — see where your photos were taken at a glance
+- Markers colored by camera model so you can see which device shot what
+- Click any marker for a popup with thumbnail, filename, date, and camera info
+- CartoDB Dark Matter tiles match the DaVinci Resolve dark theme (vendored for offline use)
+- GPS coverage banner shows "N of M photos have GPS coordinates"
+
+### Blur Comparison
+- Before/after slider comparing the blurriest and sharpest photos from each scene — drag the handle to reveal the difference
+- Scene navigation buttons when blur detection found multiple scenes
+- Filmstrip with blur score badges on each thumbnail — click any to compare against the sharpest
+
+### Streaming Logs
+- Offset-based log polling sends only new content instead of the entire log on each poll
+- Line numbers on every log line with step headers highlighted in accent color
+- Scroll lock indicator when you scroll up — click to resume auto-scroll
+
+### Metadata Panel
+- Camera model breakdown showing which cameras were used and how many photos each took
+- Date range display (earliest to latest photo date)
+
+### Workflow Presets
+- Save your current workflow configuration as a named preset and reload it later
+- Presets stored as JSON files in `.photoshell/presets/`, named with `[a-zA-Z0-9_-]`
+- Sidebar dropdown to select, save, and delete presets
+
+### Undo / Revert
+- One-click undo restores metadata from exiftool `_original` backup files
+- Undo button appears in the sidebar when backup files exist in the current folder
+- Operations logged to `.photoshell/operations.jsonl`
+
+### Multi-Folder Project Mode
+- Select a parent folder and PhotoShell auto-detects subfolders containing photos
+- Runs the full pipeline across all subfolders sequentially — skip failed folders and continue with the rest
+- Per-folder status tracking in job log output
+
+### Drag-and-Drop
+- Drop a folder from your file manager onto the UI to set the photo directory
+- Full-page overlay with dashed accent border appears while dragging
+
+### Testing
+- 24 new integration tests covering all Flask API endpoints (browse, validate, photos, presets, undo, blur, GPS, run, status, log)
+- Total test count: 81 passing
+
 ## 1.2.0 — 2026-03-20
 
 ### Structured Search
