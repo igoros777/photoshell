@@ -2640,6 +2640,11 @@ document.addEventListener("DOMContentLoaded", function() {
                         // Play completion sound
                         if (data.status === "done") playSuccessSound();
                         else if (data.status === "failed" || data.status === "cancelled") playErrorSound();
+                        // Re-check blur/undo availability after pipeline completes
+                        if (lastResolvedPath) {
+                            checkBlurResultsAvailable(lastResolvedPath);
+                            checkUndoAvailable(lastResolvedPath);
+                        }
                     }
                 })
                 .catch(function() { /* ignore transient errors */ });
