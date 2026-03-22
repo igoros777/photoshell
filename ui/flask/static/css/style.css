@@ -1860,24 +1860,39 @@ body {
     display: flex;
     gap: 4px;
     margin-bottom: var(--ps-space-sm);
-    overflow-x: auto;
+    align-items: center;
 }
 
-.blur-scene-btn {
-    padding: 4px 12px;
-    font-size: 11px;
+.blur-scene-select {
+    flex: 1;
+    background: var(--ps-bg);
+    color: var(--ps-text);
+    border: 1px solid var(--ps-border);
+    border-radius: var(--ps-radius-sm);
+    padding: 4px 8px;
+    font-size: 12px;
     font-weight: 600;
+    cursor: pointer;
+}
+
+.blur-scene-select:focus {
+    outline: none;
+    border-color: var(--ps-accent);
+}
+
+.blur-scene-btn.blur-scene-arrow {
+    padding: 4px 8px;
+    font-size: 14px;
     background: var(--ps-surface2);
     color: var(--ps-text-muted);
     border: 1px solid var(--ps-border);
     border-radius: var(--ps-radius-sm);
     cursor: pointer;
-    white-space: nowrap;
     transition: all 150ms ease;
+    flex-shrink: 0;
 }
 
-.blur-scene-btn:hover { background: var(--ps-surface3); color: var(--ps-text); }
-.blur-scene-btn.active { background: var(--ps-accent-muted); color: var(--ps-accent); border-color: var(--ps-accent); }
+.blur-scene-btn.blur-scene-arrow:hover { background: var(--ps-surface3); color: var(--ps-text); }
 
 .blur-slider-container {
     position: relative;

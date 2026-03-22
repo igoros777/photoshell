@@ -1518,18 +1518,55 @@ document.addEventListener("DOMContentLoaded", function() {
         var nav = document.getElementById("blur-scene-nav");
         nav.innerHTML = "";
         if (blurScenes.length <= 1) return;
-        blurScenes.forEach(function(scene, i) {
-            var btn = document.createElement("button");
-            btn.type = "button";
-            btn.className = "blur-scene-btn" + (i === 0 ? " active" : "");
-            btn.textContent = "Scene " + (i + 1) + " (" + scene.analyzed.length + ")";
-            btn.addEventListener("click", function() {
-                nav.querySelectorAll(".blur-scene-btn").forEach(function(b) { b.classList.remove("active"); });
-                btn.classList.add("active");
-                renderBlurScene(i);
-            });
-            nav.appendChild(btn);
+
+        // Prev button
+        var btnPrev = document.createElement("button");
+        btnPrev.type = "button";
+        btnPrev.className = "blur-scene-btn blur-scene-arrow";
+        btnPrev.innerHTML = '<i class="bi bi-chevron-left"></i>';
+        btnPrev.title = "Previous scene";
+        btnPrev.addEventListener("click", function() {
+            if (currentBlurScene > 0) {
+                renderBlurScene(currentBlurScene - 1);
+                updateBlurSceneNav();
+            }
         });
+        nav.appendChild(btnPrev);
+
+        // Scene dropdown
+        var select = document.createElement("select");
+        select.className = "blur-scene-select";
+        select.id = "blur-scene-select";
+        blurScenes.forEach(function(scene, i) {
+            var opt = document.createElement("option");
+            opt.value = i;
+            opt.textContent = "Scene " + (i + 1) + " of " + blurScenes.length + " (" + scene.analyzed.length + " photos)";
+            select.appendChild(opt);
+        });
+        select.addEventListener("change", function() {
+            renderBlurScene(parseInt(select.value, 10));
+            updateBlurSceneNav();
+        });
+        nav.appendChild(select);
+
+        // Next button
+        var btnNext = document.createElement("button");
+        btnNext.type = "button";
+        btnNext.className = "blur-scene-btn blur-scene-arrow";
+        btnNext.innerHTML = '<i class="bi bi-chevron-right"></i>';
+        btnNext.title = "Next scene";
+        btnNext.addEventListener("click", function() {
+            if (currentBlurScene < blurScenes.length - 1) {
+                renderBlurScene(currentBlurScene + 1);
+                updateBlurSceneNav();
+            }
+        });
+        nav.appendChild(btnNext);
+    }
+
+    function updateBlurSceneNav() {
+        var select = document.getElementById("blur-scene-select");
+        if (select) select.value = currentBlurScene;
     }
 
     function renderBlurScene(sceneIndex) {
