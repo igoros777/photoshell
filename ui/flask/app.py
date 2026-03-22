@@ -85,6 +85,15 @@ def _csrf_check():
         if urlparse(referer).netloc != host:
             return jsonify({"error": "CSRF validation failed"}), 403
 
+@app.after_request
+def _no_cache_html(response):
+    """Prevent browser caching of HTML pages so UI updates are always fresh."""
+    if response.content_type and "text/html" in response.content_type:
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 # Resolve directories relative to this file
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPTS_DIR = str(REPO_ROOT / "scripts")

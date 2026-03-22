@@ -601,55 +601,53 @@
         <!-- Folder metadata stats -->
         <div id="folder-meta-stats" class="folder-meta-stats" style="display:none"></div>
 
-        <!-- Content view toggle tabs -->
-        <div id="content-view-tabs" class="content-view-tabs" style="display:none">
-            <button class="content-tab active" data-view="thumbs" id="tab-thumbs">
-                <i class="bi bi-grid-3x3-gap"></i> Thumbnails
-            </button>
-            <button class="content-tab" data-view="map" id="tab-map">
-                <i class="bi bi-geo-alt"></i> Map <span class="tab-badge" id="map-count-badge" style="display:none"></span>
-            </button>
-            <button class="content-tab" data-view="blur" id="tab-blur" disabled>
-                <i class="bi bi-eye"></i> Blur Comparison
-            </button>
-        </div>
-
-        <!-- Photo thumbnail preview grid -->
+        <!-- Photo content views (tabs + grid/map/blur) -->
         <div id="photo-thumbs" class="photo-thumbs-container" style="display:none">
+            <div id="content-view-tabs" class="content-view-tabs" style="display:none">
+                <button class="content-tab active" data-view="thumbs" id="tab-thumbs">
+                    <i class="bi bi-grid-3x3-gap"></i> Thumbnails
+                </button>
+                <button class="content-tab" data-view="map" id="tab-map">
+                    <i class="bi bi-geo-alt"></i> Map <span class="tab-badge" id="map-count-badge" style="display:none"></span>
+                </button>
+                <button class="content-tab" data-view="blur" id="tab-blur" disabled>
+                    <i class="bi bi-eye"></i> Blur Comparison
+                </button>
+            </div>
             <div class="photo-thumbs-header" id="photo-thumbs-header"></div>
             <div class="photo-thumbs-grid" id="photo-thumbs-grid"></div>
             <div class="photo-thumbs-footer" id="photo-thumbs-footer"></div>
-        </div>
 
-        <!-- GPS Map View -->
-        <div id="map-view" class="map-view-container" style="display:none">
-            <div class="map-coverage-banner" id="map-coverage-banner"></div>
-            <div id="map-container" style="height:500px;border-radius:var(--ps-radius-md)"></div>
-        </div>
-
-        <!-- Blur Before/After View -->
-        <div id="blur-view" class="blur-view-container" style="display:none">
-            <div class="blur-empty-state" id="blur-empty-state">
-                <i class="bi bi-eye-slash"></i>
-                <span>Run "Detect Blurry Photos" to see blur comparison</span>
+            <!-- GPS Map View -->
+            <div id="map-view" class="map-view-container" style="display:none">
+                <div class="map-coverage-banner" id="map-coverage-banner"></div>
+                <div id="map-container" style="height:500px;border-radius:var(--ps-radius-md)"></div>
             </div>
-            <div class="blur-comparison" id="blur-comparison" style="display:none">
-                <div class="blur-scene-nav" id="blur-scene-nav"></div>
-                <div class="blur-slider-container" id="blur-slider-container">
-                    <div class="blur-slider-image blur-slider-left" id="blur-slider-left">
-                        <img id="blur-img-left" src="" alt="Blurry">
-                        <span class="blur-label">Blurry</span>
-                    </div>
-                    <div class="blur-slider-image blur-slider-right" id="blur-slider-right">
-                        <img id="blur-img-right" src="" alt="Sharp">
-                        <span class="blur-label">Sharp (selected)</span>
-                    </div>
-                    <div class="blur-slider-handle" id="blur-slider-handle">
-                        <div class="blur-slider-line"></div>
-                        <div class="blur-slider-circle"></div>
-                    </div>
+
+            <!-- Blur Before/After View -->
+            <div id="blur-view" class="blur-view-container" style="display:none">
+                <div class="blur-empty-state" id="blur-empty-state">
+                    <i class="bi bi-eye-slash"></i>
+                    <span>Run "Detect Blurry Photos" to see blur comparison</span>
                 </div>
-                <div class="blur-filmstrip" id="blur-filmstrip"></div>
+                <div class="blur-comparison" id="blur-comparison" style="display:none">
+                    <div class="blur-scene-nav" id="blur-scene-nav"></div>
+                    <div class="blur-slider-container" id="blur-slider-container">
+                        <div class="blur-slider-image blur-slider-left" id="blur-slider-left">
+                            <img id="blur-img-left" src="" alt="Blurry">
+                            <span class="blur-label">Blurry</span>
+                        </div>
+                        <div class="blur-slider-image blur-slider-right" id="blur-slider-right">
+                            <img id="blur-img-right" src="" alt="Sharp">
+                            <span class="blur-label">Sharp (selected)</span>
+                        </div>
+                        <div class="blur-slider-handle" id="blur-slider-handle">
+                            <div class="blur-slider-line"></div>
+                            <div class="blur-slider-circle"></div>
+                        </div>
+                    </div>
+                    <div class="blur-filmstrip" id="blur-filmstrip"></div>
+                </div>
             </div>
         </div>
 

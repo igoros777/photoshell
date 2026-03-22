@@ -1751,6 +1751,7 @@ body {
     border-radius: var(--ps-radius-md);
     overflow: hidden;
     background: var(--ps-surface);
+    margin-bottom: var(--ps-space-sm);
 }
 
 .content-tab {

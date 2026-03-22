@@ -758,10 +758,15 @@ document.addEventListener("DOMContentLoaded", function() {
         folderStatus.className = "mt-1 " + (cls || "");
     }
 
+    var lastResolvedPath = "";
+
     function validateFolder(path) {
         if (!path) {
+            lastResolvedPath = "";
             setFolderStatus("");
             hideFolderMetaStats();
+            hidePhotoThumbs();
+            hideContentViewTabs();
             photoDirInput.classList.remove("is-valid", "is-invalid");
             folderValid = false;
             updateHeaderMeta(null);
@@ -769,14 +774,12 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         setFolderStatus('<i class="bi bi-hourglass-split"></i> Checking...', "text-secondary");
-        hideFolderMetaStats();
-        hidePhotoThumbs();
-        hideContentViewTabs();
 
         fetch("/api/validate_folder?path=" + encodeURIComponent(path))
             .then(function(res) { return res.json(); })
             .then(function(data) {
                 if (!data.valid) {
+                    lastResolvedPath = "";
                     setFolderStatus(
                         '<i class="bi bi-x-circle-fill"></i> ' + data.reason,
                         "text-danger"
@@ -787,40 +790,42 @@ document.addEventListener("DOMContentLoaded", function() {
                     updateHeaderMeta(null);
                     hidePhotoThumbs();
                     hideContentViewTabs();
-                } else if (data.warning) {
-                    setFolderStatus(
-                        '<i class="bi bi-exclamation-triangle-fill"></i> ' + data.warning +
-                        ' <span class="text-muted">(resolved: ' + data.path + ')</span>',
-                        "text-warning"
-                    );
-                    photoDirInput.classList.remove("is-invalid");
-                    photoDirInput.classList.add("is-valid");
-                    folderValid = true;
-                    autoDefaultMaxPerSheet(data.photo_count);
-                    fetchFolderMetaStats(data.path);
-                    fetchPhotoThumbs(data.path, 1);
-                    showContentViewTabs();
-                    resetMapState();
-                    checkBlurResultsAvailable(data.path);
                 } else {
-                    setFolderStatus(
-                        '<i class="bi bi-check-circle-fill"></i> ' +
-                        data.photo_count + ' photo file' + (data.photo_count !== 1 ? 's' : '') +
-                        ' found <span class="text-muted">(resolved: ' + data.path + ')</span>',
-                        "text-success"
-                    );
+                    var resolvedPath = data.path;
+                    var isNewPath = resolvedPath !== lastResolvedPath;
+                    lastResolvedPath = resolvedPath;
+
+                    if (data.warning) {
+                        setFolderStatus(
+                            '<i class="bi bi-exclamation-triangle-fill"></i> ' + data.warning +
+                            ' <span class="text-muted">(resolved: ' + resolvedPath + ')</span>',
+                            "text-warning"
+                        );
+                    } else {
+                        setFolderStatus(
+                            '<i class="bi bi-check-circle-fill"></i> ' +
+                            data.photo_count + ' photo file' + (data.photo_count !== 1 ? 's' : '') +
+                            ' found <span class="text-muted">(resolved: ' + resolvedPath + ')</span>',
+                            "text-success"
+                        );
+                    }
                     photoDirInput.classList.remove("is-invalid");
                     photoDirInput.classList.add("is-valid");
                     folderValid = true;
                     autoDefaultMaxPerSheet(data.photo_count);
-                    fetchFolderMetaStats(data.path);
-                    fetchPhotoThumbs(data.path, 1);
                     showContentViewTabs();
-                    resetMapState();
-                    checkBlurResultsAvailable(data.path);
+
+                    // Only reload data if the resolved path actually changed
+                    if (isNewPath) {
+                        fetchFolderMetaStats(resolvedPath);
+                        fetchPhotoThumbs(resolvedPath, 1);
+                        resetMapState();
+                        checkBlurResultsAvailable(resolvedPath);
+                    }
                 }
             })
             .catch(function() {
+                lastResolvedPath = "";
                 setFolderStatus(
                     '<i class="bi bi-x-circle-fill"></i> Validation request failed',
                     "text-danger"
@@ -1124,16 +1129,26 @@ document.addEventListener("DOMContentLoaded", function() {
         var file = thumbFiles[idx];
         var modalEl = document.getElementById("photoPreviewModal");
         var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-        var previewImg = modalEl.querySelector(".modal-body img");
-        var footer = modalEl.querySelector(".modal-footer");
+        var previewImg = document.getElementById("photo-preview-img");
+        var footer = document.getElementById("photo-preview-footer");
+        var spinner = modalEl.querySelector(".preview-loading");
 
-        // Show spinner while loading
+        // Hide old image and show spinner
         previewImg.src = "";
+        previewImg.style.display = "none";
         previewImg.alt = file.name;
+        if (spinner) spinner.style.display = "flex";
 
         var loader = new Image();
-        loader.onload = function() { previewImg.src = loader.src; };
-        loader.onerror = function() { previewImg.alt = "Failed to load: " + file.name; };
+        loader.onload = function() {
+            previewImg.src = loader.src;
+            previewImg.style.display = "block";
+            if (spinner) spinner.style.display = "none";
+        };
+        loader.onerror = function() {
+            previewImg.alt = "Failed to load: " + file.name;
+            if (spinner) spinner.style.display = "none";
+        };
         loader.src = "/api/thumbnail?path=" + encodeURIComponent(file.path) + "&size=1200";
 
         // Footer metadata
@@ -1143,6 +1158,7 @@ document.addEventListener("DOMContentLoaded", function() {
         nameEl.textContent = file.name;
         footer.appendChild(nameEl);
 
+        document.getElementById("photo-preview-title").textContent = file.name;
         modal.show();
     }
 
@@ -1162,7 +1178,11 @@ document.addEventListener("DOMContentLoaded", function() {
         document.querySelectorAll(".content-tab").forEach(function(t) {
             t.classList.toggle("active", t.dataset.view === view);
         });
-        document.getElementById("photo-thumbs").style.display = (view === "thumbs") ? "block" : "none";
+        // Toggle inner content views — the parent container stays visible
+        var showThumbs = (view === "thumbs") ? "" : "none";
+        photoThumbsHeader.style.display = showThumbs;
+        photoThumbsGrid.style.display = showThumbs;
+        photoThumbsFooter.style.display = showThumbs;
         document.getElementById("map-view").style.display = (view === "map") ? "block" : "none";
         document.getElementById("blur-view").style.display = (view === "blur") ? "block" : "none";
 
@@ -1188,6 +1208,9 @@ document.addEventListener("DOMContentLoaded", function() {
         document.querySelectorAll(".content-tab").forEach(function(t) {
             t.classList.toggle("active", t.dataset.view === "thumbs");
         });
+        photoThumbsHeader.style.display = "";
+        photoThumbsGrid.style.display = "";
+        photoThumbsFooter.style.display = "";
         document.getElementById("map-view").style.display = "none";
         document.getElementById("blur-view").style.display = "none";
     }
@@ -1466,6 +1489,8 @@ document.addEventListener("DOMContentLoaded", function() {
         if (!val) {
             setFolderStatus("");
             hideFolderMetaStats();
+            hidePhotoThumbs();
+            hideContentViewTabs();
             photoDirInput.classList.remove("is-valid", "is-invalid");
             folderValid = false;
             updateHeaderMeta(null);
