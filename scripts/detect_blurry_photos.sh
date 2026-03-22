@@ -32,6 +32,7 @@ CLEAN_OUTPUT=0
 USE_VISUAL=1
 VISUAL_THRESHOLD="0.10"
 THUMB_SIZE=256
+PARALLEL_JOBS=0  # 0 = auto-detect nproc
 
 declare -a IMAGES=()
 declare -a SCENE_DIRS=()
@@ -48,9 +49,12 @@ Usage:
   ${SCRIPT_NAME} [options]
 
 Purpose:
-  Detect blur level in JPG/JPEG files using ImageMagick StandardDeviation.
+  Detect blur level in photo files using ImageMagick StandardDeviation.
   Can also split images into scenes by EXIF time gap plus visual-change
   analysis and select one sharpest image per scene.
+
+  Supports JPG, JPEG, PNG, TIFF, HEIC, HEIF, WebP, and common RAW formats
+  (DNG, NEF, CR2, CR3, ARW, ORF, RW2, SRW, RAF, PEF).
 
 Modes:
   analyze   Score all images and copy to analyzed dir as <score>_<filename>
@@ -68,6 +72,7 @@ Options:
   --thumb-size PX            Comparison thumbnail edge size (default: 256)
   -w, --window WxH           Statistic window size (default: 5x5)
   -m, --mode MODE            analyze | select | all (default: all)
+  -j, --jobs N               Parallel workers (default: auto-detect nproc)
   --clean                    Remove output dirs before running
   -n, --dry-run              Print actions without writing files
   -h, --help                 Show this help
@@ -163,11 +168,17 @@ detect_imagemagick() {
 list_images() {
   mapfile -d '' -t IMAGES < <(
     find "${INPUT_DIR}" -maxdepth 1 -mindepth 1 -type f \
-      \( -iname '*.jpg' -o -iname '*.jpeg' \) -print0 | sort -z
+      \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \
+         -o -iname '*.tif' -o -iname '*.tiff' \
+         -o -iname '*.heic' -o -iname '*.heif' -o -iname '*.webp' \
+         -o -iname '*.dng' -o -iname '*.nef' -o -iname '*.cr2' \
+         -o -iname '*.cr3' -o -iname '*.arw' -o -iname '*.orf' \
+         -o -iname '*.rw2' -o -iname '*.srw' -o -iname '*.raf' \
+         -o -iname '*.pef' \) -print0 | sort -z
   )
 
   if [[ "${#IMAGES[@]}" -eq 0 ]]; then
-    die "no JPG/JPEG files found in ${INPUT_DIR}"
+    die "no supported image files found in ${INPUT_DIR}"
   fi
 }
 
@@ -191,10 +202,84 @@ blur_score() {
   '
 }
 
+# Worker function for parallel blur scoring.
+# Outputs "score\tfilepath" per image.
+_blur_score_worker() {
+  local image="$1"
+  local score
+  score="$(blur_score "${image}")"
+  printf '%s\t%s\n' "${score}" "${image}"
+}
+
+_get_parallel_jobs() {
+  if [[ "${PARALLEL_JOBS}" -gt 0 ]]; then
+    echo "${PARALLEL_JOBS}"
+  else
+    nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4
+  fi
+}
+
 float_gt() {
   local left="$1"
   local right="$2"
   awk -v a="${left}" -v b="${right}" 'BEGIN { if ((a + 0.0) > (b + 0.0)) exit 0; exit 1; }'
+}
+
+# Directory for cached thumbnails (created once, cleaned up at end)
+_THUMB_CACHE_DIR=""
+
+_init_thumb_cache() {
+  if [[ -z "${_THUMB_CACHE_DIR}" ]]; then
+    # Prefer /dev/shm (RAM-backed) for faster I/O
+    if [[ -d /dev/shm && -w /dev/shm ]]; then
+      _THUMB_CACHE_DIR="$(mktemp -d /dev/shm/blur_thumbs.XXXXXX)"
+    else
+      _THUMB_CACHE_DIR="$(mktemp -d)"
+    fi
+  fi
+}
+
+_cleanup_thumb_cache() {
+  if [[ -n "${_THUMB_CACHE_DIR}" && -d "${_THUMB_CACHE_DIR}" ]]; then
+    rm -rf "${_THUMB_CACHE_DIR}"
+  fi
+}
+trap _cleanup_thumb_cache EXIT
+
+_get_thumb_path() {
+  local image="$1"
+  local hash
+  hash="$(echo -n "${image}" | md5sum | cut -d' ' -f1)"
+  echo "${_THUMB_CACHE_DIR}/${hash}.png"
+}
+
+_ensure_thumb() {
+  local image="$1"
+  local thumb_path
+  thumb_path="$(_get_thumb_path "${image}")"
+  if [[ ! -f "${thumb_path}" ]]; then
+    "${CONVERT_CMD[@]}" "${image}" -auto-orient -colorspace Gray \
+      -resize "${THUMB_SIZE}x${THUMB_SIZE}!" "${thumb_path}" >/dev/null 2>&1 || true
+  fi
+  echo "${thumb_path}"
+}
+
+_pregenerate_thumbs() {
+  local jobs
+  jobs="$(_get_parallel_jobs)"
+  _init_thumb_cache
+  log "Pre-generating ${#IMAGES[@]} thumbnails (${jobs} workers)..."
+
+  local convert_str="${CONVERT_CMD[*]}"
+  printf '%s\0' "${IMAGES[@]}" | xargs -0 -P "${jobs}" -I{} bash -c '
+    CONVERT_CMD=('"${convert_str}"')
+    image="$1"
+    hash="$(echo -n "${image}" | md5sum | cut -d'"'"' '"'"' -f1)"
+    thumb="'"${_THUMB_CACHE_DIR}"'/${hash}.png"
+    [ -f "${thumb}" ] && exit 0
+    "${CONVERT_CMD[@]}" "${image}" -auto-orient -colorspace Gray \
+      -resize "'"${THUMB_SIZE}"'x'"${THUMB_SIZE}"'!" "${thumb}" >/dev/null 2>&1 || true
+  ' _ {}
 }
 
 visual_delta() {
@@ -205,23 +290,25 @@ visual_delta() {
   local out
   local metric
 
-  # Check mktemp success to fail fast if temp file creation fails
-  thumb_a="$(mktemp --suffix=.png)" || { echo "ERROR: Failed to create temp file" >&2; return 1; }
-  thumb_b="$(mktemp --suffix=.png)" || { echo "ERROR: Failed to create temp file" >&2; rm -f "${thumb_a}"; return 1; }
+  # Use cached thumbnails
+  thumb_a="$(_get_thumb_path "${image_a}")"
+  thumb_b="$(_get_thumb_path "${image_b}")"
 
-  if ! "${CONVERT_CMD[@]}" "${image_a}" -auto-orient -colorspace Gray -resize "${THUMB_SIZE}x${THUMB_SIZE}!" "${thumb_a}" >/dev/null 2>&1; then
-    rm -f "${thumb_a}" "${thumb_b}"
-    echo "1.000000"
-    return 0
+  # Generate on-demand if not cached (shouldn't happen after pregenerate)
+  if [[ ! -f "${thumb_a}" ]]; then
+    _ensure_thumb "${image_a}" >/dev/null
   fi
-  if ! "${CONVERT_CMD[@]}" "${image_b}" -auto-orient -colorspace Gray -resize "${THUMB_SIZE}x${THUMB_SIZE}!" "${thumb_b}" >/dev/null 2>&1; then
-    rm -f "${thumb_a}" "${thumb_b}"
+  if [[ ! -f "${thumb_b}" ]]; then
+    _ensure_thumb "${image_b}" >/dev/null
+  fi
+
+  # If thumbnails failed to generate, assume max delta
+  if [[ ! -f "${thumb_a}" || ! -f "${thumb_b}" ]]; then
     echo "1.000000"
     return 0
   fi
 
   out="$("${COMPARE_CMD[@]}" -metric RMSE "${thumb_a}" "${thumb_b}" null: 2>&1 || true)"
-  rm -f "${thumb_a}" "${thumb_b}"
 
   metric="$(echo "${out}" | awk '
     {
@@ -278,19 +365,49 @@ image_epoch() {
 }
 
 run_analyze() {
+  local jobs
+  local score_file
+  local score
   local image
   local name
-  local score
 
   prepare_dir "${ANALYZED_DIR}"
-  log "Scoring ${#IMAGES[@]} image(s) into ${ANALYZED_DIR}"
+  jobs="$(_get_parallel_jobs)"
+  log "Scoring ${#IMAGES[@]} image(s) into ${ANALYZED_DIR} (${jobs} workers)"
 
-  for image in "${IMAGES[@]}"; do
+  # Export functions and variables needed by parallel workers
+  export -f blur_score _blur_score_worker
+  export CONVERT_CMD WINDOW IM_STYLE
+
+  # Build the convert command string for subshell use
+  local convert_str="${CONVERT_CMD[*]}"
+  export convert_str
+
+  # Score all images in parallel, collect results
+  score_file="$(mktemp)" || die "Failed to create temp file"
+
+  printf '%s\0' "${IMAGES[@]}" | xargs -0 -P "${jobs}" -I{} bash -c '
+    CONVERT_CMD=('"${convert_str}"')
+    image="$1"
+    raw="$("${CONVERT_CMD[@]}" "${image}" -statistic StandardDeviation "'"${WINDOW}"'" -format "%[fx:maxima]" info: 2>/dev/null || true)"
+    score=$(awk -v v="${raw}" "BEGIN {
+      if (v == \"\" || v == \"nan\" || v == \"-nan\") { printf \"0000\n\"; exit; }
+      n = int((v * 10000) + 0.5);
+      if (n < 0) n = 0; if (n > 9999) n = 9999;
+      printf \"%04d\n\", n;
+    }")
+    printf "%s\t%s\n" "${score}" "${image}"
+  ' _ {} >> "${score_file}"
+
+  # Process results
+  while IFS=$'\t' read -r score image; do
+    [[ -z "${image}" ]] && continue
     name="$(basename "${image}")"
-    score="$(blur_score "${image}")"
     copy_file "${image}" "${ANALYZED_DIR}/${score}_${name}"
     log "  ${score}  ${name}"
-  done
+  done < "${score_file}"
+
+  rm -f "${score_file}"
 }
 
 split_scenes() {
@@ -310,14 +427,74 @@ split_scenes() {
   local delta_visual="0.000000"
 
   prepare_dir "${SCENES_DIR}"
+
+  # Pre-generate thumbnails for visual delta comparison (parallel)
+  if [[ "${USE_VISUAL}" -eq 1 ]]; then
+    _pregenerate_thumbs
+  fi
+
   # Check mktemp success to fail fast if temp file creation fails
   map_file="$(mktemp)" || { echo "ERROR: Failed to create temp file" >&2; return 1; }
   sorted_file="$(mktemp)" || { echo "ERROR: Failed to create temp file" >&2; rm -f "${map_file}"; return 1; }
 
-  for image in "${IMAGES[@]}"; do
-    epoch="$(image_epoch "${image}")"
-    printf "%s\t%s\n" "${epoch}" "${image}" >> "${map_file}"
-  done
+  # Batch extract dates with exiftool if available (much faster than per-file identify)
+  if command -v exiftool >/dev/null 2>&1; then
+    log "Extracting dates with exiftool (batch)..."
+    local json_file
+    json_file="$(mktemp)" || { echo "ERROR: Failed to create temp file" >&2; return 1; }
+    exiftool -json -n -DateTimeOriginal -FileName "${IMAGES[@]}" > "${json_file}" 2>/dev/null || true
+
+    # Parse JSON to epoch\tpath using awk (no jq dependency)
+    awk -F'"' '
+      /SourceFile/ { src = $4 }
+      /DateTimeOriginal/ {
+        dto = $4
+        # Convert "YYYY:MM:DD HH:MM:SS" to epoch via shell
+        if (dto != "" && substr(dto,1,4) != "0000") {
+          gsub(/:/, " ", dto)  # make it parseable
+          cmd = "date -d \"" dto "\" +%s 2>/dev/null"
+          cmd | getline epoch
+          close(cmd)
+          if (epoch != "") {
+            print epoch "\t" src
+          } else {
+            # Fallback: use file mtime
+            cmd2 = "stat -c %Y \"" src "\" 2>/dev/null"
+            cmd2 | getline epoch2
+            close(cmd2)
+            if (epoch2 != "") print epoch2 "\t" src
+            else print "0\t" src
+          }
+        } else {
+          cmd3 = "stat -c %Y \"" src "\" 2>/dev/null"
+          cmd3 | getline epoch3
+          close(cmd3)
+          if (epoch3 != "") print epoch3 "\t" src
+          else print "0\t" src
+        }
+      }
+    ' "${json_file}" > "${map_file}"
+
+    # Handle files that had no DateTimeOriginal at all (not in awk output)
+    local mapped_count
+    mapped_count="$(wc -l < "${map_file}")"
+    if [[ "${mapped_count}" -lt "${#IMAGES[@]}" ]]; then
+      # Fill remaining with file mtime via per-file fallback
+      for image in "${IMAGES[@]}"; do
+        if ! grep -qF "${image}" "${map_file}" 2>/dev/null; then
+          epoch="$(stat -c %Y "${image}" 2>/dev/null || echo 0)"
+          printf "%s\t%s\n" "${epoch}" "${image}" >> "${map_file}"
+        fi
+      done
+    fi
+    rm -f "${json_file}"
+  else
+    # Fallback: per-file identify (slow)
+    for image in "${IMAGES[@]}"; do
+      epoch="$(image_epoch "${image}")"
+      printf "%s\t%s\n" "${epoch}" "${image}" >> "${map_file}"
+    done
+  fi
 
   sort -n -k1,1 -k2,2 "${map_file}" > "${sorted_file}"
 
@@ -420,9 +597,27 @@ pick_best_per_scene() {
       fi
     fi
 
-    for image in "${scene_images[@]}"; do
+    # Score scene images in parallel
+    local scene_score_file
+    scene_score_file="$(mktemp)" || die "Failed to create temp file"
+    local convert_str="${CONVERT_CMD[*]}"
+
+    printf '%s\0' "${scene_images[@]}" | xargs -0 -P "$(_get_parallel_jobs)" -I{} bash -c '
+      CONVERT_CMD=('"${convert_str}"')
+      image="$1"
+      raw="$("${CONVERT_CMD[@]}" "${image}" -statistic StandardDeviation "'"${WINDOW}"'" -format "%[fx:maxima]" info: 2>/dev/null || true)"
+      score=$(awk -v v="${raw}" "BEGIN {
+        if (v == \"\" || v == \"nan\" || v == \"-nan\") { printf \"0000\n\"; exit; }
+        n = int((v * 10000) + 0.5);
+        if (n < 0) n = 0; if (n > 9999) n = 9999;
+        printf \"%04d\n\", n;
+      }")
+      printf "%s\t%s\n" "${score}" "${image}"
+    ' _ {} >> "${scene_score_file}"
+
+    while IFS=$'\t' read -r score image; do
+      [[ -z "${image}" ]] && continue
       image_name="$(basename "${image}")"
-      score="$(blur_score "${image}")"
 
       if [[ "${count}" -gt 1 ]]; then
         copy_file "${image}" "${scene_analyzed}/${score}_${image_name}"
@@ -432,7 +627,8 @@ pick_best_per_scene() {
         best_score=$((10#${score}))
         best_image="${image}"
       fi
-    done
+    done < "${scene_score_file}"
+    rm -f "${scene_score_file}"
 
     selected_target="${SELECTED_DIR}/$(basename "${best_image}")"
     if [[ -e "${selected_target}" ]]; then
@@ -499,6 +695,11 @@ parse_args() {
       -m|--mode)
         [[ $# -lt 2 ]] && die "$1 requires a mode (analyze|select|all)"
         MODE="$2"
+        shift 2
+        ;;
+      -j|--jobs)
+        [[ $# -lt 2 ]] && die "$1 requires a positive integer"
+        PARALLEL_JOBS="$2"
         shift 2
         ;;
       --clean)
