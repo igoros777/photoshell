@@ -624,6 +624,22 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // ---- Sidebar step clicking: show config in inspector ----
 
+    var activeStepKey = "";  // track which step is currently shown
+
+    function closeInspector() {
+        // Return any currently-displayed config panel to its hidden state
+        var currentConfig = inspectorContent.querySelector(".step-config");
+        if (currentConfig) {
+            currentConfig.style.display = "none";
+            form.appendChild(currentConfig);
+        }
+        document.querySelectorAll(".sidebar-step").forEach(function(s) {
+            s.classList.remove("active");
+        });
+        inspectorTitle.textContent = "Select a workflow step";
+        activeStepKey = "";
+    }
+
     document.querySelectorAll(".sidebar-step").forEach(function(el) {
         el.addEventListener("click", function(e) {
             // Don't navigate inspector when clicking checkbox, tooltip, or docs link
@@ -635,19 +651,17 @@ document.addEventListener("DOMContentLoaded", function() {
             var stepKey = el.dataset.step;
             var enableKey = SIDEBAR_STEP_MAP[stepKey];
 
-            // Remove active from all sidebar steps
-            document.querySelectorAll(".sidebar-step").forEach(function(s) {
-                s.classList.remove("active");
-            });
-            el.classList.add("active");
-
-            // Return any currently-displayed config panel to its hidden state
-            var currentConfig = inspectorContent.querySelector(".step-config");
-            if (currentConfig) {
-                currentConfig.style.display = "none";
-                // Move it back to the form so collectFormData can still find it
-                form.appendChild(currentConfig);
+            // Toggle: clicking the same step again closes the inspector
+            if (activeStepKey === stepKey) {
+                closeInspector();
+                return;
             }
+
+            // Close any open panel first
+            closeInspector();
+
+            el.classList.add("active");
+            activeStepKey = stepKey;
 
             // Show the selected config in the inspector
             var configId = STEP_CONFIG_MAP[enableKey];
@@ -660,6 +674,14 @@ document.addEventListener("DOMContentLoaded", function() {
                 inspectorTitle.textContent = STEP_LABELS[enableKey] || stepKey;
             }
         });
+    });
+
+    // Close inspector when clicking outside sidebar steps and inspector
+    document.querySelector(".app-main").addEventListener("click", function(e) {
+        if (!activeStepKey) return;
+        // Don't close if clicking inside the inspector panel itself
+        if (inspectorPanel.contains(e.target)) return;
+        closeInspector();
     });
 
     // ---- Toggle step enable/disable based on checkboxes ----
@@ -3842,6 +3864,58 @@ document.addEventListener("DOMContentLoaded", function() {
                 .catch(function() { /* ignore transient errors */ });
         }, 1000);
     }
+
+    // ---- Reset button ----
+
+    document.getElementById("btn-reset").addEventListener("click", function() {
+        if (!confirm("Reset all workflow settings to defaults?")) return;
+
+        // Uncheck all step checkboxes
+        document.querySelectorAll(".section-toggle").forEach(function(cb) {
+            cb.checked = false;
+        });
+
+        // Reset all text/number inputs to defaults
+        form.querySelectorAll("input[type=text], input[type=number]").forEach(function(el) {
+            el.value = el.defaultValue;
+        });
+
+        // Reset all selects to first option
+        form.querySelectorAll("select").forEach(function(sel) {
+            sel.selectedIndex = 0;
+        });
+
+        // Reset all checkboxes inside step configs to defaults
+        document.querySelectorAll(".step-config input[type=checkbox]").forEach(function(cb) {
+            cb.checked = cb.defaultChecked;
+        });
+        document.querySelectorAll(".step-config input[type=text], .step-config input[type=number]").forEach(function(el) {
+            el.value = el.defaultValue;
+        });
+        document.querySelectorAll(".step-config select").forEach(function(sel) {
+            sel.selectedIndex = 0;
+        });
+
+        // Clear step selection order
+        selectionOrder = [];
+        updateStepSequencing();
+
+        // Close inspector
+        closeInspector();
+
+        // Reset preset dropdown
+        if (presetSelect) presetSelect.value = "";
+
+        // Clear validation state
+        folderValid = false;
+        photoDirInput.classList.remove("is-valid", "is-invalid");
+        setFolderStatus("");
+        hideFolderMetaStats();
+        hidePhotoThumbs();
+        hideContentViewTabs();
+        updateHeaderMeta(null);
+        lastResolvedPath = "";
+    });
 
     // ---- Drag-and-Drop folder selection ----
 
