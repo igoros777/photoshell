@@ -2,45 +2,37 @@
 
 ## Open
 
-### Phase 3: Thumbnails, Streaming Logs, Metadata Panel
-Photo thumbnail previews in the folder browser, append-only streaming log output, and a metadata summary panel showing GPS coverage, camera breakdown, and date range. See `docs/designs/full-vision-transformation.md` for the full spec.
-- **Priority:** P1
-- **Effort:** L (human: ~3 weeks / CC: ~2 hours)
-- **Depends on:** Phase 2 (completed)
-
-### Phase 4: Map View, Pipeline Flowchart, Blur Before/After
-Leaflet.js GPS map with clustered markers, visual pipeline flowchart with real-time status, and before/after blur comparison slider. See `docs/designs/full-vision-transformation.md` for the full spec.
-- **Priority:** P2
-- **Effort:** XL (human: ~2 months / CC: ~4 hours)
-- **Depends on:** Phase 3
-
-### Workflow Presets
-Save and load workflow configurations as named presets (stored as JSON in `.photoshell/presets/`). Dropdown in the sidebar to select a preset and auto-fill all step settings.
-- **Priority:** P2
-- **Effort:** M (human: ~1 week / CC: ~30 min)
-
-### Undo/Revert for Destructive Operations
-Lightweight undo system using exiftool backup files. UI revert button that restores metadata from `_original` files. Operation log in `.photoshell/operations.jsonl`.
-- **Priority:** P2
-- **Effort:** M (human: ~1 week / CC: ~30 min)
-
-### Multi-Folder Project Mode
-Process multiple subfolders (phones, cameras, drones) through the pipeline in sequence. Per-folder progress tracking in the pipeline view. Skip failed folders and continue with others.
-- **Priority:** P2
-- **Effort:** L (human: ~2 weeks / CC: ~1 hour)
-- **Depends on:** Phase 3 pipeline view
-
-### Drag-and-Drop Folder Selection
-Drop a folder from the file manager onto the UI to set the photo directory. Browser drag-and-drop API for folder path detection.
-- **Priority:** P3
-- **Effort:** S (human: ~3 hours / CC: ~15 min)
-
-### Integration Tests for Flask Endpoints
-pytest test suite covering all API endpoints — happy path + one error case each. Undo system tests. Note: `tests/test_structured_search.py` already has 57 unit tests for the structured search module, and CodeQL path/command line security alerts are fixed.
-- **Priority:** P2
-- **Effort:** S (human: ~1 day / CC: ~15 min)
+(none)
 
 ## Completed
+
+### Phase 3: Thumbnails, Streaming Logs, Metadata Panel
+**Completed:** v1.3.0 (2026-03-22)
+Photo thumbnail grid with lazy loading and pagination, offset-based streaming log with line numbers and scroll lock, metadata panel with camera breakdown and date range.
+
+### Phase 4: Map View, Pipeline Flowchart, Blur Before/After
+**Completed:** v1.3.0 (2026-03-22)
+Leaflet.js GPS map with clustered markers colored by camera model (CartoDB dark tiles), CSS clip-path blur before/after slider with scene filmstrip, content view tabs, pipeline strip pending icons.
+
+### Workflow Presets
+**Completed:** v1.3.0 (2026-03-22)
+Save/load/delete workflow presets as JSON in `.photoshell/presets/`. Sidebar dropdown with save and delete buttons. Names sanitized to `[a-zA-Z0-9_-]`.
+
+### Undo/Revert for Destructive Operations
+**Completed:** v1.3.0 (2026-03-22)
+Restore metadata from exiftool `_original` backup files via `/api/undo`. Undo button in sidebar, enabled when backups exist. Operations logged to `.photoshell/operations.jsonl`.
+
+### Multi-Folder Project Mode
+**Completed:** v1.3.0 (2026-03-22)
+Auto-detect subfolders with photos during validation. Per-folder sequential pipeline execution, skip failed folders and continue. Per-folder status in job data.
+
+### Drag-and-Drop Folder Selection
+**Completed:** v1.3.0 (2026-03-22)
+Full-page overlay on folder drag with dashed accent border. Extracts path from dropped items, populates folder input, triggers validation.
+
+### Integration Tests for Flask Endpoints
+**Completed:** v1.3.0 (2026-03-22)
+24 pytest tests covering all API endpoints (index, browse, validate_folder, photos, presets CRUD, undo check, blur_results, gps_data, run, status, log). Total: 81 tests passing.
 
 ### Advanced Structured Search
 **Completed:** v1.2.0 (2026-03-20)
