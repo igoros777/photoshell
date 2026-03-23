@@ -356,7 +356,8 @@ process_file_list() {
   local processed=0
   local completed=0
 
-  log "Indexing ${total} files in ${total_batches} batches..."
+  # Progress goes to stderr so it's visible even inside $() command substitution
+  echo "Indexing ${total} files in ${total_batches} batches..." >&2
 
   for bf in "${batch_files[@]}"; do
     local -a files_in_batch=()
@@ -371,7 +372,7 @@ process_file_list() {
     fi
     completed=$((completed + 1))
     local pct=$((completed * 100 / total_batches))
-    log "  [${pct}%] ${processed}/${total} files indexed (batch ${completed}/${total_batches})"
+    echo "  [${pct}%] ${processed}/${total} files indexed (batch ${completed}/${total_batches})" >&2
   done
 
   rm -rf "${tmpdir}"
