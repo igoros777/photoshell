@@ -233,6 +233,7 @@ The UI follows a DaVinci Resolve-inspired dark pro-tool aesthetic with warm ambe
 
 ## Project
 
+- [`QSG.md`](QSG.md): **Quick Start Guide** — install dependencies, clone, start the UI, and process your first photos in 10 minutes.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md): System overview, component diagram, design decisions, directory structure, and security model.
 - [`DESIGN.md`](DESIGN.md): Design system specification — color palette, spacing, typography, component specs, interaction states.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): Setup instructions, code style, testing approach, and how to submit changes.
