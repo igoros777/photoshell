@@ -141,8 +141,14 @@ def _run_step(job_id, step_index, cmd, cwd):
 
     start_time = time.time()
     try:
+        # Wrap command with stdbuf for line-buffered output on pipes
+        if shutil.which("stdbuf"):
+            run_cmd = ["stdbuf", "-oL"] + cmd
+        else:
+            run_cmd = cmd
+
         proc = subprocess.Popen(
-            cmd,
+            run_cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             cwd=cwd,
@@ -156,9 +162,14 @@ def _run_step(job_id, step_index, cmd, cwd):
         kill_timer = threading.Timer(STEP_TIMEOUT_SECONDS, lambda: proc.kill())
         kill_timer.start()
         try:
-            for line in proc.stdout:
-                with jobs_lock:
-                    jobs[job_id]["log"] += line
+            # Use readline() for true line-at-a-time streaming
+            while True:
+                line = proc.stdout.readline()
+                if not line and proc.poll() is not None:
+                    break
+                if line:
+                    with jobs_lock:
+                        jobs[job_id]["log"] += line
             proc.wait()
             rc = proc.returncode
         finally:
