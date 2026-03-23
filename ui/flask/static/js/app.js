@@ -1354,8 +1354,73 @@ document.addEventListener("DOMContentLoaded", function() {
         footer.appendChild(nameEl);
 
         document.getElementById("photo-preview-title").textContent = file.name;
+
+        // Store current file path for metadata buttons
+        modalEl.dataset.currentPath = file.path;
+
+        // Hide metadata panel on new preview
+        document.getElementById("preview-metadata-panel").style.display = "none";
+
         modal.show();
     }
+
+    // ---- Preview EXIF/IPTC metadata buttons ----
+
+    function loadFileMetadata(group) {
+        var modalEl = document.getElementById("photoPreviewModal");
+        var filePath = modalEl.dataset.currentPath;
+        if (!filePath) return;
+
+        var panel = document.getElementById("preview-metadata-panel");
+        var title = document.getElementById("preview-metadata-title");
+        var content = document.getElementById("preview-metadata-content");
+
+        title.textContent = group.toUpperCase() + " Data";
+        content.innerHTML = '<span class="text-muted"><i class="bi bi-hourglass-split"></i> Loading...</span>';
+        panel.style.display = "block";
+
+        fetch("/api/file_metadata?path=" + encodeURIComponent(filePath) + "&group=" + group)
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    content.innerHTML = '<span style="color:var(--ps-danger)">' + escapeHtml(data.error) + '</span>';
+                    return;
+                }
+                var meta = data.metadata || {};
+                var keys = Object.keys(meta);
+                if (keys.length === 0) {
+                    content.innerHTML = '<span class="text-muted">No ' + group.toUpperCase() + ' data found</span>';
+                    return;
+                }
+
+                var html = '<table>';
+                keys.sort().forEach(function(key) {
+                    var val = meta[key];
+                    if (val === null || val === undefined || val === "") return;
+                    // Strip group prefix from key (e.g. "EXIF:Make" -> "Make")
+                    var label = key.replace(/^[A-Z]+:/, "");
+                    var display = typeof val === "object" ? JSON.stringify(val) : String(val);
+                    html += '<tr><td>' + escapeHtml(label) + '</td><td>' + escapeHtml(display) + '</td></tr>';
+                });
+                html += '</table>';
+                content.innerHTML = html;
+            })
+            .catch(function() {
+                content.innerHTML = '<span style="color:var(--ps-danger)">Failed to load metadata</span>';
+            });
+    }
+
+    document.getElementById("btn-show-exif").addEventListener("click", function() {
+        loadFileMetadata("exif");
+    });
+
+    document.getElementById("btn-show-iptc").addEventListener("click", function() {
+        loadFileMetadata("iptc");
+    });
+
+    document.getElementById("btn-close-metadata").addEventListener("click", function() {
+        document.getElementById("preview-metadata-panel").style.display = "none";
+    });
 
     // ---- Content View Tabs ----
 

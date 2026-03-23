@@ -1800,6 +1800,53 @@ def api_thumbnail():
     )
 
 
+@app.route("/api/file_metadata")
+def api_file_metadata():
+    """Return full EXIF and/or IPTC metadata for a single file."""
+    path = request.args.get("path", "").strip()
+    group = request.args.get("group", "exif").lower()  # "exif" or "iptc"
+    if not path:
+        return jsonify({"error": "No path specified"}), 400
+
+    try:
+        filepath = _sanitize_file_path(path)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if not os.path.isfile(filepath):
+        return jsonify({"error": "File not found"}), 404
+
+    if group == "iptc":
+        tags = ["-IPTC:all"]
+    else:
+        tags = ["-EXIF:all"]
+
+    cmd = ["exiftool", "-json", "-G"] + tags + [filepath]
+    try:
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=15,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if proc.returncode != 0:
+            return jsonify({"error": "exiftool failed"}), 500
+        data = json.loads(proc.stdout)
+        if data and isinstance(data, list):
+            # Remove SourceFile from output
+            record = data[0]
+            record.pop("SourceFile", None)
+            return jsonify({"group": group, "metadata": record})
+        return jsonify({"group": group, "metadata": {}})
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Metadata extraction timed out"}), 504
+    except Exception as exc:
+        logger.error("File metadata failed: %s", exc)
+        return jsonify({"error": "An error occurred"}), 500
+
+
 @app.route("/api/search_meta", methods=["POST"])
 def api_search_meta():
     """Return metadata (UserComment, Caption, Keywords) for a list of files.

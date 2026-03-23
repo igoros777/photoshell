@@ -1726,6 +1726,60 @@ body {
     margin-right: 6px;
 }
 
+/* ---- Preview metadata panel ---- */
+
+.preview-metadata-panel {
+    background: var(--ps-surface);
+    border-top: 1px solid var(--ps-border);
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.preview-metadata-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--ps-border);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ps-accent);
+    position: sticky;
+    top: 0;
+    background: var(--ps-surface);
+    z-index: 1;
+}
+
+.preview-metadata-content {
+    padding: 8px 12px;
+}
+
+.preview-metadata-content table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+}
+
+.preview-metadata-content table td {
+    padding: 3px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    vertical-align: top;
+}
+
+.preview-metadata-content table td:first-child {
+    color: var(--ps-text-muted);
+    white-space: nowrap;
+    font-weight: 600;
+    width: 40%;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+}
+
+.preview-metadata-content table td:last-child {
+    color: var(--ps-text);
+    word-break: break-word;
+}
+
 /* ---- Modal overrides ---- */
 
 .modal-backdrop {

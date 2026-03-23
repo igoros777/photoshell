@@ -908,10 +908,27 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="photo-preview-title"></h5>
+                <div class="d-flex gap-2 ms-auto me-2">
+                    <button type="button" class="btn btn-sm btn-photoshell" id="btn-show-exif" title="Show EXIF data">
+                        <i class="bi bi-camera"></i> EXIF
+                    </button>
+                    <button type="button" class="btn btn-sm btn-photoshell" id="btn-show-iptc" title="Show IPTC data">
+                        <i class="bi bi-card-text"></i> IPTC
+                    </button>
+                </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" style="padding:0;background:#0a0a0a">
                 <img id="photo-preview-img" src="" alt="" style="width:100%;display:block">
+            </div>
+            <div id="preview-metadata-panel" class="preview-metadata-panel" style="display:none">
+                <div class="preview-metadata-header">
+                    <span id="preview-metadata-title">EXIF Data</span>
+                    <button type="button" class="btn btn-sm" id="btn-close-metadata" style="color:var(--ps-text-dim)">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <div id="preview-metadata-content" class="preview-metadata-content"></div>
             </div>
             <div class="modal-footer" id="photo-preview-footer" style="flex-direction:column;align-items:stretch;gap:4px;padding:10px 16px">
             </div>
