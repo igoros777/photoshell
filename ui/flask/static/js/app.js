@@ -2133,8 +2133,8 @@ document.addEventListener("DOMContentLoaded", function() {
             });
     }
 
-    // Fetch models when a description or keywords step is clicked
-    document.querySelectorAll('.sidebar-step[data-step="desc"], .sidebar-step[data-step="kw"]').forEach(function(el) {
+    // Fetch models when an Ollama-based step is clicked
+    document.querySelectorAll('.sidebar-step[data-step="desc"], .sidebar-step[data-step="kw"], .sidebar-step[data-step="hl"]').forEach(function(el) {
         el.addEventListener("click", function() {
             fetchOllamaModels();
         });
@@ -2143,6 +2143,13 @@ document.addEventListener("DOMContentLoaded", function() {
     // ---- Prompt management ----
 
     var promptCache = {};  // workflow -> [{id, text, source}, ...]
+
+    function _workflowPrefix(workflow) {
+        if (workflow === "description") return "desc";
+        if (workflow === "keywords") return "kw";
+        if (workflow === "headline") return "hl";
+        return workflow;
+    }
 
     function fetchPrompts(workflow) {
         if (promptCache[workflow]) {
@@ -2160,7 +2167,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     function populatePromptSelect(workflow, prompts) {
-        var prefix = workflow === "description" ? "desc" : "kw";
+        var prefix = _workflowPrefix(workflow);
         var sel = document.getElementById(prefix + "-prompt-select");
         if (!sel) return;
 
@@ -2197,7 +2204,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     function updatePromptText(workflow) {
-        var prefix = workflow === "description" ? "desc" : "kw";
+        var prefix = _workflowPrefix(workflow);
         var sel = document.getElementById(prefix + "-prompt-select");
         var textarea = document.getElementById(prefix + "-prompt-text");
         if (!sel || !textarea) return;
@@ -2228,7 +2235,7 @@ document.addEventListener("DOMContentLoaded", function() {
     document.querySelectorAll(".prompt-edit-btn").forEach(function(btn) {
         btn.addEventListener("click", function() {
             var wf = btn.dataset.workflow;
-            var prefix = wf === "description" ? "desc" : "kw";
+            var prefix = _workflowPrefix(wf);
             var textarea = document.getElementById(prefix + "-prompt-text");
             var saveBtn = document.getElementById(prefix + "-prompt-save");
             var sel = document.getElementById(prefix + "-prompt-select");
@@ -2253,7 +2260,7 @@ document.addEventListener("DOMContentLoaded", function() {
     document.querySelectorAll(".prompt-save-btn").forEach(function(btn) {
         btn.addEventListener("click", function() {
             var wf = btn.dataset.workflow;
-            var prefix = wf === "description" ? "desc" : "kw";
+            var prefix = _workflowPrefix(wf);
             var textarea = document.getElementById(prefix + "-prompt-text");
             var sel = document.getElementById(prefix + "-prompt-select");
             var status = document.getElementById(prefix + "-prompt-status");
@@ -2307,6 +2314,9 @@ document.addEventListener("DOMContentLoaded", function() {
     });
     document.querySelectorAll('.sidebar-step[data-step="kw"]').forEach(function(el) {
         el.addEventListener("click", function() { fetchPrompts("keywords"); });
+    });
+    document.querySelectorAll('.sidebar-step[data-step="hl"]').forEach(function(el) {
+        el.addEventListener("click", function() { fetchPrompts("headline"); });
     });
 
     // ---- Collect form data ----
