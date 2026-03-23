@@ -6,6 +6,30 @@
 
 ## Completed
 
+### Photo Catalog (SQLite)
+**Completed:** v1.5.0 (2026-03-23)
+`catalog_build.sh` indexes EXIF/IPTC into SQLite with parallel exiftool workers. Catalog tab in UI with build/update/prune/remove, structured filters (Discover Fields), free-text search, progress bar, subcatalog detection.
+
+### EXIF/IPTC Metadata Viewer
+**Completed:** v1.5.0 (2026-03-23)
+EXIF and IPTC buttons in photo preview modal display full metadata in a scrollable table. Full file path in modal title.
+
+### Annotate Headline Workflow
+**Completed:** v1.4.0 (2026-03-22)
+New `--headline` workflow in `annotate_photos_with_ollama.sh` generates IPTC Headline via Ollama. Three prompts: newspaper caption, two Adobe Stock title variants.
+
+### Blur Detection Performance
+**Completed:** v1.4.0 (2026-03-22)
+Parallel blur scoring (4-8x speedup), batch exiftool for dates (~50x), pre-generated thumbnail cache in `/dev/shm`, 18 image formats including RAW.
+
+### CodeQL Security Fixes (v1.4.0)
+**Completed:** v1.4.0 (2026-03-22)
+Fixed all 29 path injection and command line injection alerts with `_sanitize_dir_path()` and `_sanitize_path()` on all new endpoints.
+
+### UI Improvements (v1.4.0)
+**Completed:** v1.4.0 (2026-03-22)
+Inspector panel toggle on re-click and outside click, Reset button, high-res blur comparison (2400px), scene navigation dropdown.
+
 ### Phase 3: Thumbnails, Streaming Logs, Metadata Panel
 **Completed:** v1.3.0 (2026-03-22)
 Photo thumbnail grid with lazy loading and pagination, offset-based streaming log with line numbers and scroll lock, metadata panel with camera breakdown and date range.
