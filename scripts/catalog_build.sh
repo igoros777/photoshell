@@ -158,55 +158,59 @@ SQL
 # File discovery
 # ---------------------------------------------------------------------------
 
-build_find_args() {
-  local -a args=()
-  args+=("${INPUT_DIR}")
+discover_files_to_list() {
+  # Write matching file paths (one per line) to the given output file
+  local outfile="$1"
+
+  # Build the find command dynamically
+  local -a find_cmd=(find "${INPUT_DIR}")
 
   # Depth limit
   if [[ "${MAX_DEPTH}" -gt 0 ]]; then
-    args+=(-maxdepth "${MAX_DEPTH}")
+    find_cmd+=(-maxdepth "${MAX_DEPTH}")
   fi
 
-  # Folder pattern filter (prune non-matching dirs)
-  if [[ -n "${FOLDER_PATTERN}" ]]; then
-    args+=( -type d ! -name "${FOLDER_PATTERN}" ! -path "${INPUT_DIR}" -prune -o )
-  fi
+  find_cmd+=(-type f)
 
-  args+=(-type f)
-
-  # File type extensions
+  # File type extensions — build -iname clauses
+  local -a ext_args=()
   local first=1
   local ext
-  args+=( \( )
   IFS=',' read -ra EXTS <<< "${FILE_TYPES}"
   for ext in "${EXTS[@]}"; do
     ext="$(echo "${ext}" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    [[ -z "${ext}" ]] && continue
     if [[ "${first}" -eq 1 ]]; then
       first=0
+      ext_args+=( \( -iname "*.${ext}" )
     else
-      args+=(-o)
+      ext_args+=( -o -iname "*.${ext}" )
     fi
-    args+=(-iname "*.${ext}")
   done
-  args+=( \) )
+  if [[ "${#ext_args[@]}" -gt 0 ]]; then
+    ext_args+=( \) )
+    find_cmd+=("${ext_args[@]}")
+  fi
 
   # File name pattern
   if [[ -n "${FILE_PATTERN}" ]]; then
-    args+=(-name "${FILE_PATTERN}")
+    find_cmd+=(-name "${FILE_PATTERN}")
   fi
 
-  args+=(-print0)
-  echo "${args[@]}"
-}
+  # Run find, output one file per line
+  "${find_cmd[@]}" 2>/dev/null > "${outfile}" || true
 
-discover_files() {
-  local find_cmd
-  find_cmd="$(build_find_args)"
+  # Folder pattern filter (post-filter — only keep paths where a dir component matches)
+  if [[ -n "${FOLDER_PATTERN}" ]]; then
+    local filtered
+    filtered="$(mktemp)"
+    grep -E "/${FOLDER_PATTERN}/" "${outfile}" > "${filtered}" 2>/dev/null || true
+    # Also keep files directly in INPUT_DIR (no subfolder)
+    grep -v "/" "${outfile}" >> "${filtered}" 2>/dev/null || true
+    mv "${filtered}" "${outfile}"
+  fi
 
-  local count
-  # shellcheck disable=SC2086
-  count=$(eval find ${find_cmd} 2>/dev/null | tr '\0' '\n' | wc -l)
-  echo "${count}"
+  wc -l < "${outfile}" | tr -d ' '
 }
 
 # ---------------------------------------------------------------------------
@@ -319,57 +323,25 @@ print(len(data))
 # Main workflows
 # ---------------------------------------------------------------------------
 
-run_build() {
+process_file_list() {
+  # Process a file containing one path per line, in batches
   local db="$1"
-  local jobs
-  jobs="$(get_jobs)"
-
-  log "Building catalog: ${INPUT_DIR}"
-  log "Database: ${db}"
-  log "Workers: ${jobs}, Batch size: ${BATCH_SIZE}"
-
-  # Drop and recreate
-  rm -f "${db}"
-  init_db "${db}"
-
-  local find_cmd
-  find_cmd="$(build_find_args)"
-
-  local total=0
-  local processed=0
-  local batch_count=0
-  local -a batch=()
-
-  # Count files first
-  # shellcheck disable=SC2086
-  total=$(eval find ${find_cmd} 2>/dev/null | tr '\0' '\n' | wc -l)
-  log "Files to index: ${total}"
+  local file_list="$2"
+  local total="$3"
 
   local tmpdir
   tmpdir="$(mktemp -d)"
-  trap "rm -rf '${tmpdir}'" EXIT
 
-  # Split files into batch lists for parallel processing
-  local batch_file_idx=0
-  # shellcheck disable=SC2086
-  eval find ${find_cmd} 2>/dev/null | xargs -0 -n "${BATCH_SIZE}" bash -c '
-    idx=0
-    for f in "$@"; do
-      echo "$f"
-    done
-  ' _ > "${tmpdir}/all_files.txt"
+  # Split into batch files
+  split -l "${BATCH_SIZE}" -d "${file_list}" "${tmpdir}/batch_"
 
-  # Process in batches using xargs with parallel workers
-  local lines_per_batch="${BATCH_SIZE}"
-  split -l "${lines_per_batch}" -d "${tmpdir}/all_files.txt" "${tmpdir}/batch_"
-
-  local batch_files
-  batch_files=("${tmpdir}"/batch_*)
+  local batch_files=("${tmpdir}"/batch_*)
   local total_batches="${#batch_files[@]}"
-
-  log "Processing ${total_batches} batches..."
-
+  local processed=0
   local completed=0
+
+  log "Processing ${total_batches} batches (${total} files)..."
+
   for bf in "${batch_files[@]}"; do
     local -a files_in_batch=()
     while IFS= read -r line; do
@@ -385,13 +357,41 @@ run_build() {
     vlog "  Batch ${completed}/${total_batches}: ${processed} files indexed"
   done
 
+  rm -rf "${tmpdir}"
+  echo "${processed}"
+}
+
+run_build() {
+  local db="$1"
+
+  log "Building catalog: ${INPUT_DIR}"
+  log "Database: ${db}"
+  log "Batch size: ${BATCH_SIZE}"
+
+  # Drop and recreate
+  rm -f "${db}"
+  init_db "${db}"
+
+  local tmpdir
+  tmpdir="$(mktemp -d)"
+  trap "rm -rf '${tmpdir}'" EXIT
+
+  local total
+  total="$(discover_files_to_list "${tmpdir}/all_files.txt")"
+  log "Files found: ${total}"
+
+  if [[ "${total}" -eq 0 ]]; then
+    log "No files to index"
+    return
+  fi
+
+  local processed
+  processed="$(process_file_list "${db}" "${tmpdir}/all_files.txt" "${total}")"
   log "Catalog built: ${processed} files indexed"
 }
 
 run_update() {
   local db="$1"
-  local jobs
-  jobs="$(get_jobs)"
 
   if [[ ! -f "${db}" ]]; then
     log "No existing catalog found, running full build..."
@@ -402,22 +402,23 @@ run_update() {
   log "Updating catalog: ${INPUT_DIR}"
   log "Database: ${db}"
 
-  local find_cmd
-  find_cmd="$(build_find_args)"
-
   local tmpdir
   tmpdir="$(mktemp -d)"
   trap "rm -rf '${tmpdir}'" EXIT
 
-  # Get list of all current files
-  # shellcheck disable=SC2086
-  eval find ${find_cmd} 2>/dev/null | tr '\0' '\n' > "${tmpdir}/current_files.txt"
+  # Discover current files on disk
+  discover_files_to_list "${tmpdir}/current_files.txt" > /dev/null
 
-  # Get list of already-indexed files
+  # Get already-indexed files (as absolute paths)
   sqlite3 "${db}" "SELECT file_path FROM photos;" > "${tmpdir}/indexed_files.txt" 2>/dev/null || touch "${tmpdir}/indexed_files.txt"
 
+  # Convert current files to absolute paths for comparison
+  while IFS= read -r f; do
+    [[ -n "${f}" ]] && echo "$(cd "$(dirname "${f}")" && pwd)/$(basename "${f}")"
+  done < "${tmpdir}/current_files.txt" > "${tmpdir}/current_abs.txt"
+
   # Find new files (in current but not in indexed)
-  sort "${tmpdir}/current_files.txt" > "${tmpdir}/current_sorted.txt"
+  sort "${tmpdir}/current_abs.txt" > "${tmpdir}/current_sorted.txt"
   sort "${tmpdir}/indexed_files.txt" > "${tmpdir}/indexed_sorted.txt"
   comm -23 "${tmpdir}/current_sorted.txt" "${tmpdir}/indexed_sorted.txt" > "${tmpdir}/new_files.txt"
 
@@ -429,30 +430,8 @@ run_update() {
     return
   fi
 
-  log "New files to index: ${new_count}"
-
-  # Process new files in batches
-  split -l "${BATCH_SIZE}" -d "${tmpdir}/new_files.txt" "${tmpdir}/batch_"
-  local batch_files=("${tmpdir}"/batch_*)
-  local processed=0
-  local completed=0
-  local total_batches="${#batch_files[@]}"
-
-  for bf in "${batch_files[@]}"; do
-    local -a files_in_batch=()
-    while IFS= read -r line; do
-      [[ -n "${line}" ]] && files_in_batch+=("${line}")
-    done < "${bf}"
-
-    if [[ "${#files_in_batch[@]}" -gt 0 ]]; then
-      local count
-      count="$(process_batch "${db}" "${files_in_batch[@]}" 2>/dev/null)" || count=0
-      processed=$((processed + count))
-    fi
-    completed=$((completed + 1))
-    vlog "  Batch ${completed}/${total_batches}: ${processed} new files indexed"
-  done
-
+  local processed
+  processed="$(process_file_list "${db}" "${tmpdir}/new_files.txt" "${new_count}")"
   log "Update complete: ${processed} new files indexed"
 }
 
