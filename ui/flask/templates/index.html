@@ -765,6 +765,13 @@
                             <i class="bi bi-search"></i> Text Search
                         </button>
                     </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="tab-catalog" data-bs-toggle="tab"
+                                data-bs-target="#panel-catalog" type="button" role="tab"
+                                aria-controls="panel-catalog" aria-selected="false">
+                            <i class="bi bi-database"></i> Catalog
+                        </button>
+                    </li>
                 </ul>
             </div>
 
@@ -889,6 +896,82 @@
                             <button type="button" class="btn btn-cancel" id="btn-search-cancel" style="display:none">
                                 <i class="bi bi-x-circle"></i> Cancel
                             </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+                <!-- Catalog Tab -->
+                <div class="tab-pane fade" id="panel-catalog" role="tabpanel">
+                    <div class="search-panel-body">
+                        <!-- Catalog status -->
+                        <div id="catalog-status" class="mb-3" style="font-size:12px;color:var(--ps-text-muted)">
+                            Enter a directory above to check for an existing catalog.
+                        </div>
+
+                        <!-- Catalog management -->
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            <button type="button" class="btn btn-sm btn-photoshell" id="btn-catalog-build" title="Full scan — build or rebuild the catalog">
+                                <i class="bi bi-database-add"></i> Build
+                            </button>
+                            <button type="button" class="btn btn-sm btn-photoshell" id="btn-catalog-update" title="Scan only new files">
+                                <i class="bi bi-arrow-repeat"></i> Update
+                            </button>
+                            <button type="button" class="btn btn-sm btn-photoshell" id="btn-catalog-prune" title="Remove entries for deleted files">
+                                <i class="bi bi-scissors"></i> Prune
+                            </button>
+                            <button type="button" class="btn btn-sm" id="btn-catalog-remove" title="Delete the catalog database" style="color:var(--ps-danger)">
+                                <i class="bi bi-trash"></i> Remove
+                            </button>
+                        </div>
+
+                        <!-- Build options (collapsible) -->
+                        <details id="catalog-build-options" class="mb-3" style="font-size:12px">
+                            <summary style="cursor:pointer;color:var(--ps-text-muted);font-weight:600">Build Options</summary>
+                            <div class="mt-2" style="display:flex;flex-wrap:wrap;gap:8px">
+                                <div style="flex:1;min-width:140px">
+                                    <label class="form-label" style="font-size:11px">File Types</label>
+                                    <input type="text" class="form-control form-control-sm" id="catalog-file-types"
+                                           placeholder="jpg,cr3,nef,..." value="">
+                                </div>
+                                <div style="flex:1;min-width:100px">
+                                    <label class="form-label" style="font-size:11px">Max Depth</label>
+                                    <input type="number" class="form-control form-control-sm" id="catalog-depth"
+                                           placeholder="0 = unlimited" value="" min="0">
+                                </div>
+                                <div style="flex:1;min-width:140px">
+                                    <label class="form-label" style="font-size:11px">File Pattern</label>
+                                    <input type="text" class="form-control form-control-sm" id="catalog-file-pattern"
+                                           placeholder="e.g. DSC*.jpg">
+                                </div>
+                                <div style="flex:1;min-width:140px">
+                                    <label class="form-label" style="font-size:11px">Folder Pattern</label>
+                                    <input type="text" class="form-control form-control-sm" id="catalog-folder-pattern"
+                                           placeholder="e.g. 2025-*">
+                                </div>
+                            </div>
+                        </details>
+
+                        <!-- Build progress log -->
+                        <pre class="log-panel catalog-log" id="catalog-log" style="display:none;max-height:200px;min-height:0"></pre>
+
+                        <!-- Catalog search -->
+                        <div class="mt-3" style="border-top:1px solid var(--ps-border);padding-top:12px">
+                            <label class="form-label" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--ps-text-muted)">Search Catalog</label>
+                            <div class="d-flex gap-2">
+                                <input type="text" class="form-control form-control-sm" id="catalog-search-query"
+                                       placeholder="Search across all fields (filename, camera, keywords, caption, location...)">
+                                <button type="button" class="btn btn-sm btn-photoshell" id="btn-catalog-search">
+                                    <i class="bi bi-search"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Catalog search results -->
+                        <div id="catalog-results" style="display:none;margin-top:12px">
+                            <div id="catalog-results-header" style="font-size:11px;color:var(--ps-text-muted);margin-bottom:8px"></div>
+                            <div id="catalog-results-grid" class="search-results-grid"></div>
+                            <div id="catalog-results-pagination" class="d-flex justify-content-center gap-2 mt-2"></div>
                         </div>
                     </div>
                 </div>

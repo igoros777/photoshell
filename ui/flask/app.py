@@ -30,6 +30,7 @@ from functions.constants import (
     STEP_TOOL_DEPS,
     TOOL_LABELS,
 )
+from functions.catalog import catalog_exists, catalog_stats, catalog_search, catalog_remove, get_catalog_path
 from functions.structured_search import count_photo_files, discover_fields, structured_search
 
 logging.basicConfig(
@@ -1798,6 +1799,154 @@ def api_thumbnail():
                     b'\r\n\xb4\x00\x00\x00\x00IEND\xaeB`\x82'),
         mimetype="image/png",
     )
+
+
+# ---------------------------------------------------------------------------
+# Photo Catalog (SQLite)
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/catalog/status")
+def api_catalog_status():
+    """Check if a catalog exists and return stats."""
+    path = request.args.get("path", "").strip()
+    if not path:
+        return jsonify({"exists": False})
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError:
+        return jsonify({"exists": False})
+    target, error = _resolve_directory(path)
+    if error:
+        return jsonify({"exists": False})
+
+    db_path = get_catalog_path(target)
+    if not catalog_exists(target):
+        return jsonify({"exists": False, "path": target})
+
+    stats = catalog_stats(db_path)
+    return jsonify({"exists": True, "path": target, "stats": stats})
+
+
+@app.route("/api/catalog/build", methods=["POST"])
+def api_catalog_build():
+    """Start a catalog build/update job."""
+    body = request.get_json(silent=True) or {}
+    path = (body.get("path") or "").strip()
+    mode = body.get("mode", "build")  # build | update | prune
+    if not path:
+        return jsonify({"error": "No path specified"}), 400
+    if mode not in ("build", "update", "prune"):
+        return jsonify({"error": "Invalid mode"}), 400
+
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError:
+        return jsonify({"error": "Invalid path"}), 400
+    target, error = _resolve_directory(path)
+    if error:
+        return jsonify({"error": "Directory not accessible"}), 400
+
+    # Build options from request
+    file_types = body.get("file_types", "")
+    depth = body.get("depth", 0)
+    file_pattern = body.get("file_pattern", "")
+    folder_pattern = body.get("folder_pattern", "")
+
+    # Build command
+    cmd = ["bash", _script("catalog_build.sh"), "-m", mode, "-v"]
+    if file_types:
+        cmd += ["-t", file_types]
+    if depth and int(depth) > 0:
+        cmd += ["-D", str(depth)]
+    if file_pattern:
+        cmd += ["-f", file_pattern]
+    if folder_pattern:
+        cmd += ["-F", folder_pattern]
+    cmd.append(target)
+
+    job_id = str(uuid.uuid4())[:8]
+    with jobs_lock:
+        jobs[job_id] = {
+            "status": "running",
+            "log": "Catalog %s: %s\n" % (mode, target),
+            "current_step": 0,
+            "steps": ["Catalog " + mode],
+            "pid": None,
+            "created_at": time.time(),
+        }
+
+    def _run_catalog():
+        _run_step(job_id, 0, cmd, target)
+        with jobs_lock:
+            job = jobs.get(job_id)
+            if job and job["status"] == "running":
+                job["status"] = "done"
+                job["log"] += "\n*** Catalog %s completed ***\n" % mode
+
+    t = threading.Thread(target=_run_catalog)
+    t.daemon = True
+    t.start()
+
+    return jsonify({"job_id": job_id, "mode": mode})
+
+
+@app.route("/api/catalog/search")
+def api_catalog_search():
+    """Search the catalog with text query and/or structured filters."""
+    path = request.args.get("path", "").strip()
+    query = request.args.get("q", "").strip()
+    page = max(1, int(request.args.get("page", 1)))
+    per_page = min(100, max(1, int(request.args.get("per_page", 50))))
+
+    if not path:
+        return jsonify({"error": "No path specified"}), 400
+
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError:
+        return jsonify({"error": "Invalid path"}), 400
+    target, error = _resolve_directory(path)
+    if error:
+        return jsonify({"error": "Directory not accessible"}), 400
+
+    db_path = get_catalog_path(target)
+    if not os.path.isfile(db_path):
+        return jsonify({"error": "No catalog found. Build one first."}), 404
+
+    # Parse filters from query string
+    filters_json = request.args.get("filters", "")
+    filters = None
+    if filters_json:
+        try:
+            filters = json.loads(filters_json)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    result = catalog_search(db_path, query=query, filters=filters,
+                            page=page, per_page=per_page)
+    return jsonify(result)
+
+
+@app.route("/api/catalog/remove", methods=["POST"])
+def api_catalog_remove():
+    """Delete the catalog database."""
+    body = request.get_json(silent=True) or {}
+    path = (body.get("path") or "").strip()
+    if not path:
+        return jsonify({"error": "No path specified"}), 400
+
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError:
+        return jsonify({"error": "Invalid path"}), 400
+    target, error = _resolve_directory(path)
+    if error:
+        return jsonify({"error": "Directory not accessible"}), 400
+
+    db_path = get_catalog_path(target)
+    removed = catalog_remove(db_path)
+    return jsonify({"ok": removed})
 
 
 @app.route("/api/file_metadata")

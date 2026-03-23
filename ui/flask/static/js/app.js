@@ -3820,6 +3820,275 @@ document.addEventListener("DOMContentLoaded", function() {
         photoPreviewModal.show();
     }
 
+    // ---- Catalog ----
+
+    var catalogStatus = document.getElementById("catalog-status");
+    var catalogLog = document.getElementById("catalog-log");
+    var catalogResults = document.getElementById("catalog-results");
+    var catalogResultsGrid = document.getElementById("catalog-results-grid");
+    var catalogResultsHeader = document.getElementById("catalog-results-header");
+    var catalogResultsPagination = document.getElementById("catalog-results-pagination");
+    var catalogSearchQuery = document.getElementById("catalog-search-query");
+    var catalogJobId = null;
+    var catalogPollTimer = null;
+    var catalogCurrentPage = 1;
+
+    function getCatalogDir() {
+        return document.getElementById("search-dir").value.trim() || photoDirInput.value.trim();
+    }
+
+    function checkCatalogStatus() {
+        var dir = getCatalogDir();
+        if (!dir) {
+            catalogStatus.textContent = "Enter a directory above to check for an existing catalog.";
+            return;
+        }
+        catalogStatus.innerHTML = '<i class="bi bi-hourglass-split"></i> Checking catalog...';
+        fetch("/api/catalog/status?path=" + encodeURIComponent(dir))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.exists && data.stats) {
+                    var s = data.stats;
+                    catalogStatus.innerHTML =
+                        '<i class="bi bi-database-check" style="color:var(--ps-success)"></i> ' +
+                        '<strong>' + s.total_files + '</strong> files indexed' +
+                        ' | ' + s.camera_models + ' camera' + (s.camera_models !== 1 ? 's' : '') +
+                        ' | GPS: ' + s.with_gps +
+                        ' | Keywords: ' + s.with_keywords +
+                        (s.earliest_date ? ' | ' + s.earliest_date.split(' ')[0] + ' \u2013 ' + s.latest_date.split(' ')[0] : '') +
+                        ' <small style="color:var(--ps-text-dim)">(' + (s.db_size / 1024 / 1024).toFixed(1) + ' MB)</small>';
+                } else {
+                    catalogStatus.innerHTML =
+                        '<i class="bi bi-database-x" style="color:var(--ps-text-dim)"></i> ' +
+                        'No catalog found. Click <strong>Build</strong> to create one.';
+                }
+            })
+            .catch(function() {
+                catalogStatus.textContent = "Failed to check catalog status";
+            });
+    }
+
+    // Check catalog status when the Catalog tab is shown
+    document.getElementById("tab-catalog").addEventListener("shown.bs.tab", function() {
+        checkCatalogStatus();
+    });
+
+    function startCatalogJob(mode) {
+        var dir = getCatalogDir();
+        if (!dir) { alert("Enter a directory first."); return; }
+
+        var body = {
+            path: dir,
+            mode: mode,
+            file_types: document.getElementById("catalog-file-types").value.trim(),
+            depth: parseInt(document.getElementById("catalog-depth").value) || 0,
+            file_pattern: document.getElementById("catalog-file-pattern").value.trim(),
+            folder_pattern: document.getElementById("catalog-folder-pattern").value.trim(),
+        };
+
+        catalogLog.textContent = "Starting catalog " + mode + "...\n";
+        catalogLog.style.display = "block";
+
+        fetch("/api/catalog/build", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.error) {
+                catalogLog.textContent += "Error: " + data.error + "\n";
+                return;
+            }
+            catalogJobId = data.job_id;
+            pollCatalogJob();
+        })
+        .catch(function(err) {
+            catalogLog.textContent += "Request failed: " + err + "\n";
+        });
+    }
+
+    function pollCatalogJob() {
+        if (!catalogJobId) return;
+        catalogPollTimer = setInterval(function() {
+            fetch("/api/status/" + catalogJobId)
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    catalogLog.textContent = data.log;
+                    catalogLog.scrollTop = catalogLog.scrollHeight;
+                    if (data.status !== "running") {
+                        clearInterval(catalogPollTimer);
+                        catalogJobId = null;
+                        checkCatalogStatus();
+                    }
+                })
+                .catch(function() {});
+        }, 1000);
+    }
+
+    document.getElementById("btn-catalog-build").addEventListener("click", function() {
+        if (!confirm("Build a new catalog? This will replace any existing one.")) return;
+        startCatalogJob("build");
+    });
+
+    document.getElementById("btn-catalog-update").addEventListener("click", function() {
+        startCatalogJob("update");
+    });
+
+    document.getElementById("btn-catalog-prune").addEventListener("click", function() {
+        startCatalogJob("prune");
+    });
+
+    document.getElementById("btn-catalog-remove").addEventListener("click", function() {
+        var dir = getCatalogDir();
+        if (!dir) return;
+        if (!confirm("Delete the catalog database? This cannot be undone.")) return;
+        fetch("/api/catalog/remove", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({path: dir})
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.ok) {
+                catalogResults.style.display = "none";
+                catalogLog.style.display = "none";
+                checkCatalogStatus();
+            }
+        });
+    });
+
+    // Catalog search
+    function runCatalogSearch(page) {
+        var dir = getCatalogDir();
+        var query = catalogSearchQuery.value.trim();
+        if (!dir) return;
+
+        catalogCurrentPage = page || 1;
+        catalogResultsHeader.textContent = "Searching...";
+        catalogResults.style.display = "block";
+        catalogResultsGrid.innerHTML = "";
+        catalogResultsPagination.innerHTML = "";
+
+        var url = "/api/catalog/search?path=" + encodeURIComponent(dir) +
+                  "&q=" + encodeURIComponent(query) +
+                  "&page=" + catalogCurrentPage + "&per_page=50";
+
+        fetch(url)
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    catalogResultsHeader.textContent = data.error;
+                    return;
+                }
+                catalogResultsHeader.textContent =
+                    data.total + " result" + (data.total !== 1 ? "s" : "") +
+                    " (page " + data.page + " of " + data.total_pages + ")";
+
+                renderCatalogResults(data.results);
+                renderCatalogPagination(data.page, data.total_pages);
+            })
+            .catch(function() {
+                catalogResultsHeader.textContent = "Search failed";
+            });
+    }
+
+    function renderCatalogResults(results) {
+        catalogResultsGrid.innerHTML = "";
+        if (results.length === 0) return;
+
+        results.forEach(function(r) {
+            var card = document.createElement("div");
+            card.className = "search-result-card";
+
+            var img = document.createElement("img");
+            img.loading = "lazy";
+            img.src = "/api/thumbnail?path=" + encodeURIComponent(r.file_path) + "&size=200";
+            img.alt = r.file_name;
+            card.appendChild(img);
+
+            var meta = document.createElement("div");
+            meta.className = "search-result-meta";
+
+            var fn = document.createElement("div");
+            fn.className = "search-result-filename";
+            fn.textContent = r.file_name;
+            meta.appendChild(fn);
+
+            var details = [];
+            if (r.model) details.push(r.model);
+            if (r.date_time_original) details.push(r.date_time_original.split(" ")[0]);
+            if (r.focal_length) details.push(r.focal_length + "mm");
+            if (r.f_number) details.push("f/" + r.f_number);
+            if (r.iso) details.push("ISO " + r.iso);
+
+            if (details.length > 0) {
+                var detailEl = document.createElement("div");
+                detailEl.className = "search-result-field";
+                detailEl.textContent = details.join(" \u00b7 ");
+                meta.appendChild(detailEl);
+            }
+
+            if (r.headline) {
+                var hl = document.createElement("div");
+                hl.className = "search-result-field";
+                hl.style.color = "var(--ps-accent)";
+                hl.textContent = r.headline;
+                meta.appendChild(hl);
+            }
+
+            if (r.keywords) {
+                var kw = document.createElement("div");
+                kw.className = "search-result-field";
+                kw.style.fontSize = "10px";
+                kw.textContent = r.keywords;
+                meta.appendChild(kw);
+            }
+
+            card.appendChild(meta);
+            catalogResultsGrid.appendChild(card);
+        });
+    }
+
+    function renderCatalogPagination(currentPage, totalPages) {
+        catalogResultsPagination.innerHTML = "";
+        if (totalPages <= 1) return;
+
+        if (currentPage > 1) {
+            var prev = document.createElement("button");
+            prev.type = "button";
+            prev.className = "btn btn-sm btn-photoshell";
+            prev.textContent = "\u2190 Previous";
+            prev.addEventListener("click", function() { runCatalogSearch(currentPage - 1); });
+            catalogResultsPagination.appendChild(prev);
+        }
+
+        var info = document.createElement("span");
+        info.style.cssText = "font-size:12px;color:var(--ps-text-muted);align-self:center";
+        info.textContent = "Page " + currentPage + " of " + totalPages;
+        catalogResultsPagination.appendChild(info);
+
+        if (currentPage < totalPages) {
+            var next = document.createElement("button");
+            next.type = "button";
+            next.className = "btn btn-sm btn-photoshell";
+            next.textContent = "Next \u2192";
+            next.addEventListener("click", function() { runCatalogSearch(currentPage + 1); });
+            catalogResultsPagination.appendChild(next);
+        }
+    }
+
+    document.getElementById("btn-catalog-search").addEventListener("click", function() {
+        runCatalogSearch(1);
+    });
+
+    catalogSearchQuery.addEventListener("keydown", function(e) {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            runCatalogSearch(1);
+        }
+    });
+
     // ---- Backup Folder ----
 
     var btnBackupEstimate = document.getElementById("btn-backup-estimate");
