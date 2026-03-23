@@ -3873,6 +3873,55 @@ document.addEventListener("DOMContentLoaded", function() {
         checkCatalogStatus();
     });
 
+    // Auto-validate directory and check catalog on paste/input in the shared search-dir field
+    var catalogDirTimer = null;
+    var searchDirInput = document.getElementById("search-dir");
+
+    function onSearchDirChanged() {
+        // Only act when the Catalog tab is active
+        var catalogTabActive = document.getElementById("tab-catalog").classList.contains("active");
+        if (!catalogTabActive) return;
+
+        var dir = searchDirInput.value.trim();
+        if (!dir) {
+            catalogStatus.textContent = "Enter a directory above to check for an existing catalog.";
+            return;
+        }
+
+        catalogStatus.innerHTML = '<i class="bi bi-hourglass-split"></i> Validating...';
+
+        fetch("/api/validate_folder?path=" + encodeURIComponent(dir))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.valid) {
+                    searchDirInput.classList.remove("is-invalid");
+                    searchDirInput.classList.add("is-valid");
+                    // Update the input with the resolved path if expanded
+                    if (data.path && data.path !== dir) {
+                        searchDirInput.value = data.path;
+                    }
+                    checkCatalogStatus();
+                } else {
+                    searchDirInput.classList.remove("is-valid");
+                    searchDirInput.classList.add("is-invalid");
+                    catalogStatus.innerHTML = '<i class="bi bi-x-circle" style="color:var(--ps-danger)"></i> ' + (data.reason || "Invalid directory");
+                }
+            })
+            .catch(function() {
+                catalogStatus.textContent = "Validation failed";
+            });
+    }
+
+    searchDirInput.addEventListener("paste", function() {
+        clearTimeout(catalogDirTimer);
+        setTimeout(onSearchDirChanged, 50);
+    });
+
+    searchDirInput.addEventListener("input", function() {
+        clearTimeout(catalogDirTimer);
+        catalogDirTimer = setTimeout(onSearchDirChanged, 600);
+    });
+
     function startCatalogJob(mode) {
         var dir = getCatalogDir();
         if (!dir) { alert("Enter a directory first."); return; }
