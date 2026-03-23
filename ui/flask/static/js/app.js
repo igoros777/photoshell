@@ -4214,6 +4214,216 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     });
 
+    // ---- Catalog Structured Filters ----
+
+    var catalogFields = [];  // discovered fields
+    var catalogFilterRows = document.getElementById("catalog-filter-rows");
+    var catalogAddFieldSelect = document.getElementById("catalog-add-field");
+    var catalogActiveFilters = [];
+
+    document.getElementById("btn-catalog-discover").addEventListener("click", function() {
+        var dir = getCatalogDir();
+        if (!dir) return;
+        var status = document.getElementById("catalog-discover-status");
+        status.innerHTML = '<i class="bi bi-hourglass-split"></i> Loading...';
+
+        fetch("/api/catalog/discover?path=" + encodeURIComponent(dir))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.error) { status.textContent = data.error; return; }
+                catalogFields = data.fields || [];
+                status.innerHTML = '<span style="color:var(--ps-success)">' + catalogFields.length + ' fields available</span>';
+                populateCatalogAddField();
+                document.getElementById("catalog-add-filter-row").style.display = "";
+            })
+            .catch(function() { status.textContent = "Failed"; });
+    });
+
+    function populateCatalogAddField() {
+        catalogAddFieldSelect.innerHTML = '<option value="">+ Add filter...</option>';
+        catalogFields.forEach(function(f) {
+            var opt = document.createElement("option");
+            opt.value = f.field;
+            opt.textContent = f.label;
+            catalogAddFieldSelect.appendChild(opt);
+        });
+    }
+
+    catalogAddFieldSelect.addEventListener("change", function() {
+        var fieldName = catalogAddFieldSelect.value;
+        if (!fieldName) return;
+        var fieldInfo = catalogFields.find(function(f) { return f.field === fieldName; });
+        if (!fieldInfo) return;
+        addCatalogFilterRow(fieldInfo);
+        catalogAddFieldSelect.value = "";
+    });
+
+    function addCatalogFilterRow(fieldInfo) {
+        var row = document.createElement("div");
+        row.className = "structured-filter-row";
+        row.dataset.field = fieldInfo.field;
+        row.style.cssText = "display:flex;gap:6px;align-items:center;font-size:12px";
+
+        // Label
+        var label = document.createElement("span");
+        label.style.cssText = "min-width:120px;font-weight:600;color:var(--ps-text-muted);font-size:11px";
+        label.textContent = fieldInfo.label;
+        row.appendChild(label);
+
+        // Input(s) based on type
+        if (fieldInfo.type === "numeric") {
+            var minInput = document.createElement("input");
+            minInput.type = "number";
+            minInput.className = "form-control form-control-sm";
+            minInput.style.maxWidth = "100px";
+            minInput.placeholder = fieldInfo.min != null ? "Min (" + fieldInfo.min + ")" : "Min";
+            minInput.dataset.role = "min";
+
+            var sep = document.createElement("span");
+            sep.textContent = "\u2013";
+            sep.style.color = "var(--ps-text-dim)";
+
+            var maxInput = document.createElement("input");
+            maxInput.type = "number";
+            maxInput.className = "form-control form-control-sm";
+            maxInput.style.maxWidth = "100px";
+            maxInput.placeholder = fieldInfo.max != null ? "Max (" + fieldInfo.max + ")" : "Max";
+            maxInput.dataset.role = "max";
+
+            row.appendChild(minInput);
+            row.appendChild(sep);
+            row.appendChild(maxInput);
+
+        } else if (fieldInfo.type === "date") {
+            var dateMin = document.createElement("input");
+            dateMin.type = "text";
+            dateMin.className = "form-control form-control-sm";
+            dateMin.style.maxWidth = "140px";
+            dateMin.placeholder = fieldInfo.min ? fieldInfo.min.split(" ")[0] : "From";
+            dateMin.dataset.role = "min";
+
+            var dateSep = document.createElement("span");
+            dateSep.textContent = "\u2013";
+            dateSep.style.color = "var(--ps-text-dim)";
+
+            var dateMax = document.createElement("input");
+            dateMax.type = "text";
+            dateMax.className = "form-control form-control-sm";
+            dateMax.style.maxWidth = "140px";
+            dateMax.placeholder = fieldInfo.max ? fieldInfo.max.split(" ")[0] : "To";
+            dateMax.dataset.role = "max";
+
+            row.appendChild(dateMin);
+            row.appendChild(dateSep);
+            row.appendChild(dateMax);
+
+        } else if (fieldInfo.values && fieldInfo.values.length > 0) {
+            // Dropdown for fields with <=30 unique values
+            var select = document.createElement("select");
+            select.className = "form-select form-select-sm";
+            select.style.maxWidth = "200px";
+            select.dataset.role = "value";
+            select.innerHTML = '<option value="">Any</option>';
+            fieldInfo.values.forEach(function(v) {
+                var opt = document.createElement("option");
+                opt.value = v.value;
+                opt.textContent = v.value + " (" + v.count + ")";
+                select.appendChild(opt);
+            });
+            row.appendChild(select);
+
+        } else {
+            // Free text input
+            var textInput = document.createElement("input");
+            textInput.type = "text";
+            textInput.className = "form-control form-control-sm";
+            textInput.style.maxWidth = "200px";
+            textInput.placeholder = "Contains...";
+            textInput.dataset.role = "value";
+            row.appendChild(textInput);
+        }
+
+        // Remove button
+        var removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "btn btn-sm";
+        removeBtn.style.cssText = "color:var(--ps-text-dim);padding:2px 6px";
+        removeBtn.innerHTML = '<i class="bi bi-x"></i>';
+        removeBtn.addEventListener("click", function() { row.remove(); });
+        row.appendChild(removeBtn);
+
+        catalogFilterRows.appendChild(row);
+    }
+
+    function collectCatalogFilters() {
+        var filters = [];
+        catalogFilterRows.querySelectorAll(".structured-filter-row").forEach(function(row) {
+            var field = row.dataset.field;
+            var fieldInfo = catalogFields.find(function(f) { return f.field === field; });
+            if (!fieldInfo) return;
+
+            if (fieldInfo.type === "numeric" || fieldInfo.type === "date") {
+                var minEl = row.querySelector('[data-role="min"]');
+                var maxEl = row.querySelector('[data-role="max"]');
+                var minVal = minEl ? minEl.value.trim() : "";
+                var maxVal = maxEl ? maxEl.value.trim() : "";
+                if (minVal || maxVal) {
+                    filters.push({field: field, op: "range", min: minVal || null, max: maxVal || null});
+                }
+            } else {
+                var valEl = row.querySelector('[data-role="value"]');
+                var val = valEl ? valEl.value.trim() : "";
+                if (val) {
+                    if (valEl.tagName === "SELECT") {
+                        filters.push({field: field, op: "eq", value: val});
+                    } else {
+                        filters.push({field: field, op: "contains", value: val});
+                    }
+                }
+            }
+        });
+        return filters;
+    }
+
+    // Override runCatalogSearch to include structured filters
+    var _origRunCatalogSearch = runCatalogSearch;
+    runCatalogSearch = function(page) {
+        var dir = getCatalogDir();
+        var query = catalogSearchQuery.value.trim();
+        if (!dir) return;
+
+        catalogCurrentPage = page || 1;
+        catalogResultsHeader.textContent = "Searching...";
+        catalogResults.style.display = "block";
+        catalogResultsGrid.innerHTML = "";
+        catalogResultsPagination.innerHTML = "";
+
+        var filters = collectCatalogFilters();
+        var url = "/api/catalog/search?path=" + encodeURIComponent(dir) +
+                  "&q=" + encodeURIComponent(query) +
+                  "&page=" + catalogCurrentPage + "&per_page=50";
+        if (filters.length > 0) {
+            url += "&filters=" + encodeURIComponent(JSON.stringify(filters));
+        }
+
+        fetch(url)
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    catalogResultsHeader.textContent = data.error;
+                    return;
+                }
+                catalogResultsHeader.textContent =
+                    data.total + " result" + (data.total !== 1 ? "s" : "") +
+                    " (page " + data.page + " of " + data.total_pages + ")";
+                renderCatalogResults(data.results);
+                renderCatalogPagination(data.page, data.total_pages);
+            })
+            .catch(function() {
+                catalogResultsHeader.textContent = "Search failed";
+            });
+    };
+
     // ---- Backup Folder ----
 
     var btnBackupEstimate = document.getElementById("btn-backup-estimate");

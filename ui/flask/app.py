@@ -30,7 +30,7 @@ from functions.constants import (
     STEP_TOOL_DEPS,
     TOOL_LABELS,
 )
-from functions.catalog import catalog_exists, catalog_stats, catalog_search, catalog_remove, get_catalog_path
+from functions.catalog import catalog_exists, catalog_stats, catalog_search, catalog_discover, catalog_remove, get_catalog_path
 from functions.structured_search import count_photo_files, discover_fields, structured_search
 
 logging.basicConfig(
@@ -1889,6 +1889,30 @@ def api_catalog_build():
     t.start()
 
     return jsonify({"job_id": job_id, "mode": mode})
+
+
+@app.route("/api/catalog/discover")
+def api_catalog_discover():
+    """Return field metadata for structured filter UI."""
+    path = request.args.get("path", "").strip()
+    if not path:
+        return jsonify({"error": "No path specified"}), 400
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError:
+        return jsonify({"error": "Invalid path"}), 400
+    target, error = _resolve_directory(path)
+    if error:
+        return jsonify({"error": "Directory not accessible"}), 400
+
+    db_path = get_catalog_path(target)
+    if not os.path.isfile(db_path):
+        return jsonify({"error": "No catalog found"}), 404
+
+    fields = catalog_discover(db_path)
+    if fields is None:
+        return jsonify({"error": "Failed to read catalog"}), 500
+    return jsonify({"fields": fields})
 
 
 @app.route("/api/catalog/search")

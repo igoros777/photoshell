@@ -66,6 +66,32 @@ def catalog_stats(db_path):
         conn.close()
 
 
+# Human-readable labels for catalog columns
+COLUMN_LABELS = {
+    "file_name": "Filename",
+    "file_type": "File Type",
+    "make": "Camera Make",
+    "model": "Camera Model",
+    "lens_model": "Lens",
+    "date_time_original": "Date Taken",
+    "f_number": "Aperture (f/)",
+    "exposure_time": "Shutter Speed",
+    "focal_length": "Focal Length (mm)",
+    "focal_length_35": "Focal Length 35mm eq.",
+    "iso": "ISO",
+    "image_width": "Width (px)",
+    "image_height": "Height (px)",
+    "gps_latitude": "GPS Latitude",
+    "gps_longitude": "GPS Longitude",
+    "headline": "Headline",
+    "caption": "Caption",
+    "keywords": "Keywords",
+    "copyright": "Copyright",
+    "city": "City",
+    "state": "State/Province",
+    "country": "Country",
+}
+
 # Columns that are searchable and their types
 SEARCHABLE_COLUMNS = {
     "file_name": "text",
@@ -91,6 +117,70 @@ SEARCHABLE_COLUMNS = {
     "state": "text",
     "country": "text",
 }
+
+
+def catalog_discover(db_path):
+    """Return field metadata for building structured filter UI.
+
+    For each searchable column, returns type, label, and:
+    - numeric: min/max values
+    - date: min/max dates
+    - text: up to 30 unique values (for select dropdowns)
+    """
+    if not os.path.isfile(db_path):
+        return None
+
+    conn = sqlite3.connect(db_path)
+    try:
+        fields = []
+        for col, col_type in SEARCHABLE_COLUMNS.items():
+            info = {
+                "field": col,
+                "label": COLUMN_LABELS.get(col, col),
+                "type": col_type,
+            }
+
+            if col_type == "numeric":
+                row = conn.execute(
+                    "SELECT MIN(CAST({0} AS REAL)), MAX(CAST({0} AS REAL)) "
+                    "FROM photos WHERE {0} IS NOT NULL AND {0} != ''".format(col)
+                ).fetchone()
+                if row and row[0] is not None:
+                    info["min"] = row[0]
+                    info["max"] = row[1]
+
+            elif col_type == "date":
+                row = conn.execute(
+                    "SELECT MIN({0}), MAX({0}) FROM photos "
+                    "WHERE {0} IS NOT NULL AND {0} != ''".format(col)
+                ).fetchone()
+                if row and row[0]:
+                    info["min"] = row[0]
+                    info["max"] = row[1]
+
+            elif col_type == "text":
+                # Count distinct non-empty values
+                count_row = conn.execute(
+                    "SELECT COUNT(DISTINCT {0}) FROM photos "
+                    "WHERE {0} IS NOT NULL AND {0} != ''".format(col)
+                ).fetchone()
+                distinct_count = count_row[0] if count_row else 0
+                info["distinct"] = distinct_count
+
+                # If <=30 unique values, return them for a dropdown
+                if 0 < distinct_count <= 30:
+                    rows = conn.execute(
+                        "SELECT {0}, COUNT(*) AS cnt FROM photos "
+                        "WHERE {0} IS NOT NULL AND {0} != '' "
+                        "GROUP BY {0} ORDER BY cnt DESC".format(col)
+                    ).fetchall()
+                    info["values"] = [{"value": r[0], "count": r[1]} for r in rows]
+
+            fields.append(info)
+
+        return fields
+    finally:
+        conn.close()
 
 
 def catalog_search(db_path, query="", filters=None, page=1, per_page=50):
