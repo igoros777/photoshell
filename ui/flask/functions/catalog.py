@@ -119,25 +119,41 @@ SEARCHABLE_COLUMNS = {
 }
 
 
-def catalog_discover(db_path):
-    """Return field metadata for building structured filter UI.
+# Which catalog columns are IPTC (rest are EXIF/file)
+_IPTC_COLUMNS = {
+    "headline", "caption", "keywords", "copyright", "credit",
+    "source", "city", "state", "country",
+}
 
-    For each searchable column, returns type, label, and:
-    - numeric: min/max values
-    - date: min/max dates
-    - text: up to 30 unique values (for select dropdowns)
+# Special filter modes matching the structured search convention
+_FILTER_MODES = {
+    "file_name": "regex",
+    "caption": "regex",
+    "keywords": "keywords_all",
+    "file_type": "select",
+}
+
+
+def catalog_discover(db_path):
+    """Return field metadata for the structured filter UI.
+
+    Output format matches the existing structured search discover response
+    so the same renderFilterRow() JS function can be reused.
     """
     if not os.path.isfile(db_path):
         return None
 
     conn = sqlite3.connect(db_path)
     try:
-        fields = []
+        exif_fields = []
+        iptc_fields = []
+
         for col, col_type in SEARCHABLE_COLUMNS.items():
             info = {
+                "name": COLUMN_LABELS.get(col, col),
                 "field": col,
-                "label": COLUMN_LABELS.get(col, col),
                 "type": col_type,
+                "filter_mode": _FILTER_MODES.get(col, ""),
             }
 
             if col_type == "numeric":
@@ -159,26 +175,29 @@ def catalog_discover(db_path):
                     info["max"] = row[1]
 
             elif col_type == "text":
-                # Count distinct non-empty values
+                fm = _FILTER_MODES.get(col, "")
                 count_row = conn.execute(
                     "SELECT COUNT(DISTINCT {0}) FROM photos "
                     "WHERE {0} IS NOT NULL AND {0} != ''".format(col)
                 ).fetchone()
                 distinct_count = count_row[0] if count_row else 0
-                info["distinct"] = distinct_count
 
-                # If <=30 unique values, return them for a dropdown
-                if 0 < distinct_count <= 30:
+                # For select-type or low-cardinality fields, return values list
+                if fm == "select" or (fm == "" and 0 < distinct_count <= 30):
+                    info["type"] = "select"
                     rows = conn.execute(
-                        "SELECT {0}, COUNT(*) AS cnt FROM photos "
+                        "SELECT {0} FROM photos "
                         "WHERE {0} IS NOT NULL AND {0} != '' "
-                        "GROUP BY {0} ORDER BY cnt DESC".format(col)
+                        "GROUP BY {0} ORDER BY COUNT(*) DESC".format(col)
                     ).fetchall()
-                    info["values"] = [{"value": r[0], "count": r[1]} for r in rows]
+                    info["values"] = [r[0] for r in rows]
 
-            fields.append(info)
+            if col in _IPTC_COLUMNS:
+                iptc_fields.append(info)
+            else:
+                exif_fields.append(info)
 
-        return fields
+        return {"exif_fields": exif_fields, "iptc_fields": iptc_fields}
     finally:
         conn.close()
 

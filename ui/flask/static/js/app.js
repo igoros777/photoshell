@@ -3290,7 +3290,7 @@ document.addEventListener("DOMContentLoaded", function() {
         var filterMode = field.filter_mode || "";  // "regex", "keywords_all", "select", or ""
         var row = document.createElement("div");
         row.className = "structured-filter-row";
-        row.dataset.fieldName = field.name;
+        row.dataset.fieldName = field.field || field.name;  // column name for catalog, exiftool name for structured
         row.dataset.fieldGroup = group;
         row.dataset.fieldType = field.type;
         row.dataset.filterMode = filterMode;
@@ -4214,178 +4214,148 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     });
 
-    // ---- Catalog Structured Filters ----
+    // ---- Catalog Structured Filters (same pattern as Structured tab) ----
 
-    var catalogFields = [];  // discovered fields
-    var catalogFilterRows = document.getElementById("catalog-filter-rows");
+    var _catalogSchema = null;
+    var _catalogActiveFilters = {};
+    var catalogExifList = document.getElementById("catalog-exif-filter-list");
+    var catalogIptcList = document.getElementById("catalog-iptc-filter-list");
     var catalogAddFieldSelect = document.getElementById("catalog-add-field");
-    var catalogActiveFilters = [];
 
     document.getElementById("btn-catalog-discover").addEventListener("click", function() {
         var dir = getCatalogDir();
         if (!dir) return;
         var status = document.getElementById("catalog-discover-status");
-        status.innerHTML = '<i class="bi bi-hourglass-split"></i> Loading...';
+        status.innerHTML = '<i class="bi bi-hourglass-split"></i> Discovering fields...';
 
         fetch("/api/catalog/discover?path=" + encodeURIComponent(dir))
             .then(function(res) { return res.json(); })
             .then(function(data) {
                 if (data.error) { status.textContent = data.error; return; }
-                catalogFields = data.fields || [];
-                status.innerHTML = '<span style="color:var(--ps-success)">' + catalogFields.length + ' fields available</span>';
-                populateCatalogAddField();
-                document.getElementById("catalog-add-filter-row").style.display = "";
+                _catalogSchema = data;
+                var total = (data.exif_fields || []).length + (data.iptc_fields || []).length;
+                status.innerHTML = '<span style="color:var(--ps-success)">' + total + ' fields discovered</span>';
+
+                // Render default fields
+                catalogExifList.innerHTML = "";
+                catalogIptcList.innerHTML = "";
+                _catalogActiveFilters = {};
+
+                // Show default fields: model, date, iso, f_number, focal_length, keywords, headline
+                var defaults = ["model", "date_time_original", "iso", "f_number", "focal_length", "keywords", "headline"];
+                var allFields = (data.exif_fields || []).concat(data.iptc_fields || []);
+                defaults.forEach(function(fieldCol) {
+                    var f = allFields.find(function(x) { return x.field === fieldCol; });
+                    if (f) addCatalogFilterField(f);
+                });
+
+                refreshCatalogAddFieldDropdown();
+                document.getElementById("catalog-structured-fields").style.display = "";
             })
-            .catch(function() { status.textContent = "Failed"; });
+            .catch(function() { status.textContent = "Failed to discover fields"; });
     });
 
-    function populateCatalogAddField() {
-        catalogAddFieldSelect.innerHTML = '<option value="">+ Add filter...</option>';
-        catalogFields.forEach(function(f) {
+    function addCatalogFilterField(field) {
+        if (_catalogActiveFilters[field.field]) return;
+        _catalogActiveFilters[field.field] = true;
+
+        // Reuse the exact same renderFilterRow function from the Structured tab
+        var row = renderFilterRow(field, field.field in _IPTC_COLUMNS_SET ? "iptc" : "exif");
+
+        // Override the remove handler to work with catalog state
+        var removeBtn = row.querySelector(".filter-remove");
+        if (removeBtn) {
+            // Remove old handler by cloning
+            var newBtn = removeBtn.cloneNode(true);
+            removeBtn.parentNode.replaceChild(newBtn, removeBtn);
+            newBtn.addEventListener("click", function() {
+                row.parentNode.removeChild(row);
+                delete _catalogActiveFilters[field.field];
+                refreshCatalogAddFieldDropdown();
+            });
+        }
+
+        if (field.field in _IPTC_COLUMNS_SET) {
+            catalogIptcList.appendChild(row);
+        } else {
+            catalogExifList.appendChild(row);
+        }
+    }
+
+    function refreshCatalogAddFieldDropdown() {
+        if (!_catalogSchema) return;
+        catalogAddFieldSelect.innerHTML = '<option value="">+ Add field...</option>';
+        var allFields = (_catalogSchema.exif_fields || []).concat(_catalogSchema.iptc_fields || []);
+        allFields.forEach(function(f) {
+            if (_catalogActiveFilters[f.field]) return;
             var opt = document.createElement("option");
             opt.value = f.field;
-            opt.textContent = f.label;
+            opt.textContent = f.name;
             catalogAddFieldSelect.appendChild(opt);
         });
     }
 
     catalogAddFieldSelect.addEventListener("change", function() {
-        var fieldName = catalogAddFieldSelect.value;
-        if (!fieldName) return;
-        var fieldInfo = catalogFields.find(function(f) { return f.field === fieldName; });
-        if (!fieldInfo) return;
-        addCatalogFilterRow(fieldInfo);
+        var fieldCol = catalogAddFieldSelect.value;
+        if (!fieldCol || !_catalogSchema) return;
+        var allFields = (_catalogSchema.exif_fields || []).concat(_catalogSchema.iptc_fields || []);
+        var field = allFields.find(function(f) { return f.field === fieldCol; });
+        if (field) {
+            addCatalogFilterField(field);
+            refreshCatalogAddFieldDropdown();
+        }
         catalogAddFieldSelect.value = "";
     });
 
-    function addCatalogFilterRow(fieldInfo) {
-        var row = document.createElement("div");
-        row.className = "structured-filter-row";
-        row.dataset.field = fieldInfo.field;
-        row.style.cssText = "display:flex;gap:6px;align-items:center;font-size:12px";
-
-        // Label
-        var label = document.createElement("span");
-        label.style.cssText = "min-width:120px;font-weight:600;color:var(--ps-text-muted);font-size:11px";
-        label.textContent = fieldInfo.label;
-        row.appendChild(label);
-
-        // Input(s) based on type
-        if (fieldInfo.type === "numeric") {
-            var minInput = document.createElement("input");
-            minInput.type = "number";
-            minInput.className = "form-control form-control-sm";
-            minInput.style.maxWidth = "100px";
-            minInput.placeholder = fieldInfo.min != null ? "Min (" + fieldInfo.min + ")" : "Min";
-            minInput.dataset.role = "min";
-
-            var sep = document.createElement("span");
-            sep.textContent = "\u2013";
-            sep.style.color = "var(--ps-text-dim)";
-
-            var maxInput = document.createElement("input");
-            maxInput.type = "number";
-            maxInput.className = "form-control form-control-sm";
-            maxInput.style.maxWidth = "100px";
-            maxInput.placeholder = fieldInfo.max != null ? "Max (" + fieldInfo.max + ")" : "Max";
-            maxInput.dataset.role = "max";
-
-            row.appendChild(minInput);
-            row.appendChild(sep);
-            row.appendChild(maxInput);
-
-        } else if (fieldInfo.type === "date") {
-            var dateMin = document.createElement("input");
-            dateMin.type = "text";
-            dateMin.className = "form-control form-control-sm";
-            dateMin.style.maxWidth = "140px";
-            dateMin.placeholder = fieldInfo.min ? fieldInfo.min.split(" ")[0] : "From";
-            dateMin.dataset.role = "min";
-
-            var dateSep = document.createElement("span");
-            dateSep.textContent = "\u2013";
-            dateSep.style.color = "var(--ps-text-dim)";
-
-            var dateMax = document.createElement("input");
-            dateMax.type = "text";
-            dateMax.className = "form-control form-control-sm";
-            dateMax.style.maxWidth = "140px";
-            dateMax.placeholder = fieldInfo.max ? fieldInfo.max.split(" ")[0] : "To";
-            dateMax.dataset.role = "max";
-
-            row.appendChild(dateMin);
-            row.appendChild(dateSep);
-            row.appendChild(dateMax);
-
-        } else if (fieldInfo.values && fieldInfo.values.length > 0) {
-            // Dropdown for fields with <=30 unique values
-            var select = document.createElement("select");
-            select.className = "form-select form-select-sm";
-            select.style.maxWidth = "200px";
-            select.dataset.role = "value";
-            select.innerHTML = '<option value="">Any</option>';
-            fieldInfo.values.forEach(function(v) {
-                var opt = document.createElement("option");
-                opt.value = v.value;
-                opt.textContent = v.value + " (" + v.count + ")";
-                select.appendChild(opt);
-            });
-            row.appendChild(select);
-
-        } else {
-            // Free text input
-            var textInput = document.createElement("input");
-            textInput.type = "text";
-            textInput.className = "form-control form-control-sm";
-            textInput.style.maxWidth = "200px";
-            textInput.placeholder = "Contains...";
-            textInput.dataset.role = "value";
-            row.appendChild(textInput);
-        }
-
-        // Remove button
-        var removeBtn = document.createElement("button");
-        removeBtn.type = "button";
-        removeBtn.className = "btn btn-sm";
-        removeBtn.style.cssText = "color:var(--ps-text-dim);padding:2px 6px";
-        removeBtn.innerHTML = '<i class="bi bi-x"></i>';
-        removeBtn.addEventListener("click", function() { row.remove(); });
-        row.appendChild(removeBtn);
-
-        catalogFilterRows.appendChild(row);
-    }
+    // Set for quick IPTC lookup
+    var _IPTC_COLUMNS_SET = {"headline":1,"caption":1,"keywords":1,"copyright":1,"credit":1,"source":1,"city":1,"state":1,"country":1};
 
     function collectCatalogFilters() {
         var filters = [];
-        catalogFilterRows.querySelectorAll(".structured-filter-row").forEach(function(row) {
-            var field = row.dataset.field;
-            var fieldInfo = catalogFields.find(function(f) { return f.field === field; });
-            if (!fieldInfo) return;
+        var containers = [catalogExifList, catalogIptcList];
+        containers.forEach(function(container) {
+            container.querySelectorAll(".structured-filter-row").forEach(function(row) {
+                var fieldCol = row.dataset.fieldName;
+                var filterMode = row.dataset.filterMode || "";
+                var fieldType = row.dataset.fieldType || "text";
 
-            if (fieldInfo.type === "numeric" || fieldInfo.type === "date") {
-                var minEl = row.querySelector('[data-role="min"]');
-                var maxEl = row.querySelector('[data-role="max"]');
-                var minVal = minEl ? minEl.value.trim() : "";
-                var maxVal = maxEl ? maxEl.value.trim() : "";
-                if (minVal || maxVal) {
-                    filters.push({field: field, op: "range", min: minVal || null, max: maxVal || null});
-                }
-            } else {
-                var valEl = row.querySelector('[data-role="value"]');
-                var val = valEl ? valEl.value.trim() : "";
-                if (val) {
-                    if (valEl.tagName === "SELECT") {
-                        filters.push({field: field, op: "eq", value: val});
-                    } else {
-                        filters.push({field: field, op: "contains", value: val});
+                if (filterMode === "regex" || filterMode === "keywords_all") {
+                    var valEl = row.querySelector('[data-role="value"]');
+                    var val = valEl ? valEl.value.trim() : "";
+                    if (val) filters.push({field: fieldCol, op: "contains", value: val});
+                } else if (fieldType === "numeric" || fieldType === "date") {
+                    var minEl = row.querySelector('[data-role="min"]');
+                    var maxEl = row.querySelector('[data-role="max"]');
+                    var minVal = minEl ? minEl.value.trim() : "";
+                    var maxVal = maxEl ? maxEl.value.trim() : "";
+                    if (minVal || maxVal) {
+                        filters.push({field: fieldCol, op: "range", min: minVal || null, max: maxVal || null});
                     }
+                } else if (fieldType === "select") {
+                    var cbGroup = row.querySelector('[data-role="values"]');
+                    if (cbGroup) {
+                        var checked = [];
+                        cbGroup.querySelectorAll("input:checked").forEach(function(cb) {
+                            checked.push(cb.value);
+                        });
+                        if (checked.length > 0) filters.push({field: fieldCol, op: "in", values: checked});
+                    }
+                } else {
+                    var textEl = row.querySelector('[data-role="value"]');
+                    var textVal = textEl ? textEl.value.trim() : "";
+                    if (textVal) filters.push({field: fieldCol, op: "contains", value: textVal});
                 }
-            }
+            });
         });
         return filters;
     }
 
-    // Override runCatalogSearch to include structured filters
+    // Wire up the structured search button
+    document.getElementById("btn-catalog-structured-search").addEventListener("click", function() {
+        runCatalogSearch(1);
+    });
+
+    // Include structured filters in catalog search
     var _origRunCatalogSearch = runCatalogSearch;
     runCatalogSearch = function(page) {
         var dir = getCatalogDir();
