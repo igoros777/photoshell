@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.4.0 — 2026-03-22
+
+### Annotate Headline
+- New `--headline` workflow generates short headlines via Ollama and writes them to the IPTC Headline metadata field
+- Three built-in prompts: newspaper caption style (8 words max), and two Adobe Stock-optimized title prompts (natural phrases under 70 characters, focused on subject, setting, and mood)
+- Skips files where the headline is already populated — same safe-write pattern as keywords
+
+### Blur Detection Performance
+- Blur detection runs 4-8x faster with parallel scoring via `xargs -P $(nproc)`
+- Batch exiftool replaces per-file `identify` calls for date extraction (~50x faster)
+- Pre-generated thumbnail cache in `/dev/shm` for visual delta comparison
+- New `-j/--jobs` flag to control parallel worker count
+- Blur detection now supports 18 image formats including RAW (DNG, NEF, CR2, ARW, etc.)
+
+### Security
+- Fixed all 29 CodeQL path injection and command line injection alerts with `_sanitize_dir_path()` and `_sanitize_path()` on all new endpoints
+
+### UI Improvements
+- Clicking a sidebar workflow step again closes its configuration panel
+- Clicking outside the inspector panel closes it
+- New "Reset" button resets all workflow settings to defaults
+- Blur comparison slider now loads full-resolution images (2400px) instead of tiny previews
+- Scene navigation uses a dropdown + prev/next arrows instead of overflowing button rows
+
 ## 1.3.0 — 2026-03-22
 
 ### Photo Browsing

@@ -206,7 +206,7 @@ The UI follows a DaVinci Resolve-inspired dark pro-tool aesthetic with warm ambe
 - [`scripts/contact_sheet.sh`](scripts/contact_sheet.sh): Generate a contact/proof sheet from photos with metadata captions (IPTC Caption, EXIF UserComment, or EXIF summary fallback).
 - [`scripts/gps_gap_fill.sh`](scripts/gps_gap_fill.sh): Fill in missing GPS coordinates by copying them from the nearest-in-time photo with geotags.
 - [`scripts/extract_photo_summary.sh`](scripts/extract_photo_summary.sh): Extract key EXIF details, build a concise photo summary, and write it into comment/description metadata tags.
-- [`scripts/annotate_photos_with_ollama.sh`](scripts/annotate_photos_with_ollama.sh): Run one Ollama workflow at a time: description mode replaces `EXIF:ImageDescription` and `IPTC:Caption-Abstract`, keywords mode populates empty `IPTC:Keywords`, and both support prompt selection (`--list-prompts`, `--prompt-id`, `--prompt-file`).
+- [`scripts/annotate_photos_with_ollama.sh`](scripts/annotate_photos_with_ollama.sh): Run one Ollama workflow at a time: description mode replaces `EXIF:ImageDescription` and `IPTC:Caption-Abstract`, keywords mode populates empty `IPTC:Keywords`, headline mode populates empty `IPTC:Headline` (includes Adobe Stock-optimized title prompts). All workflows support prompt selection (`--list-prompts`, `--prompt-id`, `--prompt-file`).
 - [`scripts/sync_exif_and_rename.sh`](scripts/sync_exif_and_rename.sh): Sync export JPEG metadata from matching originals and rename files back to source-aligned basenames.
 - [`scripts/geo_rename_photos.sh`](scripts/geo_rename_photos.sh): Rename photos using capture timestamp, camera model, and reverse-geocoded location, with optional date-based folder structure.
 - [`scripts/gopro_geo_rename.sh`](scripts/gopro_geo_rename.sh): Rename GoPro MP4 clips with capture time, reverse-geocoded location, duration, and original filename.
@@ -221,7 +221,7 @@ The UI follows a DaVinci Resolve-inspired dark pro-tool aesthetic with warm ambe
 - [`docs/contact_sheet.md`](docs/contact_sheet.md): Contact/proof sheet generation flow, geometry logic, metadata caption fallback, and usage examples.
 - [`docs/gps_gap_fill.md`](docs/gps_gap_fill.md): Why this script exists, how it works, requirements, usage, and limitations.
 - [`docs/extract_photo_summary.md`](docs/extract_photo_summary.md): Why this script exists, how metadata is summarized, geocoding behavior, requirements, usage, and limitations.
-- [`docs/annotate_photos_with_ollama.md`](docs/annotate_photos_with_ollama.md): Ollama-driven metadata annotation with mutually exclusive description/keywords workflows, input modes (`DIRECTORY`, `--file`, `--list`), prompt-file selection options, requirements, and safety notes.
+- [`docs/annotate_photos_with_ollama.md`](docs/annotate_photos_with_ollama.md): Ollama-driven metadata annotation with mutually exclusive description/keywords/headline workflows, input modes (`DIRECTORY`, `--file`, `--list`), prompt-file selection options, requirements, and safety notes.
 - [`docs/sync_exif_and_rename.md`](docs/sync_exif_and_rename.md): Why this script exists, matching/metadata sync behavior, usage, safety, and limitations.
 - [`docs/geo_rename_photos.md`](docs/geo_rename_photos.md): Why this script exists, how naming and folder structure work, requirements, usage, and limitations.
 - [`docs/gopro_geo_rename.md`](docs/gopro_geo_rename.md): Why this script exists, how filename construction works, requirements, usage, and limitations.

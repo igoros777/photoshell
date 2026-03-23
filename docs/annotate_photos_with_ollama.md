@@ -6,6 +6,7 @@
   - `EXIF:ImageDescription`
   - `IPTC:Caption-Abstract`
 - `--keywords`: generate keywords and populate `IPTC:Keywords` only when it is empty.
+- `--headline`: generate a short headline and populate `IPTC:Headline` only when it is empty. Includes Adobe Stock-optimized title prompts.
 
 ## Why This Script Exists
 
@@ -30,12 +31,21 @@ Keywords workflow:
 4. Parses model output into keyword values.
 5. Writes `IPTC:Keywords` when originally empty.
 
+Headline workflow:
+
+1. Reads `IPTC:Headline`.
+2. Skips files where the headline is already populated.
+3. Runs `ollama run` with a headline prompt.
+4. Normalizes output.
+5. Writes `IPTC:Headline` when originally empty.
+
 ## Workflow Selection Rules
 
 - Workflows are mutually exclusive.
 - Use at most one of:
   - `--description` (default if neither flag is passed)
   - `--keywords`
+  - `--headline`
 
 ## Input Modes
 
@@ -57,6 +67,7 @@ Each workflow has a built-in fallback prompt plus a default prompt file:
 
 - Description: `scripts/annotate_photos_with_ollama.prompts.txt`
 - Keywords: `scripts/annotate_photos_with_ollama.keywords.prompts.txt`
+- Headline: `scripts/annotate_photos_with_ollama.headline.prompts.txt`
 
 Prompt file format:
 
