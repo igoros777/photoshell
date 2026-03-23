@@ -29,6 +29,7 @@ FILE_PATTERN=""    # glob pattern for filenames (e.g. "DSC*.jpg")
 FOLDER_PATTERN=""  # glob pattern for folder names (e.g. "2025-*")
 MODE="build"       # build | update | prune | stats
 VERBOSE=0
+declare -a EXCLUDE_DIRS=()   # directories to skip during build
 
 # Default: all common image/RAW extensions
 FILE_TYPES="jpg,jpeg,png,tif,tiff,heic,heif,webp,bmp,gif,dng,nef,cr2,cr3,arw,orf,rw2,srw,raf,pef,x3f"
@@ -208,6 +209,21 @@ discover_files_to_list() {
     # Also keep files directly in INPUT_DIR (no subfolder)
     grep -v "/" "${outfile}" >> "${filtered}" 2>/dev/null || true
     mv "${filtered}" "${outfile}"
+  fi
+
+  # Exclude specific directories
+  if [[ "${#EXCLUDE_DIRS[@]}" -gt 0 ]]; then
+    local excl_filtered
+    excl_filtered="$(mktemp)"
+    cp "${outfile}" "${excl_filtered}"
+    for excl_dir in "${EXCLUDE_DIRS[@]}"; do
+      local tmp_excl
+      tmp_excl="$(mktemp)"
+      grep -v "^${excl_dir}/" "${excl_filtered}" > "${tmp_excl}" 2>/dev/null || true
+      mv "${tmp_excl}" "${excl_filtered}"
+      vlog "  Excluding: ${excl_dir}"
+    done
+    mv "${excl_filtered}" "${outfile}"
   fi
 
   wc -l < "${outfile}" | tr -d ' '
@@ -535,6 +551,11 @@ while [[ $# -gt 0 ]]; do
     -F|--folder-pattern)
       [[ $# -lt 2 ]] && die "$1 requires a glob pattern"
       FOLDER_PATTERN="$2"
+      shift 2
+      ;;
+    --exclude-dir)
+      [[ $# -lt 2 ]] && die "$1 requires a directory path"
+      EXCLUDE_DIRS+=("$2")
       shift 2
       ;;
     -m|--mode)

@@ -3922,7 +3922,7 @@ document.addEventListener("DOMContentLoaded", function() {
         catalogDirTimer = setTimeout(onSearchDirChanged, 600);
     });
 
-    function startCatalogJob(mode) {
+    function startCatalogJob(mode, excludeDirs) {
         var dir = getCatalogDir();
         if (!dir) { alert("Enter a directory first."); return; }
 
@@ -3934,6 +3934,9 @@ document.addEventListener("DOMContentLoaded", function() {
             file_pattern: document.getElementById("catalog-file-pattern").value.trim(),
             folder_pattern: document.getElementById("catalog-folder-pattern").value.trim(),
         };
+        if (excludeDirs && excludeDirs.length > 0) {
+            body.exclude_dirs = excludeDirs;
+        }
 
         catalogLog.textContent = "Starting catalog " + mode + "...\n";
         catalogLog.style.display = "block";
@@ -3976,8 +3979,41 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     document.getElementById("btn-catalog-build").addEventListener("click", function() {
-        if (!confirm("Build a new catalog? This will replace any existing one.")) return;
-        startCatalogJob("build");
+        var dir = getCatalogDir();
+        if (!dir) { alert("Enter a directory first."); return; }
+
+        // Check for existing subcatalogs before building
+        catalogStatus.innerHTML = '<i class="bi bi-hourglass-split"></i> Checking for existing subcatalogs...';
+
+        fetch("/api/catalog/subcatalogs?path=" + encodeURIComponent(dir))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                var subs = data.subcatalogs || [];
+                if (subs.length === 0) {
+                    if (!confirm("Build a new catalog? This will replace any existing one.")) return;
+                    startCatalogJob("build");
+                } else {
+                    // Show subcatalog info and ask user
+                    var msg = "Found " + subs.length + " subfolder" + (subs.length > 1 ? "s" : "") + " with existing catalogs:\n\n";
+                    subs.forEach(function(s) {
+                        msg += "  \u2022 " + s.relative + " (" + s.total_files + " files)\n";
+                    });
+                    msg += "\nChoose an action:\n";
+                    msg += "  OK = Rebuild everything (replaces all subcatalogs)\n";
+                    msg += "  Cancel = Skip those subfolders (keep their catalogs)";
+
+                    if (confirm(msg)) {
+                        startCatalogJob("build");
+                    } else {
+                        // Build with exclusions
+                        startCatalogJob("build", subs.map(function(s) { return s.path; }));
+                    }
+                }
+            })
+            .catch(function() {
+                if (!confirm("Build a new catalog? This will replace any existing one.")) return;
+                startCatalogJob("build");
+            });
     });
 
     document.getElementById("btn-catalog-update").addEventListener("click", function() {

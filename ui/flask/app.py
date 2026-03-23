@@ -1828,6 +1828,36 @@ def api_catalog_status():
     return jsonify({"exists": True, "path": target, "stats": stats})
 
 
+@app.route("/api/catalog/subcatalogs")
+def api_catalog_subcatalogs():
+    """Scan for existing catalog.db files in subdirectories."""
+    path = request.args.get("path", "").strip()
+    if not path:
+        return jsonify({"subcatalogs": []})
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError:
+        return jsonify({"subcatalogs": []})
+    target, error = _resolve_directory(path)
+    if error:
+        return jsonify({"subcatalogs": []})
+
+    found = []
+    for root, dirs, files in os.walk(target):
+        # Skip the top-level .photoshell dir
+        dirs[:] = [d for d in dirs if d != ".photoshell"]
+        catalog_path = os.path.join(root, ".photoshell", "catalog.db")
+        if os.path.isfile(catalog_path):
+            rel = os.path.relpath(root, target)
+            stats = catalog_stats(catalog_path)
+            found.append({
+                "path": root,
+                "relative": rel,
+                "total_files": stats["total_files"] if stats else 0,
+            })
+    return jsonify({"subcatalogs": found})
+
+
 @app.route("/api/catalog/build", methods=["POST"])
 def api_catalog_build():
     """Start a catalog build/update job."""
@@ -1863,6 +1893,11 @@ def api_catalog_build():
         cmd += ["-f", file_pattern]
     if folder_pattern:
         cmd += ["-F", folder_pattern]
+    exclude_dirs = body.get("exclude_dirs", [])
+    if isinstance(exclude_dirs, list):
+        for excl in exclude_dirs:
+            if excl and isinstance(excl, str):
+                cmd += ["--exclude-dir", excl]
     cmd.append(target)
 
     job_id = str(uuid.uuid4())[:8]
