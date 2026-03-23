@@ -186,6 +186,8 @@ Use `--host` and `--port` to customize the bind address (e.g., `python3 app.py -
 - **Workflow presets** — save, load, and delete named workflow configurations as JSON presets
 - **Undo/revert** — restore metadata from exiftool `_original` backup files with one click
 - **Multi-folder project mode** — auto-detect subfolders with photos, run the full pipeline across all subfolders sequentially, skip failures and continue
+- **Photo catalog** — index EXIF/IPTC metadata from large photo collections into SQLite for instant searching. Build, update, prune, and remove catalogs from the UI. Structured filters (numeric ranges, date ranges, camera model dropdowns, keyword search) plus free-text search across all fields. Parallel exiftool workers with real-time progress bar.
+- **EXIF/IPTC viewer** — click any photo thumbnail to preview it, then view full EXIF or IPTC metadata in a scrollable table with one click
 - **Drag-and-drop** — drop a folder onto the UI to set the photo directory
 - **Contact sheet splitting** — automatically split large collections across multiple sheets (configurable max images per sheet)
 - **Backup** — create timestamped `.tar.gz` archives with size estimation before running
@@ -213,6 +215,7 @@ The UI follows a DaVinci Resolve-inspired dark pro-tool aesthetic with warm ambe
 - [`scripts/search_exif_iptc.sh`](scripts/search_exif_iptc.sh): Search EXIF/IPTC metadata text across supported image/raw/video files with field, type, and recursion filters.
 - [`scripts/scrub_selected_metadata.sh`](scripts/scrub_selected_metadata.sh): Clear selected EXIF/IPTC fields with optional exact tag selectors (`--exif`, `--iptc`) and recursion control.
 - [`scripts/backup_folder.sh`](scripts/backup_folder.sh): Create timestamped `.tar.gz` archives of a photo directory with optional recursion.
+- [`scripts/catalog_build.sh`](scripts/catalog_build.sh): Scan photo directories and index EXIF/IPTC metadata into SQLite for fast searching. Supports file type filtering, depth limiting, filename/folder patterns, and parallel exiftool workers. Four modes: build, update, prune, stats.
 
 ## Documentation
 - [`docs/photofolders.md`](docs/photofolders.md): `photofolders` behavior, rationale, usage, and workflow integration for Windows and Linux variants.

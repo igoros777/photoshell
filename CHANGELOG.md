@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.5.0 — 2026-03-23
+
+### Photo Catalog
+- New `catalog_build.sh` script indexes EXIF/IPTC metadata from large photo collections into SQLite for instant searching
+- Supports file type filtering, directory depth limits, filename and folder name glob patterns, and parallel exiftool workers with configurable batch size
+- Four modes: build (full scan), update (incremental — only new files), prune (remove entries for deleted files), stats (show catalog summary)
+- New "Catalog" tab in the Search panel with build/update/prune/remove buttons, collapsible build options, and a real-time progress bar
+- Structured search with Discover Fields: numeric ranges, date pickers, camera model/file type checkboxes, keyword and caption search — same layout as the Structured search tab
+- Free-text quick search across all indexed fields (filename, camera, lens, keywords, caption, location)
+- Detects existing subcatalogs in subdirectories before building and lets you skip them to avoid duplicates
+- Clickable search result thumbnails open the full preview modal with metadata footer
+
+### EXIF/IPTC Viewer
+- Photo preview modal now has EXIF and IPTC buttons that display the full metadata in a scrollable table
+- Shows all fields returned by exiftool, sorted alphabetically with monospace field names
+- Preview modal title now shows the full file path instead of just the filename
+
 ## 1.4.0 — 2026-03-22
 
 ### Annotate Headline

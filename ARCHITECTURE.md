@@ -37,13 +37,16 @@ PhotoShell is a local-first photo workflow toolkit. It has two layers: a set of 
 │  /api/undo        → restore exiftool _original backups       │
 │  /api/backup      → estimate + run .tar.gz archive           │
 │  /api/docs        → serves markdown docs for in-app reading  │
+│  /api/file_metadata → full EXIF or IPTC data for one file    │
+│  /api/catalog/*   → SQLite catalog: build/search/discover    │
 │                                                              │
 │  constants.py           → shared PHOTO_EXTENSIONS, labels    │
 │  advisory_checks.py     → metadata pre-flight + GPS extract  │
 │  structured_search.py   → field discovery + filtering engine │
+│  catalog.py             → SQLite catalog search + discovery  │
 │                                                              │
 │  In-memory: jobs{} (with TTL cleanup)                        │
-│  On-disk:   .photoshell/presets/ and operations.jsonl         │
+│  On-disk:   .photoshell/catalog.db, presets/, operations.jsonl│
 └──────────────────────────┬──────────────────────────────────┘
                            │ subprocess.Popen (list args, no shell)
 ┌──────────────────────────▼──────────────────────────────────┐
