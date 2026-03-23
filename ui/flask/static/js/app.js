@@ -4042,13 +4042,89 @@ document.addEventListener("DOMContentLoaded", function() {
             });
     }
 
+    var catalogResultFiles = [];  // store for preview modal
+
+    function openCatalogPreview(idx) {
+        if (idx < 0 || idx >= catalogResultFiles.length) return;
+        var r = catalogResultFiles[idx];
+        var modalEl = document.getElementById("photoPreviewModal");
+        var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        var previewImg = document.getElementById("photo-preview-img");
+        var footer = document.getElementById("photo-preview-footer");
+        var spinner = modalEl.querySelector(".preview-loading");
+
+        previewImg.src = "";
+        previewImg.style.display = "none";
+        previewImg.alt = r.file_name;
+        if (spinner) spinner.style.display = "flex";
+
+        var loader = new Image();
+        loader.onload = function() {
+            previewImg.src = loader.src;
+            previewImg.style.display = "block";
+            if (spinner) spinner.style.display = "none";
+        };
+        loader.onerror = function() {
+            previewImg.alt = "Failed to load: " + r.file_name;
+            if (spinner) spinner.style.display = "none";
+        };
+        loader.src = "/api/thumbnail?path=" + encodeURIComponent(r.file_path) + "&size=1200";
+
+        // Store path for EXIF/IPTC buttons
+        modalEl.dataset.currentPath = r.file_path;
+
+        // Hide metadata panel
+        document.getElementById("preview-metadata-panel").style.display = "none";
+
+        // Build footer with catalog metadata
+        footer.innerHTML = "";
+        var nameEl = document.createElement("div");
+        nameEl.className = "preview-meta-filename";
+        nameEl.textContent = r.file_name;
+        footer.appendChild(nameEl);
+
+        var fields = [];
+        if (r.model) fields.push(["Camera", r.model]);
+        if (r.lens_model) fields.push(["Lens", r.lens_model]);
+        if (r.date_time_original) fields.push(["Date", r.date_time_original]);
+        if (r.f_number) fields.push(["Aperture", "f/" + r.f_number]);
+        if (r.focal_length) fields.push(["Focal", r.focal_length + "mm"]);
+        if (r.iso) fields.push(["ISO", r.iso]);
+        if (r.image_width && r.image_height) fields.push(["Size", r.image_width + "\u00d7" + r.image_height]);
+        if (r.gps_latitude && r.gps_longitude) fields.push(["GPS", Number(r.gps_latitude).toFixed(4) + ", " + Number(r.gps_longitude).toFixed(4)]);
+        if (r.headline) fields.push(["Headline", r.headline]);
+        if (r.caption) fields.push(["Caption", r.caption]);
+        if (r.keywords) fields.push(["Keywords", r.keywords]);
+        if (r.city || r.state || r.country) fields.push(["Location", [r.city, r.state, r.country].filter(Boolean).join(", ")]);
+
+        fields.forEach(function(pair) {
+            var div = document.createElement("div");
+            div.className = "preview-meta-field";
+            var label = document.createElement("span");
+            label.className = "preview-meta-label";
+            label.textContent = pair[0];
+            div.appendChild(label);
+            div.appendChild(document.createTextNode(pair[1]));
+            footer.appendChild(div);
+        });
+
+        document.getElementById("photo-preview-title").textContent = r.file_name;
+        modal.show();
+    }
+
     function renderCatalogResults(results) {
         catalogResultsGrid.innerHTML = "";
+        catalogResultFiles = results;
         if (results.length === 0) return;
 
-        results.forEach(function(r) {
+        results.forEach(function(r, idx) {
             var card = document.createElement("div");
             card.className = "search-result-card";
+            card.style.cursor = "pointer";
+
+            card.addEventListener("click", function() {
+                openCatalogPreview(idx);
+            });
 
             var img = document.createElement("img");
             img.loading = "lazy";
