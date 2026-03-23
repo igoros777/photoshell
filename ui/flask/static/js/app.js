@@ -3940,6 +3940,10 @@ document.addEventListener("DOMContentLoaded", function() {
 
         catalogLog.textContent = "Starting catalog " + mode + "...\n";
         catalogLog.style.display = "block";
+        document.getElementById("catalog-progress").style.display = "block";
+        document.getElementById("catalog-progress-bar").style.width = "0%";
+        document.getElementById("catalog-progress-pct").textContent = "0%";
+        document.getElementById("catalog-progress-text").textContent = "Starting...";
 
         fetch("/api/catalog/build", {
             method: "POST",
@@ -3950,6 +3954,7 @@ document.addEventListener("DOMContentLoaded", function() {
         .then(function(data) {
             if (data.error) {
                 catalogLog.textContent += "Error: " + data.error + "\n";
+                document.getElementById("catalog-progress").style.display = "none";
                 return;
             }
             catalogJobId = data.job_id;
@@ -3957,7 +3962,27 @@ document.addEventListener("DOMContentLoaded", function() {
         })
         .catch(function(err) {
             catalogLog.textContent += "Request failed: " + err + "\n";
+            document.getElementById("catalog-progress").style.display = "none";
         });
+    }
+
+    function parseCatalogProgress(log) {
+        // Parse "[NN%] X/Y files indexed (batch M/N)" from log lines
+        var lines = log.split("\n");
+        for (var i = lines.length - 1; i >= 0; i--) {
+            var match = lines[i].match(/\[(\d+)%\]\s+(\d+)\/(\d+)\s+files indexed/);
+            if (match) {
+                return {pct: parseInt(match[1]), indexed: parseInt(match[2]), total: parseInt(match[3])};
+            }
+        }
+        // Check for "Files found: N" as initial state
+        for (var j = lines.length - 1; j >= 0; j--) {
+            var foundMatch = lines[j].match(/Files found:\s+(\d+)/);
+            if (foundMatch) {
+                return {pct: 0, indexed: 0, total: parseInt(foundMatch[1])};
+            }
+        }
+        return null;
     }
 
     function pollCatalogJob() {
@@ -3968,9 +3993,26 @@ document.addEventListener("DOMContentLoaded", function() {
                 .then(function(data) {
                     catalogLog.textContent = data.log;
                     catalogLog.scrollTop = catalogLog.scrollHeight;
+
+                    // Update progress bar
+                    var prog = parseCatalogProgress(data.log);
+                    if (prog) {
+                        document.getElementById("catalog-progress-bar").style.width = prog.pct + "%";
+                        document.getElementById("catalog-progress-pct").textContent = prog.pct + "%";
+                        document.getElementById("catalog-progress-text").textContent =
+                            prog.indexed + " / " + prog.total + " files indexed";
+                    }
+
                     if (data.status !== "running") {
                         clearInterval(catalogPollTimer);
                         catalogJobId = null;
+                        // Final progress
+                        document.getElementById("catalog-progress-bar").style.width = "100%";
+                        document.getElementById("catalog-progress-pct").textContent = "Done";
+                        if (prog) {
+                            document.getElementById("catalog-progress-text").textContent =
+                                prog.indexed + " files indexed";
+                        }
                         checkCatalogStatus();
                     }
                 })

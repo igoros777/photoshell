@@ -356,7 +356,7 @@ process_file_list() {
   local processed=0
   local completed=0
 
-  log "Processing ${total_batches} batches (${total} files)..."
+  log "Indexing ${total} files in ${total_batches} batches..."
 
   for bf in "${batch_files[@]}"; do
     local -a files_in_batch=()
@@ -370,7 +370,8 @@ process_file_list() {
       processed=$((processed + count))
     fi
     completed=$((completed + 1))
-    vlog "  Batch ${completed}/${total_batches}: ${processed} files indexed"
+    local pct=$((completed * 100 / total_batches))
+    log "  [${pct}%] ${processed}/${total} files indexed (batch ${completed}/${total_batches})"
   done
 
   rm -rf "${tmpdir}"
