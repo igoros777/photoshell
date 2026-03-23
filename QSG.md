@@ -83,11 +83,11 @@ ollama pull gemma3:12b
 ollama pull gemma3:27b
 ```
 
-**What do 4B/12B/27B mean?** These are the number of *parameters* (billions) in the model. More parameters = better understanding of images and more nuanced descriptions, but requires more GPU memory and runs slower. Start with `4b` if your GPU has limited VRAM.
+**What do 4B/12B/27B mean?** These are the number of *parameters* (billions) in the model. More parameters = better image understanding and more nuanced descriptions, but require more GPU memory and run slower. Start with `4b` if your GPU has limited VRAM.
 
 Browse all available vision models at **https://ollama.com/search?c=vision**.
 
-For full Ollama documentation see **https://docs.ollama.com/quickstart**.
+For full Ollama documentation, see **https://docs.ollama.com/quickstart**.
 
 ---
 
@@ -127,13 +127,13 @@ Check the steps you want to run in the sidebar. Common workflow:
 3. **Annotate - Description** — AI-generated captions (requires Ollama)
 4. **Annotate - Keywords** — AI-generated tags (requires Ollama)
 5. **Annotate - Headline** — short title for stock/catalog use (requires Ollama)
-6. **Detect Blurry Photos** — scores sharpness, groups scenes, picks the best
+6. **Detect Blurry Photos** — scores sharpness, groups scenes, and picks the best
 
 Click any step name to configure its options in the inspector panel.
 
 ### Step 3: Run
 
-Click **Run Pipeline** (or press `R`). Watch the log panel for real-time progress. Steps light up green as they complete.
+Click **Run Pipeline** (or press `R`). Watch the log panel for real-time progress. Steps light up green as they are completed.
 
 ### Step 4: Explore results
 
@@ -211,13 +211,13 @@ bash scripts/catalog_build.sh -m build /path/to/photos
 
 **"exiftool: command not found"** — Install ExifTool. On Ubuntu: `sudo apt install exiftool`. On macOS: `brew install exiftool`.
 
-**"Ollama not available"** — Make sure `ollama serve` is running in a separate terminal. PhotoShell auto-detects Ollama and disables AI steps if it's not running.
+**"Ollama not available"** — Make sure `ollama serve` is running in a separate terminal. PhotoShell auto-detects Ollama and disables AI steps when Ollama isn't running.
 
 **Thumbnails don't load** — The thumbnail endpoint needs read access to the photo files. Make sure the Flask process can access the directory.
 
 **Map shows no markers** — Your photos may lack GPS data. Run **GPS Gap Fill** first if you have a mix of GPS and non-GPS cameras.
 
-**Catalog build seems slow** — Normal for large collections. 1000 photos takes ~30 seconds, 10000 photos takes ~5 minutes. The progress bar shows real-time status.
+**Catalog build seems slow** — Normal for large collections. 1000 photos take ~30 seconds, 10000 photos take ~5 minutes. The progress bar shows real-time status.
 
 ---
 
