@@ -1909,10 +1909,10 @@ def api_catalog_discover():
     if not os.path.isfile(db_path):
         return jsonify({"error": "No catalog found"}), 404
 
-    fields = catalog_discover(db_path)
-    if fields is None:
+    result = catalog_discover(db_path)
+    if result is None:
         return jsonify({"error": "Failed to read catalog"}), 500
-    return jsonify({"fields": fields})
+    return jsonify(result)
 
 
 @app.route("/api/catalog/search")
