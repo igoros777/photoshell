@@ -1353,7 +1353,7 @@ document.addEventListener("DOMContentLoaded", function() {
         nameEl.textContent = file.name;
         footer.appendChild(nameEl);
 
-        document.getElementById("photo-preview-title").textContent = file.name;
+        document.getElementById("photo-preview-title").textContent = file.path || file.name;
 
         // Store current file path for metadata buttons
         modalEl.dataset.currentPath = file.path;
@@ -3779,7 +3779,7 @@ document.addEventListener("DOMContentLoaded", function() {
         var m = metaMap[filepath] || {filename: filepath.split("/").pop(), comment: "", caption: "", keywords: ""};
         var fullUrl = "/api/thumbnail?path=" + encodeURIComponent(filepath) + "&size=1600";
 
-        photoPreviewTitle.textContent = m.filename;
+        photoPreviewTitle.textContent = filepath;
 
         // Hide old image and show spinner while new one loads
         photoPreviewImg.style.display = "none";
@@ -4186,7 +4186,7 @@ document.addEventListener("DOMContentLoaded", function() {
             footer.appendChild(div);
         });
 
-        document.getElementById("photo-preview-title").textContent = r.file_name;
+        document.getElementById("photo-preview-title").textContent = r.file_path || r.file_name;
         modal.show();
     }
 
