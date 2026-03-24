@@ -91,7 +91,24 @@ For full Ollama documentation, see **https://docs.ollama.com/quickstart**.
 
 ---
 
-## 4. Clone and Start
+## 4. Geocod.io API Key (Optional — for Reverse Geocoding)
+
+Some workflows use reverse geocoding to turn GPS coordinates into place names (city, state, country). This is used by **Extract Photo Summary** and **Geo Rename Photos** to include location names in metadata and filenames.
+
+PhotoShell uses [Geocod.io](https://www.geocod.io/) for this. Their **free tier** (2,500 lookups/day) is more than enough for most hobbyists. See pricing at **https://www.geocod.io/pricing/**.
+
+1. Sign up at [geocod.io](https://www.geocod.io/) and get your API key
+2. Set it as an environment variable before running PhotoShell:
+
+```bash
+export GEOCODIO_API_KEY="YOUR_API_KEY_HERE"
+```
+
+**No API key?** Everything still works — you just won't get human-readable location names in summaries and filenames. GPS coordinates are still filled and stored.
+
+---
+
+## 5. Clone and Start
 
 ```bash
 git clone https://github.com/igoros777/photoshell.git
@@ -106,7 +123,7 @@ Open **http://localhost:5050** in your browser. You should see:
 
 ---
 
-## 5. Your First Workflow
+## 6. Your First Workflow
 
 ### Step 1: Select a folder
 
@@ -147,7 +164,7 @@ Switch to the **Map** tab to see where your photos were taken:
 
 ---
 
-## 6. Photo Catalog
+## 7. Photo Catalog
 
 For large collections, build a SQLite catalog for instant searching across thousands of photos.
 
@@ -166,7 +183,7 @@ For large collections, build a SQLite catalog for instant searching across thous
 
 ---
 
-## 7. CLI Scripts (No UI Required)
+## 8. CLI Scripts (No UI Required)
 
 Every workflow step is also a standalone bash script. Use them from the command line:
 
@@ -195,7 +212,7 @@ bash scripts/catalog_build.sh -m build /path/to/photos
 
 ---
 
-## 8. Keyboard Shortcuts
+## 9. Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
