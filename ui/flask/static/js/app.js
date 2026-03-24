@@ -1436,7 +1436,17 @@ document.addEventListener("DOMContentLoaded", function() {
     document.getElementById("btn-rotate-preview").addEventListener("click", function() {
         _previewRotation = (_previewRotation + 90) % 360;
         var img = document.getElementById("photo-preview-img");
-        img.style.transform = _previewRotation ? "rotate(" + _previewRotation + "deg)" : "";
+        if (_previewRotation === 0) {
+            img.style.transform = "";
+        } else if (_previewRotation === 90 || _previewRotation === 270) {
+            // At 90/270 the image is sideways — scale to fit within the container
+            // Use the aspect ratio to calculate the right scale factor
+            var ratio = img.naturalHeight ? (img.naturalWidth / img.naturalHeight) : 1;
+            var scale = ratio > 1 ? (1 / ratio) : ratio;
+            img.style.transform = "rotate(" + _previewRotation + "deg) scale(" + scale.toFixed(4) + ")";
+        } else {
+            img.style.transform = "rotate(" + _previewRotation + "deg)";
+        }
     });
 
     // ---- Content View Tabs ----
