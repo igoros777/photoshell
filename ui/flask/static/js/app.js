@@ -1358,8 +1358,9 @@ document.addEventListener("DOMContentLoaded", function() {
         // Title: filename only
         document.getElementById("photo-preview-title").textContent = file.name;
 
-        // Store current file path for metadata buttons
+        // Store current file path for metadata/download buttons
         modalEl.dataset.currentPath = file.path;
+        updateDownloadButton(file.path);
 
         // Reset rotation
         _previewRotation = 0;
@@ -1428,6 +1429,15 @@ document.addEventListener("DOMContentLoaded", function() {
     document.getElementById("btn-close-metadata").addEventListener("click", function() {
         document.getElementById("preview-metadata-panel").style.display = "none";
     });
+
+    // ---- Preview download button ----
+
+    function updateDownloadButton(filePath) {
+        var btn = document.getElementById("btn-download-preview");
+        if (btn && filePath) {
+            btn.href = "/api/download?path=" + encodeURIComponent(filePath);
+        }
+    }
 
     // ---- Preview image rotation ----
 
@@ -3812,8 +3822,9 @@ document.addEventListener("DOMContentLoaded", function() {
         _previewRotation = 0;
         photoPreviewImg.style.transform = "";
 
-        // Store path for EXIF/IPTC buttons
+        // Store path for EXIF/IPTC/download buttons
         photoPreviewModalEl.dataset.currentPath = filepath;
+        updateDownloadButton(filepath);
 
         // Hide old image and show spinner while new one loads
         photoPreviewImg.style.display = "none";
@@ -4182,8 +4193,9 @@ document.addEventListener("DOMContentLoaded", function() {
         };
         loader.src = "/api/thumbnail?path=" + encodeURIComponent(r.file_path) + "&size=1200";
 
-        // Store path for EXIF/IPTC buttons
+        // Store path for EXIF/IPTC/download buttons
         modalEl.dataset.currentPath = r.file_path;
+        updateDownloadButton(r.file_path);
 
         // Reset rotation
         _previewRotation = 0;

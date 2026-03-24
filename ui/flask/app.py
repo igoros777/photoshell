@@ -2019,6 +2019,21 @@ def api_catalog_remove():
     return jsonify({"ok": removed})
 
 
+@app.route("/api/download")
+def api_download():
+    """Serve the original photo file for download."""
+    path = request.args.get("path", "").strip()
+    if not path:
+        return jsonify({"error": "No path specified"}), 400
+    try:
+        filepath = _sanitize_file_path(path)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if not os.path.isfile(filepath):
+        return jsonify({"error": "File not found"}), 404
+    return send_file(filepath, as_attachment=True)
+
+
 @app.route("/api/file_metadata")
 def api_file_metadata():
     """Return full EXIF and/or IPTC metadata for a single file."""
