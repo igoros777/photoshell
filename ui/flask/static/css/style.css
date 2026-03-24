@@ -1702,6 +1702,16 @@ body {
     line-height: 1.5;
 }
 
+.preview-meta-filepath {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--ps-text-muted);
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--ps-border);
+    margin-bottom: 4px;
+    word-break: break-all;
+}
+
 .preview-meta-filename {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
@@ -1710,6 +1720,10 @@ body {
     padding-bottom: 4px;
     border-bottom: 1px solid var(--ps-border);
     margin-bottom: 4px;
+}
+
+#photo-preview-img {
+    transition: transform 200ms ease;
 }
 
 .preview-meta-field {

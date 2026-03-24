@@ -1346,17 +1346,24 @@ document.addEventListener("DOMContentLoaded", function() {
         };
         loader.src = "/api/thumbnail?path=" + encodeURIComponent(file.path) + "&size=1200";
 
-        // Footer metadata
+        // Footer: full path first, then filename
         footer.innerHTML = "";
-        var nameEl = document.createElement("span");
-        nameEl.className = "preview-meta-filename";
-        nameEl.textContent = file.name;
-        footer.appendChild(nameEl);
+        if (file.path) {
+            var pathEl = document.createElement("div");
+            pathEl.className = "preview-meta-filepath";
+            pathEl.textContent = file.path;
+            footer.appendChild(pathEl);
+        }
 
-        document.getElementById("photo-preview-title").textContent = file.path || file.name;
+        // Title: filename only
+        document.getElementById("photo-preview-title").textContent = file.name;
 
         // Store current file path for metadata buttons
         modalEl.dataset.currentPath = file.path;
+
+        // Reset rotation
+        _previewRotation = 0;
+        document.getElementById("photo-preview-img").style.transform = "";
 
         // Hide metadata panel on new preview
         document.getElementById("preview-metadata-panel").style.display = "none";
@@ -1420,6 +1427,16 @@ document.addEventListener("DOMContentLoaded", function() {
 
     document.getElementById("btn-close-metadata").addEventListener("click", function() {
         document.getElementById("preview-metadata-panel").style.display = "none";
+    });
+
+    // ---- Preview image rotation ----
+
+    var _previewRotation = 0;
+
+    document.getElementById("btn-rotate-preview").addEventListener("click", function() {
+        _previewRotation = (_previewRotation + 90) % 360;
+        var img = document.getElementById("photo-preview-img");
+        img.style.transform = _previewRotation ? "rotate(" + _previewRotation + "deg)" : "";
     });
 
     // ---- Content View Tabs ----
@@ -3779,7 +3796,14 @@ document.addEventListener("DOMContentLoaded", function() {
         var m = metaMap[filepath] || {filename: filepath.split("/").pop(), comment: "", caption: "", keywords: ""};
         var fullUrl = "/api/thumbnail?path=" + encodeURIComponent(filepath) + "&size=1600";
 
-        photoPreviewTitle.textContent = filepath;
+        photoPreviewTitle.textContent = m.filename;
+
+        // Reset rotation
+        _previewRotation = 0;
+        photoPreviewImg.style.transform = "";
+
+        // Store path for EXIF/IPTC buttons
+        photoPreviewModalEl.dataset.currentPath = filepath;
 
         // Hide old image and show spinner while new one loads
         photoPreviewImg.style.display = "none";
@@ -3801,8 +3825,8 @@ document.addEventListener("DOMContentLoaded", function() {
         };
         loader.src = fullUrl;
 
-        // Build footer with metadata
-        var footerHtml = '<div class="preview-meta-filename">' + escapeHtml(m.filename) + '</div>';
+        // Build footer with metadata — full path first
+        var footerHtml = '<div class="preview-meta-filepath">' + escapeHtml(filepath) + '</div>';
         if (m.caption) {
             footerHtml += '<div class="preview-meta-field"><span class="preview-meta-label">Caption</span>' + escapeHtml(m.caption) + '</div>';
         }
@@ -4151,15 +4175,21 @@ document.addEventListener("DOMContentLoaded", function() {
         // Store path for EXIF/IPTC buttons
         modalEl.dataset.currentPath = r.file_path;
 
+        // Reset rotation
+        _previewRotation = 0;
+        previewImg.style.transform = "";
+
         // Hide metadata panel
         document.getElementById("preview-metadata-panel").style.display = "none";
 
-        // Build footer with catalog metadata
+        // Build footer with catalog metadata — full path first
         footer.innerHTML = "";
-        var nameEl = document.createElement("div");
-        nameEl.className = "preview-meta-filename";
-        nameEl.textContent = r.file_name;
-        footer.appendChild(nameEl);
+        if (r.file_path) {
+            var pathEl = document.createElement("div");
+            pathEl.className = "preview-meta-filepath";
+            pathEl.textContent = r.file_path;
+            footer.appendChild(pathEl);
+        }
 
         var fields = [];
         if (r.model) fields.push(["Camera", r.model]);
@@ -4186,7 +4216,7 @@ document.addEventListener("DOMContentLoaded", function() {
             footer.appendChild(div);
         });
 
-        document.getElementById("photo-preview-title").textContent = r.file_path || r.file_name;
+        document.getElementById("photo-preview-title").textContent = r.file_name;
         modal.show();
     }
 
