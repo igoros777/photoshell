@@ -4085,39 +4085,39 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     });
 
-    // Catalog search
-    function runCatalogSearch(page) {
+    // Catalog search (overridden below to include structured filters)
+    function runCatalogSearch(page) {}
+
+    function prefetchCatalogPages(currentPage, totalPages) {
+        // Prefetch thumbnails for the next 3 pages
         var dir = getCatalogDir();
         var query = catalogSearchQuery.value.trim();
-        if (!dir) return;
+        var filters = collectCatalogFilters();
 
-        catalogCurrentPage = page || 1;
-        catalogResultsHeader.textContent = "Searching...";
-        catalogResults.style.display = "block";
-        catalogResultsGrid.innerHTML = "";
-        catalogResultsPagination.innerHTML = "";
+        for (var ahead = 1; ahead <= 3; ahead++) {
+            var nextPage = currentPage + ahead;
+            if (nextPage > totalPages) break;
 
-        var url = "/api/catalog/search?path=" + encodeURIComponent(dir) +
-                  "&q=" + encodeURIComponent(query) +
-                  "&page=" + catalogCurrentPage + "&per_page=50";
+            var url = "/api/catalog/search?path=" + encodeURIComponent(dir) +
+                      "&q=" + encodeURIComponent(query) +
+                      "&page=" + nextPage + "&per_page=50";
+            if (filters.length > 0) {
+                url += "&filters=" + encodeURIComponent(JSON.stringify(filters));
+            }
 
-        fetch(url)
-            .then(function(res) { return res.json(); })
-            .then(function(data) {
-                if (data.error) {
-                    catalogResultsHeader.textContent = data.error;
-                    return;
-                }
-                catalogResultsHeader.textContent =
-                    data.total + " result" + (data.total !== 1 ? "s" : "") +
-                    " (page " + data.page + " of " + data.total_pages + ")";
-
-                renderCatalogResults(data.results);
-                renderCatalogPagination(data.page, data.total_pages);
-            })
-            .catch(function() {
-                catalogResultsHeader.textContent = "Search failed";
-            });
+            (function(prefetchUrl) {
+                fetch(prefetchUrl)
+                    .then(function(res) { return res.json(); })
+                    .then(function(data) {
+                        if (!data.results) return;
+                        data.results.forEach(function(r) {
+                            var img = new Image();
+                            img.src = "/api/thumbnail?path=" + encodeURIComponent(r.file_path) + "&size=200";
+                        });
+                    })
+                    .catch(function() {});
+            })(url);
+        }
     }
 
     var catalogResultFiles = [];  // store for preview modal
@@ -4205,7 +4205,7 @@ document.addEventListener("DOMContentLoaded", function() {
             });
 
             var img = document.createElement("img");
-            img.loading = "lazy";
+            img.loading = "eager";
             img.src = "/api/thumbnail?path=" + encodeURIComponent(r.file_path) + "&size=200";
             img.alt = r.file_name;
             card.appendChild(img);
@@ -4466,6 +4466,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     " (page " + data.page + " of " + data.total_pages + ")";
                 renderCatalogResults(data.results);
                 renderCatalogPagination(data.page, data.total_pages);
+                prefetchCatalogPages(data.page, data.total_pages);
             })
             .catch(function() {
                 catalogResultsHeader.textContent = "Search failed";
