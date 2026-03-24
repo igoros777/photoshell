@@ -1351,7 +1351,7 @@ document.addEventListener("DOMContentLoaded", function() {
         if (file.path) {
             var pathEl = document.createElement("div");
             pathEl.className = "preview-meta-filepath";
-            pathEl.textContent = file.path;
+            pathEl.textContent = '"' + file.path + '"';
             footer.appendChild(pathEl);
         }
 
@@ -1434,7 +1434,7 @@ document.addEventListener("DOMContentLoaded", function() {
     var _previewRotation = 0;
 
     document.getElementById("btn-rotate-preview").addEventListener("click", function() {
-        _previewRotation = (_previewRotation + 90) % 360;
+        _previewRotation = (_previewRotation + 270) % 360;
         var img = document.getElementById("photo-preview-img");
         if (_previewRotation === 0) {
             img.style.transform = "";
@@ -3836,7 +3836,7 @@ document.addEventListener("DOMContentLoaded", function() {
         loader.src = fullUrl;
 
         // Build footer with metadata — full path first
-        var footerHtml = '<div class="preview-meta-filepath">' + escapeHtml(filepath) + '</div>';
+        var footerHtml = '<div class="preview-meta-filepath">"' + escapeHtml(filepath) + '"</div>';
         if (m.caption) {
             footerHtml += '<div class="preview-meta-field"><span class="preview-meta-label">Caption</span>' + escapeHtml(m.caption) + '</div>';
         }
@@ -4197,7 +4197,7 @@ document.addEventListener("DOMContentLoaded", function() {
         if (r.file_path) {
             var pathEl = document.createElement("div");
             pathEl.className = "preview-meta-filepath";
-            pathEl.textContent = r.file_path;
+            pathEl.textContent = '"' + r.file_path + '"';
             footer.appendChild(pathEl);
         }
 
