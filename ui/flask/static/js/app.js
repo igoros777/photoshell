@@ -2990,8 +2990,8 @@ document.addEventListener("DOMContentLoaded", function() {
 
         btnSearch.disabled = true;
         btnSearchCancel.style.display = "inline-block";
-        searchResultsEl.style.display = "none";
-        searchResultsEl.innerHTML = "";
+        textSearchResultsEl.style.display = "none";
+        textSearchResultsEl.innerHTML = "";
         searchLog.style.display = "block";
         searchLog.classList.add("active");
         searchLog.textContent = "Searching in " + dir + " ...\n";
@@ -3025,6 +3025,7 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 
     var searchResultsEl = document.getElementById("search-results");
+    var textSearchResultsEl = document.getElementById("text-search-results");
 
     function startSearchPolling() {
         searchPollTimer = setInterval(function() {
@@ -3072,13 +3073,13 @@ document.addEventListener("DOMContentLoaded", function() {
         }
 
         if (files.length === 0) {
-            searchResultsEl.style.display = "none";
+            textSearchResultsEl.style.display = "none";
             return;
         }
 
         // Show loading state
-        searchResultsEl.style.display = "block";
-        searchResultsEl.innerHTML = '<div class="search-results-header">'
+        textSearchResultsEl.style.display = "block";
+        textSearchResultsEl.innerHTML = '<div class="search-results-header">'
             + '<span><i class="bi bi-images"></i> ' + files.length + ' match' + (files.length !== 1 ? 'es' : '') + ' found</span>'
             + '<span class="text-muted">Loading metadata...</span></div>';
 
@@ -3127,8 +3128,8 @@ document.addEventListener("DOMContentLoaded", function() {
             });
             html += '</div>';
 
-            searchResultsEl.innerHTML = html;
-            wirePhotoPreviewLinks();
+            textSearchResultsEl.innerHTML = html;
+            wireTextSearchPreviewLinks();
         })
         .catch(function() {
             // Fallback: show thumbnails without metadata
@@ -3146,8 +3147,8 @@ document.addEventListener("DOMContentLoaded", function() {
                 html += '</div>';
             });
             html += '</div>';
-            searchResultsEl.innerHTML = html;
-            wirePhotoPreviewLinks();
+            textSearchResultsEl.innerHTML = html;
+            wireTextSearchPreviewLinks();
         });
     }
 
@@ -3801,6 +3802,16 @@ document.addEventListener("DOMContentLoaded", function() {
 
     function wirePhotoPreviewLinks() {
         searchResultsEl.querySelectorAll(".photo-preview-link").forEach(function(link) {
+            link.addEventListener("click", function(e) {
+                e.preventDefault();
+                var idx = parseInt(link.dataset.idx, 10);
+                openPhotoPreview(idx);
+            });
+        });
+    }
+
+    function wireTextSearchPreviewLinks() {
+        textSearchResultsEl.querySelectorAll(".photo-preview-link").forEach(function(link) {
             link.addEventListener("click", function(e) {
                 e.preventDefault();
                 var idx = parseInt(link.dataset.idx, 10);
