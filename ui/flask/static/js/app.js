@@ -3129,7 +3129,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
             searchResultsEl.innerHTML = html;
             wirePhotoPreviewLinks();
-            searchResultsEl.scrollIntoView({behavior: "smooth", block: "start"});
+            searchResultsEl.scrollIntoView({behavior: "smooth", block: "nearest"});
         })
         .catch(function() {
             // Fallback: show thumbnails without metadata
@@ -3149,7 +3149,7 @@ document.addEventListener("DOMContentLoaded", function() {
             html += '</div>';
             searchResultsEl.innerHTML = html;
             wirePhotoPreviewLinks();
-            searchResultsEl.scrollIntoView({behavior: "smooth", block: "start"});
+            searchResultsEl.scrollIntoView({behavior: "smooth", block: "nearest"});
         });
     }
 
@@ -3718,7 +3718,7 @@ document.addEventListener("DOMContentLoaded", function() {
         wirePhotoPreviewLinks();
 
         // Scroll results into view
-        searchResultsEl.scrollIntoView({behavior: "smooth", block: "start"});
+        searchResultsEl.scrollIntoView({behavior: "smooth", block: "nearest"});
 
         searchResultsEl.querySelectorAll(".structured-page-btn").forEach(function(btn) {
             btn.addEventListener("click", function() {
@@ -3734,7 +3734,7 @@ document.addEventListener("DOMContentLoaded", function() {
                             window._searchFiles = f2;
                             window._searchMetaMap = m2;
                             renderStructuredPage(f2, m2, d.page, d.total_pages);
-                            searchResultsEl.scrollIntoView({behavior: "smooth", block: "start"});
+                            searchResultsEl.scrollIntoView({behavior: "smooth", block: "nearest"});
                         }
                     });
             });
