@@ -3715,8 +3715,11 @@ document.addEventListener("DOMContentLoaded", function() {
         searchResultsEl.style.display = "block";
         wirePhotoPreviewLinks();
 
-        // Scroll results header into view (not the full grid which is very tall)
-        structuredResultsHeader.scrollIntoView({behavior: "smooth", block: "nearest"});
+        // Scroll the main container so the top of results is visible
+        var appMain = document.querySelector(".app-main");
+        if (appMain && searchResultsEl.offsetTop > 0) {
+            appMain.scrollTop = searchResultsEl.offsetTop - 60;
+        }
 
         searchResultsEl.querySelectorAll(".structured-page-btn").forEach(function(btn) {
             btn.addEventListener("click", function() {
@@ -3732,7 +3735,6 @@ document.addEventListener("DOMContentLoaded", function() {
                             window._searchFiles = f2;
                             window._searchMetaMap = m2;
                             renderStructuredPage(f2, m2, d.page, d.total_pages);
-                            structuredResultsHeader.scrollIntoView({behavior: "smooth", block: "nearest"});
                         }
                     });
             });
