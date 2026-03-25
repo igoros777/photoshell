@@ -247,20 +247,22 @@ document.addEventListener("DOMContentLoaded", function() {
     var STEP_RECOMMENDED_ORDER = {
         "enable_sync_exif":        1,
         "enable_gps_gap_fill":     2,
-        "enable_extract_summary":  3,
-        "enable_annotate_desc":    4,
-        "enable_annotate_kw":      5,
-        "enable_annotate_hl":      6,
-        "enable_geo_rename":       7,
-        "enable_gopro":            8,
-        "enable_blur":             9,
-        "enable_contact_sheet":   10,
-        "enable_scrub":           11
+        "enable_gps_set_loc":      3,
+        "enable_extract_summary":  4,
+        "enable_annotate_desc":    5,
+        "enable_annotate_kw":      6,
+        "enable_annotate_hl":      7,
+        "enable_geo_rename":       8,
+        "enable_gopro":            9,
+        "enable_blur":            10,
+        "enable_contact_sheet":   11,
+        "enable_scrub":           12
     };
 
     var STEP_LABELS = {
         "enable_sync_exif":       "Sync EXIF & Rename",
         "enable_gps_gap_fill":    "GPS Gap Fill",
+        "enable_gps_set_loc":     "Set GPS Location",
         "enable_extract_summary": "Extract Photo Summary",
         "enable_annotate_desc":   "Annotate - Description",
         "enable_annotate_kw":     "Annotate - Keywords",
@@ -276,6 +278,7 @@ document.addEventListener("DOMContentLoaded", function() {
     var STEP_CONFIG_MAP = {
         "enable_sync_exif":       "config-sync",
         "enable_gps_gap_fill":    "config-gps",
+        "enable_gps_set_loc":     "config-gps-set",
         "enable_extract_summary": "config-summary",
         "enable_annotate_desc":   "config-desc",
         "enable_annotate_kw":     "config-kw",
@@ -291,6 +294,7 @@ document.addEventListener("DOMContentLoaded", function() {
     var SIDEBAR_STEP_MAP = {
         "sync":    "enable_sync_exif",
         "gps":     "enable_gps_gap_fill",
+        "gps_set": "enable_gps_set_loc",
         "summary": "enable_extract_summary",
         "desc":    "enable_annotate_desc",
         "kw":      "enable_annotate_kw",
@@ -317,6 +321,21 @@ document.addEventListener("DOMContentLoaded", function() {
             before: "enable_gps_gap_fill",
             after: "enable_extract_summary",
             reason: "Extract Summary uses GPS for reverse geocoding. Without GPS Gap Fill, photos missing coordinates will have no location in their summary."
+        },
+        {
+            before: "enable_gps_set_loc",
+            after: "enable_gps_gap_fill",
+            reason: "Set GPS Location writes coordinates from a named location. GPS Gap Fill can then use those as donor photos for remaining gaps."
+        },
+        {
+            before: "enable_gps_set_loc",
+            after: "enable_extract_summary",
+            reason: "Set GPS Location provides coordinates that Extract Summary uses for reverse geocoding."
+        },
+        {
+            before: "enable_gps_set_loc",
+            after: "enable_geo_rename",
+            reason: "Set GPS Location provides coordinates that Geo Rename uses for location-based filenames."
         },
         {
             before: "enable_gps_gap_fill",

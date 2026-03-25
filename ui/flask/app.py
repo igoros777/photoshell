@@ -291,6 +291,25 @@ def _build_step(key, data):
             cmd.append("--dry-run")
         return {"label": "GPS Gap Fill", "cmd": cmd}
 
+    if key == "enable_gps_set_loc" and data.get(key):
+        location = data.get("gps_set_location", "").strip()
+        if not location:
+            return None
+        cmd = ["bash", _script("gps_set_location.sh"), "-l", location]
+        spread = data.get("gps_set_spread", "").strip()
+        if spread and spread != "0":
+            cmd += ["-s", spread]
+            unit = data.get("gps_set_unit", "miles").strip()
+            if unit:
+                cmd += ["-u", unit]
+        if data.get("gps_set_recursive"):
+            cmd.append("--recursive")
+        if data.get("gps_set_types"):
+            cmd += ["-t", data["gps_set_types"]]
+        if data.get("gps_set_force"):
+            cmd.append("--force")
+        return {"label": "Set GPS Location", "cmd": cmd}
+
     if key == "enable_extract_summary" and data.get(key):
         script_path = _script("extract_photo_summary.sh")
         cmd = ["find", ".", "-maxdepth", "1", "-type", "f",

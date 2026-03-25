@@ -107,6 +107,18 @@
                         </span>
                     </div>
 
+                    <div class="sidebar-step" data-step="gps_set">
+                        <input class="form-check-input section-toggle" type="checkbox"
+                               id="chk-gps-set" name="enable_gps_set_loc" data-section="sec-gps-set">
+                        <span class="sidebar-step-label"><i class="bi bi-pin-map"></i> Set GPS Location</span>
+                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_gps_set_loc">Step</span>
+                        <span class="sidebar-step-actions">
+                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                               data-bs-toggle="popover" data-bs-trigger="hover focus"
+                               data-bs-content="Sets GPS coordinates on photos by geocoding a location name via Geocod.io API. Optionally randomizes coordinates within a radius for natural distribution."></i>
+                        </span>
+                    </div>
+
                     <div class="sidebar-step" data-step="summary">
                         <input class="form-check-input section-toggle" type="checkbox"
                                id="chk-summary" name="enable_extract_summary" data-section="sec-summary">
@@ -290,6 +302,53 @@
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" name="gps_dry_run" id="gps-dry">
                     <label class="form-check-label" for="gps-dry">Dry run (preview only)</label>
+                </div>
+            </div>
+
+            <!-- 2b. Set GPS Location -->
+            <div class="step-config" id="config-gps-set" style="display:none">
+                <p class="section-desc">
+                    Geocodes a location name via Geocod.io and writes GPS coordinates to photo EXIF.
+                    Optionally randomizes coordinates within a radius for natural distribution.
+                    Requires <code>GEOCODIO_API_KEY</code> environment variable.
+                </p>
+                <div class="field-row">
+                    <div style="flex:2">
+                        <label class="form-label">Location</label>
+                        <input type="text" class="form-control" name="gps_set_location"
+                               placeholder="e.g. Cape Lookout, NC">
+                    </div>
+                </div>
+                <div class="field-row mt-2">
+                    <div>
+                        <label class="form-label">Spread Radius</label>
+                        <input type="number" class="form-control" name="gps_set_spread"
+                               placeholder="0" value="" min="0" step="0.1">
+                    </div>
+                    <div>
+                        <label class="form-label">Unit</label>
+                        <select class="form-select" name="gps_set_unit">
+                            <option value="miles" selected>Miles</option>
+                            <option value="km">Kilometers</option>
+                            <option value="yards">Yards</option>
+                            <option value="meters">Meters</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="field-row mt-2">
+                    <div>
+                        <label class="form-label">File Types (optional)</label>
+                        <input type="text" class="form-control" name="gps_set_types"
+                               placeholder="All types if empty (e.g. jpg,cr3)">
+                    </div>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" name="gps_set_recursive" id="gps-set-rec">
+                    <label class="form-check-label" for="gps-set-rec">Include subfolders</label>
+                </div>
+                <div class="form-check mt-1">
+                    <input class="form-check-input" type="checkbox" name="gps_set_force" id="gps-set-force">
+                    <label class="form-check-label" for="gps-set-force">Overwrite existing GPS data</label>
                 </div>
             </div>
 

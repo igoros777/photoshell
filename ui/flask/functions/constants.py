@@ -11,6 +11,7 @@ PHOTO_EXTENSIONS = {
 STEP_PREFLIGHT_LABELS = {
     "enable_sync_exif":       "Sync EXIF & Rename",
     "enable_gps_gap_fill":    "GPS Gap Fill",
+    "enable_gps_set_loc":     "Set GPS Location",
     "enable_extract_summary": "Extract Photo Summary",
     "enable_annotate_desc":   "Annotate (Description)",
     "enable_annotate_kw":     "Annotate (Keywords)",
@@ -26,6 +27,7 @@ STEP_PREFLIGHT_LABELS = {
 STEP_TOOL_DEPS = {
     "enable_sync_exif":       ["exiftool"],
     "enable_gps_gap_fill":    ["exiftool"],
+    "enable_gps_set_loc":     ["exiftool", "curl"],
     "enable_extract_summary": ["exiftool", "curl", "jq"],
     "enable_annotate_desc":   ["exiftool", "ollama"],
     "enable_annotate_kw":     ["exiftool", "ollama"],
@@ -48,7 +50,7 @@ TOOL_LABELS = {
 
 # Default step order (used when client doesn't send step_order).
 DEFAULT_STEP_ORDER = [
-    "enable_sync_exif", "enable_gps_gap_fill", "enable_extract_summary",
+    "enable_sync_exif", "enable_gps_gap_fill", "enable_gps_set_loc", "enable_extract_summary",
     "enable_annotate_desc", "enable_annotate_kw", "enable_annotate_hl",
     "enable_geo_rename", "enable_gopro", "enable_blur",
     "enable_contact_sheet", "enable_scrub",
