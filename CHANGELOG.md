@@ -15,7 +15,17 @@
 ### EXIF/IPTC Viewer
 - Photo preview modal now has EXIF and IPTC buttons that display the full metadata in a scrollable table
 - Shows all fields returned by exiftool, sorted alphabetically with monospace field names
-- Preview modal title now shows the full file path instead of just the filename
+
+### Preview Modal Enhancements
+- Rotate button rotates the image counterclockwise in 90° increments, auto-scaling to fit the container
+- Download button serves the original full-resolution file
+- Title shows filename, full path displayed in quotes below the image
+- Catalog search result thumbnails load eagerly with 3-page ahead prefetch
+
+### Search Improvements
+- Text search launches with Enter key from the query field
+- Elapsed time indicator on the Search button during text search ("Searching... 12s")
+- Structured and text search results now render inline within their own tab panes
 
 ## 1.4.0 — 2026-03-22
 
