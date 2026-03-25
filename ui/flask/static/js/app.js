@@ -3129,6 +3129,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
             searchResultsEl.innerHTML = html;
             wirePhotoPreviewLinks();
+            searchResultsEl.scrollIntoView({behavior: "smooth", block: "start"});
         })
         .catch(function() {
             // Fallback: show thumbnails without metadata
@@ -3148,6 +3149,7 @@ document.addEventListener("DOMContentLoaded", function() {
             html += '</div>';
             searchResultsEl.innerHTML = html;
             wirePhotoPreviewLinks();
+            searchResultsEl.scrollIntoView({behavior: "smooth", block: "start"});
         });
     }
 
@@ -3714,6 +3716,9 @@ document.addEventListener("DOMContentLoaded", function() {
         searchResultsEl.innerHTML = html;
         searchResultsEl.style.display = "block";
         wirePhotoPreviewLinks();
+
+        // Scroll results into view
+        searchResultsEl.scrollIntoView({behavior: "smooth", block: "start"});
 
         searchResultsEl.querySelectorAll(".structured-page-btn").forEach(function(btn) {
             btn.addEventListener("click", function() {
