@@ -3501,7 +3501,10 @@ document.addEventListener("DOMContentLoaded", function() {
 
     function collectStructuredFilters() {
         var filters = [];
-        var rows = document.querySelectorAll(".structured-filter-row");
+        // Only collect from the Structured tab's filter lists (not Catalog tab)
+        var container = document.getElementById("structured-fields");
+        if (!container) return filters;
+        var rows = container.querySelectorAll(".structured-filter-row");
         rows.forEach(function(row) {
             var fieldName = row.dataset.fieldName;
             var fieldType = row.dataset.fieldType;
