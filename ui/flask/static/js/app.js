@@ -2965,7 +2965,10 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     }
 
-    btnSearch.addEventListener("click", function() {
+    var _textSearchStartTime = 0;
+    var _textSearchTimer = null;
+
+    function launchTextSearch() {
         var dir = searchDirInput.value.trim() || photoDirInput.value.trim();
         var query = searchQueryInput.value.trim();
 
@@ -2996,6 +2999,14 @@ document.addEventListener("DOMContentLoaded", function() {
         searchLog.classList.add("active");
         searchLog.textContent = "Searching in " + dir + " ...\n";
 
+        _textSearchStartTime = Date.now();
+        clearInterval(_textSearchTimer);
+        _textSearchTimer = setInterval(function() {
+            var secs = ((Date.now() - _textSearchStartTime) / 1000).toFixed(0);
+            btnSearch.textContent = "Searching... (" + secs + "s)";
+        }, 1000);
+        btnSearch.innerHTML = '<i class="bi bi-arrow-repeat" style="animation:spin 1s linear infinite"></i> Searching... (0s)';
+
         fetch("/api/search", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
@@ -3006,6 +3017,8 @@ document.addEventListener("DOMContentLoaded", function() {
             if (body.error) {
                 searchLog.textContent = "Error: " + body.error;
                 btnSearch.disabled = false;
+                btnSearch.innerHTML = '<i class="bi bi-search"></i> Search';
+                clearInterval(_textSearchTimer);
                 btnSearchCancel.style.display = "none";
                 return;
             }
@@ -3015,8 +3028,19 @@ document.addEventListener("DOMContentLoaded", function() {
         .catch(function(err) {
             searchLog.textContent = "Request failed: " + err;
             btnSearch.disabled = false;
+            btnSearch.innerHTML = '<i class="bi bi-search"></i> Search';
+            clearInterval(_textSearchTimer);
             btnSearchCancel.style.display = "none";
         });
+    }
+
+    btnSearch.addEventListener("click", launchTextSearch);
+
+    searchQueryInput.addEventListener("keydown", function(e) {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            launchTextSearch();
+        }
     });
 
     btnSearchCancel.addEventListener("click", function() {
@@ -3037,7 +3061,9 @@ document.addEventListener("DOMContentLoaded", function() {
                     searchLog.scrollTop = searchLog.scrollHeight;
                     if (data.status !== "running") {
                         clearInterval(searchPollTimer);
+                        clearInterval(_textSearchTimer);
                         btnSearch.disabled = false;
+                        btnSearch.innerHTML = '<i class="bi bi-search"></i> Search';
                         btnSearchCancel.style.display = "none";
                         searchJobId = null;
                         // Parse matched files from the log and fetch thumbnails
