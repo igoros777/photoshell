@@ -182,6 +182,7 @@ Use `--host` and `--port` to customize the bind address (e.g., `python3 app.py -
 - **Photo thumbnails** — browse photos as a lazy-loaded thumbnail grid with "Load more" pagination, click to preview full-size images
 - **Streaming logs** — offset-based log streaming with line numbers, step header highlighting, and scroll-lock indicator
 - **Metadata coverage** — shows GPS, Caption, UserComment, Keywords coverage, camera model breakdown, and date range with option to scan all files
+- **Set GPS location** — geocode a place name via Geocod.io and write GPS coordinates to photos, with optional randomized spread within a radius (miles, km, yards, meters) for natural distribution
 - **GPS map** — interactive Leaflet.js map with clustered markers colored by camera model, click markers for thumbnail + metadata popup (CartoDB dark tiles, vendored for offline use)
 - **Blur comparison** — before/after slider comparing blurriest vs sharpest photos per scene, with filmstrip navigation and blur score badges
 - **Content view tabs** — toggle between Thumbnails, Map, and Blur Comparison views
@@ -209,6 +210,7 @@ The UI follows a DaVinci Resolve-inspired dark pro-tool aesthetic with warm ambe
 - [`scripts/detect_blurry_photos.sh`](scripts/detect_blurry_photos.sh): Detect blur with ImageMagick, split photos into scenes by time gap plus visual similarity, and select the sharpest frame per scene.
 - [`scripts/contact_sheet.sh`](scripts/contact_sheet.sh): Generate a contact/proof sheet from photos with metadata captions (IPTC Caption, EXIF UserComment, or EXIF summary fallback).
 - [`scripts/gps_gap_fill.sh`](scripts/gps_gap_fill.sh): Fill in missing GPS coordinates by copying them from the nearest-in-time photo with geotags.
+- [`scripts/gps_set_location.sh`](scripts/gps_set_location.sh): Geocode a location name via Geocod.io and write GPS coordinates to photos. Supports randomized spread within a radius (miles, km, yards, meters), file type filtering, and recursive scanning.
 - [`scripts/extract_photo_summary.sh`](scripts/extract_photo_summary.sh): Extract key EXIF details, build a concise photo summary, and write it into comment/description metadata tags.
 - [`scripts/annotate_photos_with_ollama.sh`](scripts/annotate_photos_with_ollama.sh): Run one Ollama workflow at a time: description mode replaces `EXIF:ImageDescription` and `IPTC:Caption-Abstract`, keywords mode populates empty `IPTC:Keywords`, headline mode populates empty `IPTC:Headline` (includes Adobe Stock-optimized title prompts). All workflows support prompt selection (`--list-prompts`, `--prompt-id`, `--prompt-file`).
 - [`scripts/sync_exif_and_rename.sh`](scripts/sync_exif_and_rename.sh): Sync export JPEG metadata from matching originals and rename files back to source-aligned basenames.

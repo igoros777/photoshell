@@ -139,12 +139,13 @@ Type or paste a photo folder path in the **Target Folder** field, then click the
 
 Check the steps you want to run in the sidebar. Common workflow:
 
-1. **GPS Gap Fill** — copies GPS coordinates from nearby photos to fill gaps
-2. **Extract Photo Summary** — writes camera/lens/location info to metadata
-3. **Annotate - Description** — AI-generated captions (requires Ollama)
-4. **Annotate - Keywords** — AI-generated tags (requires Ollama)
-5. **Annotate - Headline** — short title for stock/catalog use (requires Ollama)
-6. **Detect Blurry Photos** — scores sharpness, groups scenes, and picks the best
+1. **Set GPS Location** — geocode a place name and write GPS to all photos (with optional spread radius)
+2. **GPS Gap Fill** — copies GPS coordinates from nearby photos to fill remaining gaps
+3. **Extract Photo Summary** — writes camera/lens/location info to metadata
+4. **Annotate - Description** — AI-generated captions (requires Ollama)
+5. **Annotate - Keywords** — AI-generated tags (requires Ollama)
+6. **Annotate - Headline** — short title for stock/catalog use (requires Ollama)
+7. **Detect Blurry Photos** — scores sharpness, groups scenes, and picks the best
 
 Click any step name to configure its options in the inspector panel.
 
@@ -188,6 +189,10 @@ For large collections, build a SQLite catalog for instant searching across thous
 Every workflow step is also a standalone bash script. Use them from the command line:
 
 ```bash
+# Fill missing GPS from nearby photos
+# Set GPS from a location name (with quarter-mile spread)
+bash scripts/gps_set_location.sh -l "Cape Lookout, NC" -s 0.25 -u miles /path/to/photos
+
 # Fill missing GPS from nearby photos
 bash scripts/gps_gap_fill.sh /path/to/photos
 

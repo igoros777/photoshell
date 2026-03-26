@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.0 — 2026-03-25
+
+### Set GPS Location
+- New `gps_set_location.sh` geocodes a place name via Geocod.io and writes GPS coordinates to every matching photo
+- Randomized spread: distribute coordinates naturally within a radius — choose miles, km, yards, or meters
+- Skips files that already have GPS by default, `--force` to overwrite
+- Recursive scanning with file type filtering
+- New "Set GPS Location" workflow step in the UI with location input, spread radius + unit, and force overwrite toggle
+
 ## 1.5.0 — 2026-03-23
 
 ### Photo Catalog
