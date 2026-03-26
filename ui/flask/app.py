@@ -539,6 +539,7 @@ def run_preflight(enabled_steps):
 DOCS_MAP = {
     "sync_exif_and_rename": "sync_exif_and_rename.md",
     "gps_gap_fill": "gps_gap_fill.md",
+    "gps_set_location": "gps_set_location.md",
     "extract_photo_summary": "extract_photo_summary.md",
     "annotate_desc": "annotate_photos_with_ollama.md",
     "annotate_kw": "annotate_photos_with_ollama.md",
