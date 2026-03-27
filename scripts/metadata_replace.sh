@@ -31,7 +31,7 @@ RECURSIVE=0
 DRY_RUN=0
 FILE_TYPES=""
 DEFAULT_TYPES="jpg,jpeg,png,tif,tiff,heic,heif,webp,bmp,gif,dng,nef,cr2,cr3,arw,orf,rw2,srw,raf,pef,x3f"
-ALL_FIELDS="Keywords,Caption-Abstract,Headline,ImageDescription,UserComment,Copyright,Credit,Source,City,Province-State,Country-PrimaryLocationName"
+ALL_FIELDS="Keywords,Caption-Abstract,Headline,ImageDescription,UserComment,Copyright,Credit,Source,City,Province-State,Country-PrimaryLocationName,XMP-dc:Description,XMP-dc:Title,XMP-dc:Subject,XMP-dc:Rights,XMP-dc:Creator,XMP-iptcCore:AltTextAccessibility,XMP-iptcCore:Location"
 
 usage() {
   cat <<EOF
@@ -47,7 +47,13 @@ Options:
   -s, --search TEXT        Text to find (required)
   -R, --replace TEXT       Replacement text (required; use "" to delete)
   -F, --fields FIELD,...   Fields to operate on (default: all supported fields)
-                           Supported: ${ALL_FIELDS}
+                           IPTC: Keywords, Caption-Abstract, Headline, Copyright,
+                                 Credit, Source, City, Province-State,
+                                 Country-PrimaryLocationName
+                           EXIF: ImageDescription, UserComment
+                           XMP:  XMP-dc:Description, XMP-dc:Title, XMP-dc:Subject,
+                                 XMP-dc:Rights, XMP-dc:Creator,
+                                 XMP-iptcCore:AltTextAccessibility, XMP-iptcCore:Location
   -i, --ignore-case        Case-insensitive matching
   -w, --whole-word         Match whole words only
   -x, --regex              Treat search as Python regex
@@ -182,7 +188,7 @@ for field in fields:
     if val is None:
         continue
 
-    if field == 'Keywords':
+    if field in ('Keywords', 'XMP-dc:Subject', 'Subject'):
         # Handle keywords as a list
         if isinstance(val, str):
             kw_list = [k.strip() for k in val.split(',')]

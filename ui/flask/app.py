@@ -2142,38 +2142,57 @@ def api_discover_text_fields():
         "-EXIF:ImageDescription", "-EXIF:UserComment",
         "-IPTC:CopyrightNotice", "-IPTC:Credit", "-IPTC:Source",
         "-IPTC:City", "-IPTC:Province-State", "-IPTC:Country-PrimaryLocationName",
+        "-XMP-dc:Description", "-XMP-dc:Title", "-XMP-dc:Subject",
+        "-XMP-dc:Rights", "-XMP-dc:Creator",
+        "-XMP-iptcCore:AltTextAccessibility", "-XMP-iptcCore:Location",
     ]
     data = _run_exiftool_json(files, text_tags)
     if not data:
         return jsonify({"fields": [], "sampled": 0})
 
-    # Count non-empty values per field
-    field_names = [
-        "Keywords", "Caption-Abstract", "Headline",
-        "ImageDescription", "UserComment",
-        "CopyrightNotice", "Credit", "Source",
-        "City", "Province-State", "Country-PrimaryLocationName",
+    # Map: (exiftool JSON key, script field name, display label)
+    field_map = [
+        ("Keywords", "Keywords", "Keywords"),
+        ("Caption-Abstract", "Caption-Abstract", "Caption-Abstract"),
+        ("Headline", "Headline", "Headline"),
+        ("ImageDescription", "ImageDescription", "ImageDescription"),
+        ("UserComment", "UserComment", "UserComment"),
+        ("CopyrightNotice", "Copyright", "Copyright"),
+        ("Credit", "Credit", "Credit"),
+        ("Source", "Source", "Source"),
+        ("City", "City", "City"),
+        ("Province-State", "Province-State", "Province-State"),
+        ("Country-PrimaryLocationName", "Country-PrimaryLocationName", "Country"),
+        ("Description", "XMP-dc:Description", "XMP Description"),
+        ("Title", "XMP-dc:Title", "XMP Title"),
+        ("Subject", "XMP-dc:Subject", "XMP Subject/Keywords"),
+        ("Rights", "XMP-dc:Rights", "XMP Rights"),
+        ("Creator", "XMP-dc:Creator", "XMP Creator"),
+        ("AltTextAccessibility", "XMP-iptcCore:AltTextAccessibility", "Alt Text"),
+        ("Location", "XMP-iptcCore:Location", "XMP Location"),
     ]
+
     counts = {}
-    for fname in field_names:
-        counts[fname] = 0
+    for json_key, _, _ in field_map:
+        counts[json_key] = 0
 
     for rec in data:
-        for fname in field_names:
-            val = rec.get(fname)
+        for json_key, _, _ in field_map:
+            val = rec.get(json_key)
             if val:
                 if isinstance(val, list) and len(val) > 0:
-                    counts[fname] += 1
+                    counts[json_key] += 1
                 elif isinstance(val, str) and val.strip():
-                    counts[fname] += 1
+                    counts[json_key] += 1
 
     sampled = len(data)
     fields = []
-    for fname in field_names:
+    for json_key, tag_name, label in field_map:
         fields.append({
-            "name": fname,
-            "count": counts[fname],
-            "pct": round(counts[fname] * 100 / sampled) if sampled > 0 else 0,
+            "name": tag_name,
+            "label": label,
+            "count": counts[json_key],
+            "pct": round(counts[json_key] * 100 / sampled) if sampled > 0 else 0,
         })
 
     return jsonify({"fields": fields, "sampled": sampled})
