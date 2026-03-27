@@ -190,6 +190,9 @@ Use `--host` and `--port` to customize the bind address (e.g., `python3 app.py -
 - **Undo/revert** — restore metadata from exiftool `_original` backup files with one click
 - **Multi-folder project mode** — auto-detect subfolders with photos, run the full pipeline across all subfolders sequentially, skip failures and continue
 - **Photo catalog** — index EXIF/IPTC metadata from large photo collections into SQLite for instant searching. Build, update, prune, and remove catalogs from the UI. Structured filters (numeric ranges, date ranges, camera model dropdowns, keyword search) plus free-text search across all fields. Parallel exiftool workers with real-time progress bar.
+- **Metadata replace** — find and replace text across 20 EXIF/IPTC/XMP fields with keyword-aware handling, regex, case-insensitive matching, and field discovery
+- **Copyright / Creator** — batch-write photographer name, copyright, email, website, credit, source to all photos with `%Y` year substitution
+- **Consistency audit** — Ollama-powered detection of outliers in AI-generated descriptions (wrong event names, location mismatches, tone drift) with 4 selectable prompts
 - **EXIF/IPTC viewer** — click any photo thumbnail to preview it, then view full EXIF or IPTC metadata in a scrollable table with one click
 - **Drag-and-drop** — drop a folder onto the UI to set the photo directory
 - **Contact sheet splitting** — automatically split large collections across multiple sheets (configurable max images per sheet)
@@ -220,6 +223,9 @@ The UI follows a DaVinci Resolve-inspired dark pro-tool aesthetic with warm ambe
 - [`scripts/scrub_selected_metadata.sh`](scripts/scrub_selected_metadata.sh): Clear selected EXIF/IPTC fields with optional exact tag selectors (`--exif`, `--iptc`) and recursion control.
 - [`scripts/backup_folder.sh`](scripts/backup_folder.sh): Create timestamped `.tar.gz` archives of a photo directory with optional recursion.
 - [`scripts/catalog_build.sh`](scripts/catalog_build.sh): Scan photo directories and index EXIF/IPTC metadata into SQLite for fast searching. Supports file type filtering, depth limiting, filename/folder patterns, and parallel exiftool workers. Four modes: build, update, prune, stats.
+- [`scripts/metadata_replace.sh`](scripts/metadata_replace.sh): Find and replace text across 20 EXIF/IPTC/XMP metadata fields. Keyword-aware, regex support, case-insensitive matching, dry-run preview.
+- [`scripts/metadata_copyright.sh`](scripts/metadata_copyright.sh): Batch-write photographer name, copyright notice (with `%Y` year substitution), email, website, credit, and source to IPTC/EXIF/XMP fields.
+- [`scripts/metadata_consistency.sh`](scripts/metadata_consistency.sh): Ollama-powered consistency audit — reads all descriptions in a folder, detects outliers, and optionally fixes them. Four prompt modes: general, event/location, tone/style, hallucination detection.
 
 ## Documentation
 - [`docs/photofolders.md`](docs/photofolders.md): `photofolders` behavior, rationale, usage, and workflow integration for Windows and Linux variants.

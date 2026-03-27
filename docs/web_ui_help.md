@@ -34,7 +34,10 @@ flowchart LR
     E2 --> F[Geo Rename]
     F --> G[GoPro Rename]
     G --> H[Blur Detect]
-    H --> I[Contact Sheet]
+    H --> H2[Meta Replace]
+    H2 --> H3[Copyright]
+    H3 --> H4[Consistency]
+    H4 --> I[Contact Sheet]
     I --> J[Scrub]
 ```
 
@@ -50,6 +53,9 @@ flowchart LR
 | **Detect Blurry Photos** | Measures sharpness, groups photos into scenes, selects the sharpest per scene |
 | **Geo Rename Photos** | Renames files to `YYYYMMDD-HHMMSS-camera-location.ext` using GPS data |
 | **GoPro Geo Rename** | Same naming pattern for GoPro MP4 clips |
+| **Metadata Replace** | Find and replace text across 20 EXIF/IPTC/XMP fields with keyword-aware handling |
+| **Copyright / Creator** | Batch-write photographer name, copyright, email, website, credit, source |
+| **Consistency Audit** | Ollama-powered detection of outliers in descriptions (wrong names, locations, tone) |
 | **Contact Sheet** | Generates a proof sheet image with thumbnails and metadata captions |
 | **Scrub Metadata** | Clears selected EXIF/IPTC fields (destructive — use with care) |
 

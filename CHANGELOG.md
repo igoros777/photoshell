@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.7.0 — 2026-03-27
+
+### Batch Metadata Editing
+- **Metadata Replace** — find and replace text across 20 EXIF/IPTC/XMP fields with keyword-aware handling, regex support, case-insensitive matching, and dry-run preview
+- **Copyright / Creator** — batch-write photographer name, copyright notice (`%Y` for year), email, website, credit, and source to IPTC/EXIF/XMP fields. Fills empty fields by default
+- **Consistency Audit** — Ollama-powered analysis of descriptions across a photo set to detect outliers (wrong event names, location mismatches, tone drift). Four built-in prompts: general, event/location focus, tone/style, and hallucination detection
+- Field discovery button for Metadata Replace samples photos and shows which fields have data with counts
+- All three scripts use `-overwrite_original` (no leftover backup files)
+
+### Quick Backup
+- New Backup button near Target Folder creates a non-compressed `.tar` archive with optional recursive mode
+
+### XMP Field Support
+- Metadata Replace now covers XMP-dc (Description, Title, Subject, Rights, Creator) and XMP-iptcCore (AltTextAccessibility, Location, CreatorWorkEmail, CreatorWorkURL) — 20 searchable fields total
+
 ## 1.6.0 — 2026-03-25
 
 ### Set GPS Location
