@@ -19,6 +19,9 @@ STEP_PREFLIGHT_LABELS = {
     "enable_blur":            "Detect Blurry Photos",
     "enable_geo_rename":      "Geo Rename Photos",
     "enable_gopro":           "GoPro Geo Rename",
+    "enable_metadata_replace":   "Metadata Replace",
+    "enable_metadata_copyright": "Copyright / Creator",
+    "enable_metadata_consistency": "Consistency Audit",
     "enable_contact_sheet":   "Contact Sheet",
     "enable_scrub":           "Scrub Metadata",
 }
@@ -35,6 +38,9 @@ STEP_TOOL_DEPS = {
     "enable_blur":            ["exiftool", "imagemagick"],
     "enable_geo_rename":      ["exiftool", "curl", "jq"],
     "enable_gopro":           ["exiftool", "curl", "jq"],
+    "enable_metadata_replace":   ["exiftool"],
+    "enable_metadata_copyright": ["exiftool"],
+    "enable_metadata_consistency": ["exiftool", "ollama"],
     "enable_contact_sheet":   ["exiftool", "imagemagick"],
     "enable_scrub":           ["exiftool"],
 }
@@ -53,5 +59,7 @@ DEFAULT_STEP_ORDER = [
     "enable_sync_exif", "enable_gps_gap_fill", "enable_gps_set_loc", "enable_extract_summary",
     "enable_annotate_desc", "enable_annotate_kw", "enable_annotate_hl",
     "enable_geo_rename", "enable_gopro", "enable_blur",
+    "enable_metadata_replace", "enable_metadata_copyright",
+    "enable_metadata_consistency",
     "enable_contact_sheet", "enable_scrub",
 ]

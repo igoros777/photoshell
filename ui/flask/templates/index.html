@@ -211,6 +211,42 @@
                         </span>
                     </div>
 
+                    <div class="sidebar-step" data-step="mreplace">
+                        <input class="form-check-input section-toggle" type="checkbox"
+                               id="chk-mreplace" name="enable_metadata_replace" data-section="sec-mreplace">
+                        <span class="sidebar-step-label"><i class="bi bi-pencil-square"></i> Metadata Replace</span>
+                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_metadata_replace">Step</span>
+                        <span class="sidebar-step-actions">
+                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                               data-bs-toggle="popover" data-bs-trigger="hover focus"
+                               data-bs-content="Find and replace text in EXIF/IPTC metadata fields. Keyword-aware: replaces individual keywords within lists. Supports regex and case-insensitive matching."></i>
+                        </span>
+                    </div>
+
+                    <div class="sidebar-step" data-step="mcopy">
+                        <input class="form-check-input section-toggle" type="checkbox"
+                               id="chk-mcopy" name="enable_metadata_copyright" data-section="sec-mcopy">
+                        <span class="sidebar-step-label"><i class="bi bi-c-circle"></i> Copyright / Creator</span>
+                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_metadata_copyright">Step</span>
+                        <span class="sidebar-step-actions">
+                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                               data-bs-toggle="popover" data-bs-trigger="hover focus"
+                               data-bs-content="Batch-writes photographer name, copyright notice, contact email/website, credit, and source to IPTC/EXIF fields. Fills empty fields by default — use Force to overwrite."></i>
+                        </span>
+                    </div>
+
+                    <div class="sidebar-step" data-step="mcon">
+                        <input class="form-check-input section-toggle" type="checkbox"
+                               id="chk-mcon" name="enable_metadata_consistency" data-section="sec-mcon">
+                        <span class="sidebar-step-label"><i class="bi bi-clipboard-check"></i> Consistency Audit</span>
+                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_metadata_consistency">Step</span>
+                        <span class="sidebar-step-actions">
+                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                               data-bs-toggle="popover" data-bs-trigger="hover focus"
+                               data-bs-content="Uses Ollama to read all descriptions in a folder and detect outliers — wrong event names, location mismatches, tone drift. Report-only by default; enable Fix to auto-correct."></i>
+                        </span>
+                    </div>
+
                     <div class="sidebar-step" data-step="cs">
                         <input class="form-check-input section-toggle" type="checkbox"
                                id="chk-cs" name="enable_contact_sheet" data-section="sec-cs">
@@ -630,6 +666,152 @@
             </div>
 
             <!-- 10. Scrub Metadata -->
+            <!-- Metadata Replace -->
+            <div class="step-config" id="config-mreplace" style="display:none">
+                <p class="section-desc">
+                    Find and replace text in selected EXIF/IPTC metadata fields.
+                    Keywords are handled individually — replaces the matching keyword, not the entire list.
+                </p>
+                <div class="field-row">
+                    <div style="flex:1">
+                        <label class="form-label">Search</label>
+                        <input type="text" class="form-control" name="mr_search" placeholder="Text to find">
+                    </div>
+                    <div style="flex:1">
+                        <label class="form-label">Replace</label>
+                        <input type="text" class="form-control" name="mr_replace" placeholder="Replacement (empty to delete)">
+                    </div>
+                </div>
+                <div class="field-row mt-2">
+                    <div style="flex:2">
+                        <label class="form-label">Fields (optional)</label>
+                        <input type="text" class="form-control" name="mr_fields"
+                               placeholder="All fields if empty (e.g. Keywords,Headline)">
+                    </div>
+                    <div>
+                        <label class="form-label">File Types</label>
+                        <input type="text" class="form-control" name="mr_types" placeholder="All types">
+                    </div>
+                </div>
+                <div class="d-flex flex-wrap gap-3 mt-2">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="mr_ignore_case" id="mr-icase">
+                        <label class="form-check-label" for="mr-icase">Ignore case</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="mr_whole_word" id="mr-word">
+                        <label class="form-check-label" for="mr-word">Whole word</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="mr_regex" id="mr-regex">
+                        <label class="form-check-label" for="mr-regex">Regex</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="mr_recursive" id="mr-rec">
+                        <label class="form-check-label" for="mr-rec">Recursive</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="mr_dry_run" id="mr-dry" checked>
+                        <label class="form-check-label" for="mr-dry">Dry run</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Copyright / Creator -->
+            <div class="step-config" id="config-mcopy" style="display:none">
+                <p class="section-desc">
+                    Batch-writes photographer name, copyright notice, and contact info to IPTC/EXIF fields.
+                    By default only fills empty fields — enable Force to overwrite existing values.
+                    Use <code>%Y</code> in the copyright field for the current year.
+                </p>
+                <div class="field-row">
+                    <div style="flex:1">
+                        <label class="form-label">Author / Creator</label>
+                        <input type="text" class="form-control" name="mc_author" placeholder="Photographer name">
+                    </div>
+                    <div style="flex:1">
+                        <label class="form-label">Copyright</label>
+                        <input type="text" class="form-control" name="mc_copyright" placeholder="© %Y Your Name">
+                    </div>
+                </div>
+                <div class="field-row mt-2">
+                    <div style="flex:1">
+                        <label class="form-label">Email</label>
+                        <input type="text" class="form-control" name="mc_email" placeholder="you@example.com">
+                    </div>
+                    <div style="flex:1">
+                        <label class="form-label">Website</label>
+                        <input type="text" class="form-control" name="mc_website" placeholder="https://...">
+                    </div>
+                </div>
+                <div class="field-row mt-2">
+                    <div style="flex:1">
+                        <label class="form-label">Credit</label>
+                        <input type="text" class="form-control" name="mc_credit" placeholder="Credit line">
+                    </div>
+                    <div style="flex:1">
+                        <label class="form-label">Source</label>
+                        <input type="text" class="form-control" name="mc_source" placeholder="Source">
+                    </div>
+                </div>
+                <div class="field-row mt-2">
+                    <div>
+                        <label class="form-label">File Types (optional)</label>
+                        <input type="text" class="form-control" name="mc_types" placeholder="All types if empty">
+                    </div>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" name="mc_recursive" id="mc-rec">
+                    <label class="form-check-label" for="mc-rec">Include subfolders</label>
+                </div>
+                <div class="form-check mt-1">
+                    <input class="form-check-input" type="checkbox" name="mc_force" id="mc-force">
+                    <label class="form-check-label" for="mc-force">Force overwrite existing values</label>
+                </div>
+            </div>
+
+            <!-- Consistency Audit -->
+            <div class="step-config" id="config-mcon" style="display:none">
+                <p class="section-desc">
+                    Uses Ollama to read all descriptions across a photo set and detect outliers —
+                    wrong event names, location mismatches, tone differences.
+                    Report-only by default. Enable Fix to auto-correct inconsistencies.
+                </p>
+                <div class="field-row">
+                    <div>
+                        <label class="form-label">Field to Audit</label>
+                        <select class="form-select" name="mcon_field">
+                            <option value="Caption-Abstract" selected>Caption / Abstract</option>
+                            <option value="Headline">Headline</option>
+                            <option value="ImageDescription">Image Description</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Ollama Model</label>
+                        <select class="form-select ollama-model-select" name="mcon_model" id="mcon-model-select">
+                            <option value="gemma3:27b" selected>gemma3:27b</option>
+                        </select>
+                        <div class="field-help ollama-model-status" id="mcon-model-status"></div>
+                    </div>
+                </div>
+                <div class="field-row mt-2">
+                    <div>
+                        <label class="form-label">File Types (optional)</label>
+                        <input type="text" class="form-control" name="mcon_types" placeholder="All types if empty">
+                    </div>
+                </div>
+                <div class="d-flex flex-wrap gap-3 mt-2">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="mcon_recursive" id="mcon-rec">
+                        <label class="form-check-label" for="mcon-rec">Recursive</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="mcon_fix" id="mcon-fix">
+                        <label class="form-check-label" for="mcon-fix">Auto-fix inconsistencies</label>
+                    </div>
+                </div>
+            </div>
+
             <div class="step-config" id="config-scrub" style="display:none">
                 <p class="section-desc">
                     Clears selected EXIF/IPTC fields. Defaults: UserComment, ImageDescription, Caption, Caption-Abstract, Keywords.

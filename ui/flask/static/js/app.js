@@ -255,8 +255,11 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_geo_rename":       8,
         "enable_gopro":            9,
         "enable_blur":            10,
-        "enable_contact_sheet":   11,
-        "enable_scrub":           12
+        "enable_metadata_replace":   11,
+        "enable_metadata_copyright": 12,
+        "enable_metadata_consistency": 13,
+        "enable_contact_sheet":   14,
+        "enable_scrub":           15
     };
 
     var STEP_LABELS = {
@@ -270,6 +273,9 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_blur":            "Detect Blurry Photos",
         "enable_geo_rename":      "Geo Rename Photos",
         "enable_gopro":           "GoPro Geo Rename",
+        "enable_metadata_replace":   "Metadata Replace",
+        "enable_metadata_copyright": "Copyright / Creator",
+        "enable_metadata_consistency": "Consistency Audit",
         "enable_contact_sheet":   "Contact Sheet",
         "enable_scrub":           "Scrub Metadata"
     };
@@ -286,6 +292,9 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_blur":            "config-blur",
         "enable_geo_rename":      "config-geo",
         "enable_gopro":           "config-gopro",
+        "enable_metadata_replace":   "config-mreplace",
+        "enable_metadata_copyright": "config-mcopy",
+        "enable_metadata_consistency": "config-mcon",
         "enable_contact_sheet":   "config-cs",
         "enable_scrub":           "config-scrub"
     };
@@ -302,6 +311,9 @@ document.addEventListener("DOMContentLoaded", function() {
         "blur":    "enable_blur",
         "geo":     "enable_geo_rename",
         "gopro":   "enable_gopro",
+        "mreplace":"enable_metadata_replace",
+        "mcopy":   "enable_metadata_copyright",
+        "mcon":    "enable_metadata_consistency",
         "cs":      "enable_contact_sheet",
         "scrub":   "enable_scrub"
     };
@@ -2255,7 +2267,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     // Fetch models when an Ollama-based step is clicked
-    document.querySelectorAll('.sidebar-step[data-step="desc"], .sidebar-step[data-step="kw"], .sidebar-step[data-step="hl"]').forEach(function(el) {
+    document.querySelectorAll('.sidebar-step[data-step="desc"], .sidebar-step[data-step="kw"], .sidebar-step[data-step="hl"], .sidebar-step[data-step="mcon"]').forEach(function(el) {
         el.addEventListener("click", function() {
             fetchOllamaModels();
         });

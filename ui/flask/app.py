@@ -406,6 +406,65 @@ def _build_step(key, data):
             cmd += ["--max-per-sheet", data["cs_max_per_sheet"]]
         return {"label": "Contact Sheet", "cmd": cmd}
 
+    if key == "enable_metadata_replace" and data.get(key):
+        search_text = data.get("mr_search", "").strip()
+        replace_text = data.get("mr_replace", "")
+        if not search_text:
+            return None
+        cmd = ["bash", _script("metadata_replace.sh"), "-s", search_text, "-R", replace_text]
+        if data.get("mr_fields"):
+            cmd += ["-F", data["mr_fields"]]
+        if data.get("mr_ignore_case"):
+            cmd.append("--ignore-case")
+        if data.get("mr_whole_word"):
+            cmd.append("--whole-word")
+        if data.get("mr_regex"):
+            cmd.append("--regex")
+        if data.get("mr_recursive"):
+            cmd.append("--recursive")
+        if data.get("mr_types"):
+            cmd += ["-t", data["mr_types"]]
+        if data.get("mr_dry_run"):
+            cmd.append("--dry-run")
+        return {"label": "Metadata Replace", "cmd": cmd}
+
+    if key == "enable_metadata_copyright" and data.get(key):
+        cmd = ["bash", _script("metadata_copyright.sh")]
+        if data.get("mc_author"):
+            cmd += ["-a", data["mc_author"]]
+        if data.get("mc_copyright"):
+            cmd += ["-c", data["mc_copyright"]]
+        if data.get("mc_email"):
+            cmd += ["-e", data["mc_email"]]
+        if data.get("mc_website"):
+            cmd += ["-w", data["mc_website"]]
+        if data.get("mc_credit"):
+            cmd += ["--credit", data["mc_credit"]]
+        if data.get("mc_source"):
+            cmd += ["--source", data["mc_source"]]
+        if data.get("mc_force"):
+            cmd.append("--force")
+        if data.get("mc_recursive"):
+            cmd.append("--recursive")
+        if data.get("mc_types"):
+            cmd += ["-t", data["mc_types"]]
+        return {"label": "Copyright / Creator", "cmd": cmd}
+
+    if key == "enable_metadata_consistency" and data.get(key):
+        cmd = ["bash", _script("metadata_consistency.sh")]
+        field = data.get("mcon_field", "Caption-Abstract").strip()
+        if field:
+            cmd += ["-F", field]
+        if data.get("mcon_model"):
+            cmd += ["-m", data["mcon_model"]]
+        if data.get("mcon_fix"):
+            cmd.append("--fix")
+        if data.get("mcon_recursive"):
+            cmd.append("--recursive")
+        if data.get("mcon_types"):
+            cmd += ["-t", data["mcon_types"]]
+        return {"label": "Consistency Audit", "cmd": cmd}
+
     if key == "enable_scrub" and data.get(key):
         cmd = ["bash", _script("scrub_selected_metadata.sh")]
         if data.get("scrub_exif_tags"):
