@@ -695,12 +695,20 @@
                         <input type="text" class="form-control" name="mr_replace" placeholder="Replacement (empty to delete)">
                     </div>
                 </div>
-                <div class="field-row mt-2">
-                    <div style="flex:2">
-                        <label class="form-label">Fields (optional)</label>
-                        <input type="text" class="form-control" name="mr_fields"
-                               placeholder="All fields if empty (e.g. Keywords,Headline)">
+                <div class="mt-2">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <label class="form-label mb-0">Fields</label>
+                        <button type="button" class="btn btn-sm btn-photoshell" id="btn-mr-discover" title="Discover which fields have data in the current folder">
+                            <i class="bi bi-lightning"></i> Discover
+                        </button>
+                        <span id="mr-discover-status" style="font-size:11px;color:var(--ps-text-muted)"></span>
                     </div>
+                    <div id="mr-field-checkboxes" class="d-flex flex-wrap gap-2" style="font-size:11px">
+                        <span class="text-muted">Click Discover to see which fields have data, or type field names below.</span>
+                    </div>
+                    <input type="hidden" name="mr_fields" id="mr-fields-hidden" value="">
+                </div>
+                <div class="field-row mt-2">
                     <div>
                         <label class="form-label">File Types</label>
                         <input type="text" class="form-control" name="mr_types" placeholder="All types">

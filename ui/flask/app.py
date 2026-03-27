@@ -2117,6 +2117,68 @@ def api_download():
     return send_file(filepath, as_attachment=True)
 
 
+@app.route("/api/discover_text_fields")
+def api_discover_text_fields():
+    """Sample photos and report which text metadata fields have data."""
+    path = request.args.get("path", "").strip()
+    if not path:
+        return jsonify({"error": "No path specified"}), 400
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError:
+        return jsonify({"error": "Invalid path"}), 400
+    target, error = _resolve_directory(path)
+    if error:
+        return jsonify({"error": "Directory not accessible"}), 400
+
+    # Sample up to 30 files
+    from functions.advisory_checks import _list_photo_files, _run_exiftool_json
+    files = _list_photo_files(target, limit=30)
+    if not files:
+        return jsonify({"error": "No photo files found"}), 400
+
+    text_tags = [
+        "-IPTC:Keywords", "-IPTC:Caption-Abstract", "-IPTC:Headline",
+        "-EXIF:ImageDescription", "-EXIF:UserComment",
+        "-IPTC:CopyrightNotice", "-IPTC:Credit", "-IPTC:Source",
+        "-IPTC:City", "-IPTC:Province-State", "-IPTC:Country-PrimaryLocationName",
+    ]
+    data = _run_exiftool_json(files, text_tags)
+    if not data:
+        return jsonify({"fields": [], "sampled": 0})
+
+    # Count non-empty values per field
+    field_names = [
+        "Keywords", "Caption-Abstract", "Headline",
+        "ImageDescription", "UserComment",
+        "CopyrightNotice", "Credit", "Source",
+        "City", "Province-State", "Country-PrimaryLocationName",
+    ]
+    counts = {}
+    for fname in field_names:
+        counts[fname] = 0
+
+    for rec in data:
+        for fname in field_names:
+            val = rec.get(fname)
+            if val:
+                if isinstance(val, list) and len(val) > 0:
+                    counts[fname] += 1
+                elif isinstance(val, str) and val.strip():
+                    counts[fname] += 1
+
+    sampled = len(data)
+    fields = []
+    for fname in field_names:
+        fields.append({
+            "name": fname,
+            "count": counts[fname],
+            "pct": round(counts[fname] * 100 / sampled) if sampled > 0 else 0,
+        })
+
+    return jsonify({"fields": fields, "sampled": sampled})
+
+
 @app.route("/api/quick_backup", methods=["POST"])
 def api_quick_backup():
     """Create a non-compressed .tar archive of the photo directory."""

@@ -1249,6 +1249,70 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     });
 
+    // ---- Metadata Replace field discovery ----
+
+    document.getElementById("btn-mr-discover").addEventListener("click", function() {
+        var dir = lastResolvedPath || photoDirInput.value.trim();
+        if (!dir) { alert("Validate a folder first."); return; }
+
+        var status = document.getElementById("mr-discover-status");
+        var cbContainer = document.getElementById("mr-field-checkboxes");
+        status.innerHTML = '<i class="bi bi-hourglass-split"></i> Scanning...';
+
+        fetch("/api/discover_text_fields?path=" + encodeURIComponent(dir))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.error) { status.textContent = data.error; return; }
+                status.innerHTML = '<span style="color:var(--ps-success)">' + data.sampled + ' files sampled</span>';
+
+                cbContainer.innerHTML = "";
+                var fieldsWithData = [];
+                data.fields.forEach(function(f) {
+                    var lbl = document.createElement("label");
+                    lbl.className = "form-check form-check-inline";
+                    lbl.style.fontSize = "11px";
+
+                    var cb = document.createElement("input");
+                    cb.type = "checkbox";
+                    cb.className = "form-check-input";
+                    cb.value = f.name;
+                    cb.dataset.count = f.count;
+
+                    // Auto-check fields that have data
+                    if (f.count > 0) {
+                        cb.checked = true;
+                        fieldsWithData.push(f.name);
+                    }
+
+                    cb.addEventListener("change", updateMrFieldsHidden);
+
+                    var text = document.createElement("span");
+                    text.className = "form-check-label";
+                    if (f.count > 0) {
+                        text.textContent = f.name + " (" + f.count + "/" + data.sampled + ")";
+                        text.style.color = "var(--ps-text)";
+                    } else {
+                        text.textContent = f.name + " (0)";
+                        text.style.color = "var(--ps-text-dim)";
+                    }
+
+                    lbl.appendChild(cb);
+                    lbl.appendChild(text);
+                    cbContainer.appendChild(lbl);
+                });
+
+                updateMrFieldsHidden();
+            })
+            .catch(function() { status.textContent = "Discovery failed"; });
+    });
+
+    function updateMrFieldsHidden() {
+        var cbs = document.querySelectorAll("#mr-field-checkboxes input[type=checkbox]:checked");
+        var selected = [];
+        cbs.forEach(function(cb) { selected.push(cb.value); });
+        document.getElementById("mr-fields-hidden").value = selected.join(",");
+    }
+
     // ---- Quick Backup ----
 
     var btnQuickBackup = document.getElementById("btn-quick-backup");
