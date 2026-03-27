@@ -815,6 +815,31 @@
                 </div>
                 <div class="field-row mt-2">
                     <div>
+                        <label class="form-label">Prompt</label>
+                        <select class="form-select prompt-select" name="mcon_prompt_id" id="mcon-prompt-select"
+                                data-workflow="consistency">
+                            <option value="1" selected>1 — (loading...)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <label class="form-label">Prompt Text</label>
+                    <textarea class="form-control prompt-text-area" id="mcon-prompt-text" rows="3"
+                              style="font-size:12px;line-height:1.5" readonly></textarea>
+                    <div class="d-flex gap-2 mt-1 align-items-center">
+                        <button type="button" class="btn btn-sm btn-photoshell prompt-edit-btn"
+                                id="mcon-prompt-edit" data-workflow="consistency">
+                            <i class="bi bi-pencil"></i> Edit
+                        </button>
+                        <button type="button" class="btn btn-sm btn-photoshell prompt-save-btn"
+                                id="mcon-prompt-save" data-workflow="consistency" style="display:none">
+                            <i class="bi bi-save"></i> Save to file
+                        </button>
+                        <span class="prompt-save-status field-help" id="mcon-prompt-status"></span>
+                    </div>
+                </div>
+                <div class="field-row mt-2">
+                    <div>
                         <label class="form-label">File Types (optional)</label>
                         <input type="text" class="form-control" name="mcon_types" placeholder="All types if empty">
                     </div>

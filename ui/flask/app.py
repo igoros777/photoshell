@@ -458,6 +458,8 @@ def _build_step(key, data):
             cmd += ["-F", field]
         if data.get("mcon_model"):
             cmd += ["-m", data["mcon_model"]]
+        if data.get("mcon_prompt_id"):
+            cmd += ["--prompt-id", data["mcon_prompt_id"]]
         if data.get("mcon_fix"):
             cmd.append("--fix")
         if data.get("mcon_recursive"):
@@ -622,6 +624,7 @@ PROMPTS_FILES = {
     "description": os.path.join(SCRIPTS_DIR, "annotate_photos_with_ollama.prompts.txt"),
     "keywords": os.path.join(SCRIPTS_DIR, "annotate_photos_with_ollama.keywords.prompts.txt"),
     "headline": os.path.join(SCRIPTS_DIR, "annotate_photos_with_ollama.headline.prompts.txt"),
+    "consistency": os.path.join(SCRIPTS_DIR, "metadata_consistency.prompts.txt"),
 }
 
 BUILTIN_PROMPTS = {
@@ -633,6 +636,11 @@ BUILTIN_PROMPTS = {
                 "and photographic technique. Incorporate the location naturally: LOCATION. "
                 "Return keywords only as a comma-separated list. No numbering, quotes, "
                 "or commentary.",
+    "consistency": "You are a metadata consistency auditor. Identify descriptions that are "
+                   "inconsistent with the majority — wrong event names, mismatched locations, "
+                   "tone differences, factual contradictions. For each inconsistency, output "
+                   "a JSON line with file, issue, current, and suggested fields. If everything "
+                   "is consistent, output: []",
 }
 
 

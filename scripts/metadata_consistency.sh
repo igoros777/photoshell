@@ -21,6 +21,8 @@ set -euo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 INPUT_DIR="."
 FIELD="Caption-Abstract"
 MODEL="gemma3:27b"
@@ -29,6 +31,8 @@ RECURSIVE=0
 DRY_RUN=0
 FILE_TYPES=""
 BATCH_SIZE=200
+SELECTED_PROMPT_ID=""
+PROMPT_FILE="${SCRIPT_DIR}/metadata_consistency.prompts.txt"
 
 DEFAULT_TYPES="jpg,jpeg,png,tif,tiff,heic,heif,webp,bmp,gif,dng,nef,cr2,cr3,arw,orf,rw2,srw,raf,pef,x3f"
 
@@ -48,6 +52,8 @@ Options:
   -F, --field FIELD        IPTC field to audit (default: Caption-Abstract)
                            Supported: Caption-Abstract, Headline, ImageDescription
   -m, --model NAME         Ollama model (default: ${MODEL})
+  -p, --prompt-id ID       Use prompt ID from prompt file (default: 1)
+  --prompt-file FILE       Custom prompt file path
   --fix                    Auto-fix detected inconsistencies (default: report only)
   -r, --recursive          Include subfolders
   -t, --types EXT,...      File extensions (default: all image types)
@@ -193,7 +199,17 @@ for batch_start in range(0, len(items), batch_size):
 
     # Build the prompt
     desc_list = '\\n'.join([f'{fname}: {info[\"value\"]}' for fname, info in batch])
-    prompt = f'''You are a metadata consistency auditor. Below are {len(batch)} photo descriptions from the same photo shoot or collection.
+    custom_prompt = os.environ.get('CUSTOM_PROMPT', '').strip()
+
+    if custom_prompt:
+        # Use custom prompt from file, append the descriptions
+        prompt = f'''{custom_prompt}
+
+Below are {len(batch)} descriptions:
+{desc_list}'''
+    else:
+        # Default built-in prompt
+        prompt = f'''You are a metadata consistency auditor. Below are {len(batch)} photo descriptions from the same photo shoot or collection.
 
 Identify descriptions that are INCONSISTENT with the majority. Look for:
 - Wrong event names (e.g., \"Sunset Festival\" when most say \"Sunrise Festival\")
@@ -357,6 +373,12 @@ while [[ $# -gt 0 ]]; do
     -m|--model)
       [[ $# -lt 2 ]] && die "$1 requires a model name"
       MODEL="$2"; shift 2 ;;
+    -p|--prompt-id)
+      [[ $# -lt 2 ]] && die "$1 requires a prompt ID"
+      SELECTED_PROMPT_ID="$2"; shift 2 ;;
+    --prompt-file)
+      [[ $# -lt 2 ]] && die "$1 requires a file path"
+      PROMPT_FILE="$2"; shift 2 ;;
     --fix)
       FIX_MODE=1; shift ;;
     -r|--recursive)
@@ -418,6 +440,16 @@ if [[ "${total}" -eq 0 ]]; then
   log "No matching files found."
   exit 0
 fi
+
+# Load prompt from file
+CUSTOM_PROMPT=""
+if [[ -n "${SELECTED_PROMPT_ID}" && -f "${PROMPT_FILE}" ]]; then
+  CUSTOM_PROMPT="$(grep "^${SELECTED_PROMPT_ID}|" "${PROMPT_FILE}" 2>/dev/null | head -1 | cut -d'|' -f2-)"
+  if [[ -n "${CUSTOM_PROMPT}" ]]; then
+    log "Using prompt #${SELECTED_PROMPT_ID} from ${PROMPT_FILE}"
+  fi
+fi
+export CUSTOM_PROMPT
 
 log ""
 run_audit "${tmpfile}"

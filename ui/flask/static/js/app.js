@@ -2409,6 +2409,7 @@ document.addEventListener("DOMContentLoaded", function() {
         if (workflow === "description") return "desc";
         if (workflow === "keywords") return "kw";
         if (workflow === "headline") return "hl";
+        if (workflow === "consistency") return "mcon";
         return workflow;
     }
 
@@ -2578,6 +2579,9 @@ document.addEventListener("DOMContentLoaded", function() {
     });
     document.querySelectorAll('.sidebar-step[data-step="hl"]').forEach(function(el) {
         el.addEventListener("click", function() { fetchPrompts("headline"); });
+    });
+    document.querySelectorAll('.sidebar-step[data-step="mcon"]').forEach(function(el) {
+        el.addEventListener("click", function() { fetchPrompts("consistency"); });
     });
 
     // ---- Collect form data ----
