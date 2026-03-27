@@ -31,7 +31,7 @@ RECURSIVE=0
 DRY_RUN=0
 FILE_TYPES=""
 DEFAULT_TYPES="jpg,jpeg,png,tif,tiff,heic,heif,webp,bmp,gif,dng,nef,cr2,cr3,arw,orf,rw2,srw,raf,pef,x3f"
-ALL_FIELDS="Keywords,Caption-Abstract,Headline,ImageDescription,UserComment,Copyright,Credit,Source,City,Province-State,Country-PrimaryLocationName,XMP-dc:Description,XMP-dc:Title,XMP-dc:Subject,XMP-dc:Rights,XMP-dc:Creator,XMP-iptcCore:AltTextAccessibility,XMP-iptcCore:Location"
+ALL_FIELDS="Keywords,Caption-Abstract,Headline,ImageDescription,UserComment,Copyright,Credit,Source,City,Province-State,Country-PrimaryLocationName,XMP-dc:Description,XMP-dc:Title,XMP-dc:Subject,XMP-dc:Rights,XMP-dc:Creator,XMP-iptcCore:AltTextAccessibility,XMP-iptcCore:Location,XMP-iptcCore:CreatorWorkEmail,XMP-iptcCore:CreatorWorkURL"
 
 usage() {
   cat <<EOF
@@ -53,7 +53,8 @@ Options:
                            EXIF: ImageDescription, UserComment
                            XMP:  XMP-dc:Description, XMP-dc:Title, XMP-dc:Subject,
                                  XMP-dc:Rights, XMP-dc:Creator,
-                                 XMP-iptcCore:AltTextAccessibility, XMP-iptcCore:Location
+                                 XMP-iptcCore:AltTextAccessibility, XMP-iptcCore:Location,
+                                 XMP-iptcCore:CreatorWorkEmail, XMP-iptcCore:CreatorWorkURL
   -i, --ignore-case        Case-insensitive matching
   -w, --whole-word         Match whole words only
   -x, --regex              Treat search as Python regex

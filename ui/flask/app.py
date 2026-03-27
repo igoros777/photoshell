@@ -2145,6 +2145,7 @@ def api_discover_text_fields():
         "-XMP-dc:Description", "-XMP-dc:Title", "-XMP-dc:Subject",
         "-XMP-dc:Rights", "-XMP-dc:Creator",
         "-XMP-iptcCore:AltTextAccessibility", "-XMP-iptcCore:Location",
+        "-XMP-iptcCore:CreatorWorkEmail", "-XMP-iptcCore:CreatorWorkURL",
     ]
     data = _run_exiftool_json(files, text_tags)
     if not data:
@@ -2170,6 +2171,8 @@ def api_discover_text_fields():
         ("Creator", "XMP-dc:Creator", "XMP Creator"),
         ("AltTextAccessibility", "XMP-iptcCore:AltTextAccessibility", "Alt Text"),
         ("Location", "XMP-iptcCore:Location", "XMP Location"),
+        ("CreatorWorkEmail", "XMP-iptcCore:CreatorWorkEmail", "Creator Email"),
+        ("CreatorWorkURL", "XMP-iptcCore:CreatorWorkURL", "Creator URL"),
     ]
 
     counts = {}
