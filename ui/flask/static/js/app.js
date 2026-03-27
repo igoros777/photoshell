@@ -1504,7 +1504,7 @@ document.addEventListener("DOMContentLoaded", function() {
         };
         loader.src = "/api/thumbnail?path=" + encodeURIComponent(file.path) + "&size=1200";
 
-        // Footer: full path first, then filename
+        // Footer: full path first, then fetch metadata
         footer.innerHTML = "";
         if (file.path) {
             var pathEl = document.createElement("div");
@@ -1515,6 +1515,35 @@ document.addEventListener("DOMContentLoaded", function() {
 
         // Title: filename only
         document.getElementById("photo-preview-title").textContent = file.name;
+
+        // Fetch metadata for the footer (headline, caption, description, keywords)
+        fetch("/api/search_meta", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({files: [file.path]})
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (!data.results || data.results.length === 0) return;
+            var m = data.results[0];
+            var fields = [];
+            if (m.headline) fields.push(["Headline", m.headline]);
+            if (m.description) fields.push(["Description", m.description]);
+            if (m.caption) fields.push(["Caption", m.caption]);
+            if (m.comment) fields.push(["Summary", m.comment]);
+            if (m.keywords) fields.push(["Keywords", m.keywords]);
+            fields.forEach(function(pair) {
+                var div = document.createElement("div");
+                div.className = "preview-meta-field";
+                var label = document.createElement("span");
+                label.className = "preview-meta-label";
+                label.textContent = pair[0];
+                div.appendChild(label);
+                div.appendChild(document.createTextNode(pair[1]));
+                footer.appendChild(div);
+            });
+        })
+        .catch(function() {});
 
         // Store current file path for metadata/download buttons
         modalEl.dataset.currentPath = file.path;

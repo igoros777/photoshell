@@ -2345,6 +2345,7 @@ def api_search_meta():
         # to prevent user-supplied paths from being interpreted as arguments
         cmd = ["exiftool", "-json", "-charset", "exif=UTF8", "-charset", "iptc=UTF8",
                "-UserComment", "-IPTC:Caption-Abstract", "-IPTC:Keywords",
+               "-IPTC:Headline", "-EXIF:ImageDescription",
                "-FileName", "-@", "-"]
         file_list_input = "\n".join(files) + "\n"
         proc = subprocess.run(
@@ -2374,12 +2375,21 @@ def api_search_meta():
         if isinstance(caption, str):
             caption = caption.strip()
 
+        headline = rec.get("Headline") or ""
+        description = rec.get("ImageDescription") or ""
+        if isinstance(headline, str):
+            headline = headline.strip()
+        if isinstance(description, str):
+            description = description.strip()
+
         results.append({
             "file": src,
             "filename": rec.get("FileName", os.path.basename(src)),
             "comment": comment,
             "caption": caption,
             "keywords": keywords,
+            "headline": headline,
+            "description": description,
         })
 
     return jsonify({"results": results})
