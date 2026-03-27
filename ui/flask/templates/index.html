@@ -742,52 +742,50 @@
             <div class="step-config" id="config-mcopy" style="display:none">
                 <p class="section-desc">
                     Batch-writes photographer name, copyright notice, and contact info to IPTC/EXIF fields.
-                    By default only fills empty fields — enable Force to overwrite existing values.
+                    By default only fills empty fields — enable Force to overwrite.
                     Use <code>%Y</code> in the copyright field for the current year.
                 </p>
-                <div class="field-row">
-                    <div style="flex:1">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                    <div>
                         <label class="form-label">Author / Creator</label>
-                        <input type="text" class="form-control" name="mc_author" placeholder="Photographer name">
+                        <input type="text" class="form-control form-control-sm" name="mc_author" placeholder="Photographer name">
                     </div>
-                    <div style="flex:1">
+                    <div>
                         <label class="form-label">Copyright</label>
-                        <input type="text" class="form-control" name="mc_copyright" placeholder="© %Y Your Name">
+                        <input type="text" class="form-control form-control-sm" name="mc_copyright" placeholder="© %Y Your Name">
                     </div>
-                </div>
-                <div class="field-row mt-2">
-                    <div style="flex:1">
+                    <div>
                         <label class="form-label">Email</label>
-                        <input type="text" class="form-control" name="mc_email" placeholder="you@example.com">
+                        <input type="text" class="form-control form-control-sm" name="mc_email" placeholder="you@example.com">
                     </div>
-                    <div style="flex:1">
+                    <div>
                         <label class="form-label">Website</label>
-                        <input type="text" class="form-control" name="mc_website" placeholder="https://...">
+                        <input type="text" class="form-control form-control-sm" name="mc_website" placeholder="https://...">
                     </div>
-                </div>
-                <div class="field-row mt-2">
-                    <div style="flex:1">
+                    <div>
                         <label class="form-label">Credit</label>
-                        <input type="text" class="form-control" name="mc_credit" placeholder="Credit line">
+                        <input type="text" class="form-control form-control-sm" name="mc_credit" placeholder="Credit line">
                     </div>
-                    <div style="flex:1">
+                    <div>
                         <label class="form-label">Source</label>
-                        <input type="text" class="form-control" name="mc_source" placeholder="Source">
+                        <input type="text" class="form-control form-control-sm" name="mc_source" placeholder="Source">
                     </div>
                 </div>
                 <div class="field-row mt-2">
                     <div>
                         <label class="form-label">File Types (optional)</label>
-                        <input type="text" class="form-control" name="mc_types" placeholder="All types if empty">
+                        <input type="text" class="form-control form-control-sm" name="mc_types" placeholder="All types if empty">
                     </div>
                 </div>
-                <div class="form-check mt-2">
-                    <input class="form-check-input" type="checkbox" name="mc_recursive" id="mc-rec">
-                    <label class="form-check-label" for="mc-rec">Include subfolders</label>
-                </div>
-                <div class="form-check mt-1">
-                    <input class="form-check-input" type="checkbox" name="mc_force" id="mc-force">
-                    <label class="form-check-label" for="mc-force">Force overwrite existing values</label>
+                <div class="d-flex flex-wrap gap-3 mt-2">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="mc_recursive" id="mc-rec">
+                        <label class="form-check-label" for="mc-rec">Include subfolders</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="mc_force" id="mc-force">
+                        <label class="form-check-label" for="mc-force">Force overwrite existing values</label>
+                    </div>
                 </div>
             </div>
 
