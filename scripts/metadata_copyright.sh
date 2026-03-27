@@ -30,8 +30,6 @@ FORCE=0
 RECURSIVE=0
 DRY_RUN=0
 FILE_TYPES=""
-NO_BACKUP=0
-
 DEFAULT_TYPES="jpg,jpeg,png,tif,tiff,heic,heif,webp,bmp,gif,dng,nef,cr2,cr3,arw,orf,rw2,srw,raf,pef,x3f"
 
 usage() {
@@ -57,7 +55,6 @@ Options:
   -f, --force              Overwrite existing values (default: fill empty only)
   -r, --recursive          Include subfolders
   -t, --types EXT,...      File extensions (default: all image types)
-  --no-backup              Skip creating _original backup files
   -n, --dry-run            Preview changes without writing
   -h, --help               Show this help
 
@@ -210,10 +207,7 @@ process_file() {
     return 0
   fi
 
-  # Write with backup (default) or without
-  if [[ "${NO_BACKUP}" -eq 1 ]]; then
-    exif_args+=("-overwrite_original")
-  fi
+  exif_args+=("-overwrite_original")
 
   if exiftool "${exif_args[@]}" "${file}" >/dev/null 2>&1; then
     echo "  SET    ${fname}  (${fields_written} field(s) written)"
@@ -255,8 +249,6 @@ while [[ $# -gt 0 ]]; do
     -t|--types)
       [[ $# -lt 2 ]] && die "$1 requires extensions"
       FILE_TYPES="$2"; shift 2 ;;
-    --no-backup)
-      NO_BACKUP=1; shift ;;
     -n|--dry-run)
       DRY_RUN=1; shift ;;
     -h|--help)

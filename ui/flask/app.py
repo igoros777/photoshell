@@ -8,6 +8,7 @@ import logging
 import os
 import platform
 import re
+import shlex
 import shutil
 import socket
 import stat
@@ -2114,6 +2115,70 @@ def api_download():
     if not os.path.isfile(filepath):
         return jsonify({"error": "File not found"}), 404
     return send_file(filepath, as_attachment=True)
+
+
+@app.route("/api/quick_backup", methods=["POST"])
+def api_quick_backup():
+    """Create a non-compressed .tar archive of the photo directory."""
+    body = request.get_json(silent=True) or {}
+    path = (body.get("path") or "").strip()
+    recursive = bool(body.get("recursive", False))
+    if not path:
+        return jsonify({"error": "No path specified"}), 400
+
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError:
+        return jsonify({"error": "Invalid path"}), 400
+    target, error = _resolve_directory(path)
+    if error:
+        return jsonify({"error": "Directory not accessible"}), 400
+
+    # Build tar command — non-compressed archive in the working directory
+    folder_name = os.path.basename(target)
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    archive_name = "%s_backup_%s.tar" % (folder_name, timestamp)
+    archive_path = os.path.join(target, archive_name)
+
+    if recursive:
+        cmd = ["tar", "cf", archive_path, "-C", os.path.dirname(target), folder_name,
+               "--exclude", archive_name]
+    else:
+        # Non-recursive: only top-level files
+        cmd = ["bash", "-c",
+               "cd %s && find . -maxdepth 1 -type f -print0 | tar cf %s --null -T -"
+               % (shlex.quote(target), shlex.quote(archive_path))]
+
+    job_id = str(uuid.uuid4())[:8]
+    with jobs_lock:
+        jobs[job_id] = {
+            "status": "running",
+            "log": "Creating backup: %s\n" % archive_name,
+            "current_step": 0,
+            "steps": ["Backup"],
+            "pid": None,
+            "created_at": time.time(),
+        }
+
+    def _run_backup():
+        _run_step(job_id, 0, cmd, target)
+        with jobs_lock:
+            job = jobs.get(job_id)
+            if job and job["status"] == "running":
+                # Check if archive was created
+                if os.path.isfile(archive_path):
+                    size_mb = os.path.getsize(archive_path) / (1024 * 1024)
+                    job["log"] += "\nBackup created: %s (%.1f MB)\n" % (archive_name, size_mb)
+                    job["status"] = "done"
+                else:
+                    job["log"] += "\nBackup may have failed — archive not found\n"
+                    job["status"] = "failed"
+
+    t = threading.Thread(target=_run_backup)
+    t.daemon = True
+    t.start()
+
+    return jsonify({"job_id": job_id, "archive": archive_name})
 
 
 @app.route("/api/file_metadata")

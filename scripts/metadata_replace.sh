@@ -30,8 +30,6 @@ USE_REGEX=0
 RECURSIVE=0
 DRY_RUN=0
 FILE_TYPES=""
-NO_BACKUP=0
-
 DEFAULT_TYPES="jpg,jpeg,png,tif,tiff,heic,heif,webp,bmp,gif,dng,nef,cr2,cr3,arw,orf,rw2,srw,raf,pef,x3f"
 ALL_FIELDS="Keywords,Caption-Abstract,Headline,ImageDescription,UserComment,Copyright,Credit,Source,City,Province-State,Country-PrimaryLocationName"
 
@@ -55,7 +53,6 @@ Options:
   -x, --regex              Treat search as Python regex
   -r, --recursive          Include subfolders
   -t, --types EXT,...      File extensions (default: all image types)
-  --no-backup              Skip creating _original backup files
   -n, --dry-run            Preview changes without writing
   -h, --help               Show this help
 
@@ -135,7 +132,6 @@ ignore_case = sys.argv[5] == '1'
 whole_word = sys.argv[6] == '1'
 use_regex = sys.argv[7] == '1'
 dry_run = sys.argv[8] == '1'
-no_backup = sys.argv[9] == '1'
 fname = os.path.basename(file)
 
 fields = [f.strip() for f in fields_str.split(',') if f.strip()]
@@ -237,10 +233,7 @@ if dry_run:
     sys.exit(0)
 
 # Write changes
-write_cmd = ['exiftool']
-if no_backup:
-    write_cmd.append('-overwrite_original')
-write_cmd += exif_args + [file]
+write_cmd = ['exiftool', '-overwrite_original'] + exif_args + [file]
 
 try:
     proc = subprocess.run(write_cmd, capture_output=True, text=True, timeout=30)
@@ -253,7 +246,7 @@ except Exception as e:
 
 sys.exit(0)
 " "${file}" "${SEARCH}" "${REPLACE}" "${FIELDS:-${ALL_FIELDS}}" \
-  "${IGNORE_CASE}" "${WHOLE_WORD}" "${USE_REGEX}" "${DRY_RUN}" "${NO_BACKUP}"
+  "${IGNORE_CASE}" "${WHOLE_WORD}" "${USE_REGEX}" "${DRY_RUN}"
 }
 
 # ---------------------------------------------------------------------------
@@ -282,8 +275,6 @@ while [[ $# -gt 0 ]]; do
     -t|--types)
       [[ $# -lt 2 ]] && die "$1 requires extensions"
       FILE_TYPES="$2"; shift 2 ;;
-    --no-backup)
-      NO_BACKUP=1; shift ;;
     -n|--dry-run)
       DRY_RUN=1; shift ;;
     -h|--help)

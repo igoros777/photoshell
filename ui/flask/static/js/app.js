@@ -842,6 +842,7 @@ document.addEventListener("DOMContentLoaded", function() {
             hideFolderMetaStats();
             hidePhotoThumbs();
             hideContentViewTabs();
+            hideBackupRow();
             photoDirInput.classList.remove("is-valid", "is-invalid");
             folderValid = false;
             updateHeaderMeta(null);
@@ -865,6 +866,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     updateHeaderMeta(null);
                     hidePhotoThumbs();
                     hideContentViewTabs();
+            hideBackupRow();
                 } else {
                     var resolvedPath = data.path;
                     var isNewPath = resolvedPath !== lastResolvedPath;
@@ -889,6 +891,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     folderValid = true;
                     autoDefaultMaxPerSheet(data.photo_count);
                     showContentViewTabs();
+                    showBackupRow();
 
                     // Store detected subfolders for project mode
                     detectedSubfolders = data.subfolders || [];
@@ -923,6 +926,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 updateHeaderMeta(null);
                 hidePhotoThumbs();
                 hideContentViewTabs();
+            hideBackupRow();
             });
     }
 
@@ -1242,6 +1246,64 @@ document.addEventListener("DOMContentLoaded", function() {
             btnUndo.disabled = false;
             btnUndo.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Undo';
             alert("Undo request failed");
+        });
+    });
+
+    // ---- Quick Backup ----
+
+    var btnQuickBackup = document.getElementById("btn-quick-backup");
+    var quickBackupStatus = document.getElementById("quick-backup-status");
+    var folderBackupRow = document.getElementById("folder-backup-row");
+
+    // Show backup row after folder validation succeeds
+    function showBackupRow() {
+        if (folderBackupRow) folderBackupRow.style.cssText = "display:flex !important";
+    }
+    function hideBackupRow() {
+        if (folderBackupRow) folderBackupRow.style.cssText = "display:none !important";
+    }
+
+    btnQuickBackup.addEventListener("click", function() {
+        var dir = lastResolvedPath;
+        if (!dir) { alert("Validate a folder first."); return; }
+        var recursive = document.getElementById("backup-recursive-chk").checked;
+
+        btnQuickBackup.disabled = true;
+        quickBackupStatus.innerHTML = '<i class="bi bi-hourglass-split"></i> Creating archive...';
+
+        fetch("/api/quick_backup", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({path: dir, recursive: recursive})
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.error) {
+                quickBackupStatus.innerHTML = '<span style="color:var(--ps-danger)">' + data.error + '</span>';
+                btnQuickBackup.disabled = false;
+                return;
+            }
+            // Poll for completion
+            var jobId = data.job_id;
+            var pollTimer = setInterval(function() {
+                fetch("/api/status/" + jobId)
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) {
+                        if (d.status !== "running") {
+                            clearInterval(pollTimer);
+                            btnQuickBackup.disabled = false;
+                            if (d.status === "done") {
+                                quickBackupStatus.innerHTML = '<span style="color:var(--ps-success)"><i class="bi bi-check-circle"></i> ' + data.archive + '</span>';
+                            } else {
+                                quickBackupStatus.innerHTML = '<span style="color:var(--ps-danger)">Backup failed</span>';
+                            }
+                        }
+                    });
+            }, 1000);
+        })
+        .catch(function() {
+            quickBackupStatus.innerHTML = '<span style="color:var(--ps-danger)">Request failed</span>';
+            btnQuickBackup.disabled = false;
         });
     });
 
@@ -1856,6 +1918,7 @@ document.addEventListener("DOMContentLoaded", function() {
             hideFolderMetaStats();
             hidePhotoThumbs();
             hideContentViewTabs();
+            hideBackupRow();
             photoDirInput.classList.remove("is-valid", "is-invalid");
             folderValid = false;
             updateHeaderMeta(null);
