@@ -309,6 +309,34 @@ def catalog_search(db_path, query="", filters=None, page=1, per_page=50):
         conn.close()
 
 
+def catalog_lookup_files(db_path, file_paths):
+    """Look up catalog metadata for a list of file paths.
+
+    Returns a dict mapping file_path -> {headline, caption, model, date, ...}
+    Only includes files that exist in the catalog.
+    """
+    if not os.path.isfile(db_path) or not file_paths:
+        return {}
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        result = {}
+        # Batch query with IN clause
+        placeholders = ",".join("?" for _ in file_paths)
+        rows = conn.execute(
+            """SELECT file_path, file_name, headline, caption, model,
+                      date_time_original, f_number, focal_length, iso
+               FROM photos WHERE file_path IN ({})""".format(placeholders),
+            file_paths
+        ).fetchall()
+        for row in rows:
+            result[row["file_path"]] = {k: row[k] for k in row.keys()}
+        return result
+    finally:
+        conn.close()
+
+
 def catalog_remove(db_path):
     """Delete the catalog database file."""
     if os.path.isfile(db_path):

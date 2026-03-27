@@ -1422,6 +1422,9 @@ document.addEventListener("DOMContentLoaded", function() {
                 renderPhotoThumbGrid(data.files, page > 1);
                 thumbFiles = thumbFiles.concat(data.files);
 
+                // Enrich thumbnails with catalog metadata (if catalog exists)
+                enrichThumbsFromCatalog(resolvedPath, data.files);
+
                 // Load more button
                 photoThumbsFooter.innerHTML = "";
                 if (data.has_more) {
@@ -1449,6 +1452,7 @@ document.addEventListener("DOMContentLoaded", function() {
             var item = document.createElement("div");
             item.className = "photo-thumb-item";
             item.dataset.idx = startIdx + i;
+            item.dataset.filepath = file.path;
             item.title = file.name;
 
             var isRaw = RAW_EXTENSIONS.indexOf(file.ext) !== -1;
@@ -1475,6 +1479,48 @@ document.addEventListener("DOMContentLoaded", function() {
         });
 
         photoThumbsGrid.appendChild(frag);
+    }
+
+    function enrichThumbsFromCatalog(resolvedPath, files) {
+        var paths = files.map(function(f) { return f.path; });
+        fetch("/api/catalog/lookup", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({path: resolvedPath, files: paths})
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (!data.results || Object.keys(data.results).length === 0) return;
+            // Find thumb items and add metadata
+            photoThumbsGrid.querySelectorAll(".photo-thumb-item").forEach(function(item) {
+                var fp = item.dataset.filepath;
+                var meta = data.results[fp];
+                if (!meta) return;
+                // Skip if already enriched
+                if (item.querySelector(".thumb-meta")) return;
+
+                var metaDiv = document.createElement("div");
+                metaDiv.className = "thumb-meta";
+
+                if (meta.headline) {
+                    var hl = document.createElement("div");
+                    hl.className = "thumb-meta-headline";
+                    hl.textContent = meta.headline;
+                    metaDiv.appendChild(hl);
+                }
+                if (meta.caption) {
+                    var cap = document.createElement("div");
+                    cap.className = "thumb-meta-caption";
+                    cap.textContent = meta.caption;
+                    metaDiv.appendChild(cap);
+                }
+
+                if (metaDiv.children.length > 0) {
+                    item.appendChild(metaDiv);
+                }
+            });
+        })
+        .catch(function() {});
     }
 
     function openThumbPreview(idx) {

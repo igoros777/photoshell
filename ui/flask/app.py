@@ -31,7 +31,7 @@ from functions.constants import (
     STEP_TOOL_DEPS,
     TOOL_LABELS,
 )
-from functions.catalog import catalog_exists, catalog_stats, catalog_search, catalog_discover, catalog_remove, get_catalog_path
+from functions.catalog import catalog_exists, catalog_stats, catalog_search, catalog_discover, catalog_remove, catalog_lookup_files, get_catalog_path
 from functions.structured_search import count_photo_files, discover_fields, structured_search
 
 logging.basicConfig(
@@ -2087,6 +2087,31 @@ def api_catalog_search():
     result = catalog_search(db_path, query=query, filters=filters,
                             page=page, per_page=per_page)
     return jsonify(result)
+
+
+@app.route("/api/catalog/lookup", methods=["POST"])
+def api_catalog_lookup():
+    """Look up catalog metadata for a list of file paths."""
+    body = request.get_json(silent=True) or {}
+    path = (body.get("path") or "").strip()
+    file_paths = body.get("files", [])
+    if not path or not file_paths:
+        return jsonify({"results": {}})
+
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError:
+        return jsonify({"results": {}})
+    target, error = _resolve_directory(path)
+    if error:
+        return jsonify({"results": {}})
+
+    db_path = get_catalog_path(target)
+    if not os.path.isfile(db_path):
+        return jsonify({"results": {}})
+
+    results = catalog_lookup_files(db_path, file_paths[:500])
+    return jsonify({"results": results})
 
 
 @app.route("/api/catalog/remove", methods=["POST"])
