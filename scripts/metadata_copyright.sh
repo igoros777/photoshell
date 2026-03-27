@@ -48,8 +48,8 @@ Options:
   -c, --copyright TEXT     Copyright notice
                            (writes IPTC:CopyrightNotice and EXIF:Copyright)
                            Use %Y for current year: "© %Y John Smith"
-  -e, --email EMAIL        Contact email (writes XMP-iptcCore:CiEmailWork)
-  -w, --website URL        Contact website (writes XMP-iptcCore:CiUrlWork)
+  -e, --email EMAIL        Contact email (writes XMP-iptcCore:CreatorWorkEmail)
+  -w, --website URL        Contact website (writes XMP-iptcCore:CreatorWorkURL)
   --credit TEXT             Credit line (writes IPTC:Credit)
   --source TEXT             Source (writes IPTC:Source)
   -f, --force              Overwrite existing values (default: fill empty only)
@@ -157,20 +157,20 @@ process_file() {
     fi
   fi
 
-  # Email → XMP-iptcCore:CreatorContactInfo/CiEmailWork
+  # Email → XMP-iptcCore:CreatorWorkEmail
   if [[ -n "${EMAIL}" ]]; then
-    if [[ "${FORCE}" -eq 1 ]] || field_is_empty "${file}" "XMP-iptcCore:CiEmailWork"; then
-      exif_args+=("-XMP-iptcCore:CiEmailWork=${EMAIL}")
+    if [[ "${FORCE}" -eq 1 ]] || field_is_empty "${file}" "XMP-iptcCore:CreatorWorkEmail"; then
+      exif_args+=("-XMP-iptcCore:CreatorWorkEmail=${EMAIL}")
       fields_written=$((fields_written + 1))
     else
       fields_skipped=$((fields_skipped + 1))
     fi
   fi
 
-  # Website → XMP-iptcCore:CreatorContactInfo/CiUrlWork
+  # Website → XMP-iptcCore:CreatorWorkURL
   if [[ -n "${WEBSITE}" ]]; then
-    if [[ "${FORCE}" -eq 1 ]] || field_is_empty "${file}" "XMP-iptcCore:CiUrlWork"; then
-      exif_args+=("-XMP-iptcCore:CiUrlWork=${WEBSITE}")
+    if [[ "${FORCE}" -eq 1 ]] || field_is_empty "${file}" "XMP-iptcCore:CreatorWorkURL"; then
+      exif_args+=("-XMP-iptcCore:CreatorWorkURL=${WEBSITE}")
       fields_written=$((fields_written + 1))
     else
       fields_skipped=$((fields_skipped + 1))

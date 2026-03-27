@@ -22,8 +22,8 @@ For each matching photo file:
 |--------|----------|----------|
 | `--author` | By-line | Artist |
 | `--copyright` | CopyrightNotice | Copyright |
-| `--email` | XMP-iptcCore:CiEmailWork | — |
-| `--website` | XMP-iptcCore:CiUrlWork | — |
+| `--email` | XMP-iptcCore:CreatorWorkEmail | — |
+| `--website` | XMP-iptcCore:CreatorWorkURL | — |
 | `--credit` | Credit | — |
 | `--source` | Source | — |
 
