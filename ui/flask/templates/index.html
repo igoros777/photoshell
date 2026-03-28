@@ -91,211 +91,236 @@
                 <label class="sidebar-section-label">Workflow Steps</label>
                 <div id="sidebar-steps">
 
-                    <div class="sidebar-step" data-step="sync">
-                        <input class="form-check-input section-toggle" type="checkbox"
-                               id="chk-sync" name="enable_sync_exif" data-section="sec-sync">
-                        <span class="sidebar-step-label"><i class="bi bi-arrow-repeat"></i> Sync EXIF &amp; Rename</span>
-                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_sync_exif">Step</span>
-                        <span class="sidebar-step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Copies EXIF/IPTC metadata from original RAW/source files to exported JPEGs and renames exports to match the original archive filenames."></i>
-                            <i class="bi bi-book step-docs-link" data-doc="sync_exif_and_rename" title="Full documentation"></i>
-                        </span>
+                    <!-- Group 1: Ingest & Prepare -->
+                    <div class="step-group">
+                        <div class="step-group-label">Ingest &amp; Prepare</div>
+
+                        <div class="sidebar-step" data-step="sync">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-sync" name="enable_sync_exif" data-section="sec-sync">
+                            <span class="sidebar-step-label"><i class="bi bi-arrow-repeat"></i> Sync EXIF &amp; Rename</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_sync_exif">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Copies EXIF/IPTC metadata from original RAW/source files to exported JPEGs and renames exports to match the original archive filenames."></i>
+                                <i class="bi bi-book step-docs-link" data-doc="sync_exif_and_rename" title="Full documentation"></i>
+                            </span>
+                        </div>
+
+                        <div class="sidebar-step" data-step="gps">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-gps" name="enable_gps_gap_fill" data-section="sec-gps">
+                            <span class="sidebar-step-label"><i class="bi bi-geo-alt"></i> GPS Gap Fill</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_gps_gap_fill">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Fills missing GPS coordinates in photos by borrowing location data from the nearest-in-time photo that has valid geotags (default max gap: 2 hours)."></i>
+                                <i class="bi bi-book step-docs-link" data-doc="gps_gap_fill" title="Full documentation"></i>
+                            </span>
+                        </div>
+
+                        <div class="sidebar-step" data-step="gps_set">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-gps-set" name="enable_gps_set_loc" data-section="sec-gps-set">
+                            <span class="sidebar-step-label"><i class="bi bi-pin-map"></i> Set GPS Location</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_gps_set_loc">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Sets GPS coordinates on photos by geocoding a location name via Geocod.io API. Optionally randomizes coordinates within a radius for natural distribution."></i>
+                                <i class="bi bi-book step-docs-link" data-doc="gps_set_location" title="Full documentation"></i>
+                            </span>
+                        </div>
+
+                        <div class="sidebar-step" data-step="summary">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-summary" name="enable_extract_summary" data-section="sec-summary">
+                            <span class="sidebar-step-label"><i class="bi bi-card-text"></i> Extract Photo Summary</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_extract_summary">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Reads EXIF data (camera, lens, exposure, GPS) and generates a concise human-readable technical summary with reverse geocoding, then writes it to metadata comment/description fields."></i>
+                                <i class="bi bi-book step-docs-link" data-doc="extract_photo_summary" title="Full documentation"></i>
+                            </span>
+                        </div>
                     </div>
 
-                    <div class="sidebar-step" data-step="gps">
-                        <input class="form-check-input section-toggle" type="checkbox"
-                               id="chk-gps" name="enable_gps_gap_fill" data-section="sec-gps">
-                        <span class="sidebar-step-label"><i class="bi bi-geo-alt"></i> GPS Gap Fill</span>
-                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_gps_gap_fill">Step</span>
-                        <span class="sidebar-step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Fills missing GPS coordinates in photos by borrowing location data from the nearest-in-time photo that has valid geotags (default max gap: 2 hours)."></i>
-                            <i class="bi bi-book step-docs-link" data-doc="gps_gap_fill" title="Full documentation"></i>
-                        </span>
+                    <!-- Group 2: AI Annotate & Audit -->
+                    <div class="step-group">
+                        <div class="step-group-label">AI Annotate &amp; Audit</div>
+
+                        <div class="sidebar-step" data-step="desc">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-desc" name="enable_annotate_desc" data-section="sec-desc">
+                            <span class="sidebar-step-label"><i class="bi bi-chat-left-text"></i> Annotate - Description</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_annotate_desc">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Uses Ollama LLM (e.g. gemma3:27b) to analyze each photo and generate a natural-language description, which is written to EXIF/IPTC metadata fields."></i>
+                                <i class="bi bi-book step-docs-link" data-doc="annotate_desc" title="Full documentation"></i>
+                            </span>
+                        </div>
+
+                        <div class="sidebar-step" data-step="kw">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-kw" name="enable_annotate_kw" data-section="sec-kw">
+                            <span class="sidebar-step-label"><i class="bi bi-tags"></i> Annotate - Keywords</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_annotate_kw">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Uses Ollama LLM to analyze each photo and generate relevant keywords/tags, which are written to IPTC keyword metadata fields for cataloging and search."></i>
+                                <i class="bi bi-book step-docs-link" data-doc="annotate_kw" title="Full documentation"></i>
+                            </span>
+                        </div>
+
+                        <div class="sidebar-step" data-step="hl">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-hl" name="enable_annotate_hl" data-section="sec-hl">
+                            <span class="sidebar-step-label"><i class="bi bi-newspaper"></i> Annotate - Headline</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_annotate_hl">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Uses Ollama LLM to generate a short, punchy headline for each photo and writes it to the IPTC Headline metadata field."></i>
+                                <i class="bi bi-book step-docs-link" data-doc="annotate_hl" title="Full documentation"></i>
+                            </span>
+                        </div>
+
+                        <div class="sidebar-step" data-step="mcon">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-mcon" name="enable_metadata_consistency" data-section="sec-mcon">
+                            <span class="sidebar-step-label"><i class="bi bi-clipboard-check"></i> Consistency Audit</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_metadata_consistency">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Uses Ollama to read all descriptions in a folder and detect outliers — wrong event names, location mismatches, tone drift. Report-only by default; enable Fix to auto-correct."></i>
+                                <i class="bi bi-book step-docs-link" data-doc="metadata_consistency" title="Full documentation"></i>
+                            </span>
+                        </div>
                     </div>
 
-                    <div class="sidebar-step" data-step="gps_set">
-                        <input class="form-check-input section-toggle" type="checkbox"
-                               id="chk-gps-set" name="enable_gps_set_loc" data-section="sec-gps-set">
-                        <span class="sidebar-step-label"><i class="bi bi-pin-map"></i> Set GPS Location</span>
-                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_gps_set_loc">Step</span>
-                        <span class="sidebar-step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Sets GPS coordinates on photos by geocoding a location name via Geocod.io API. Optionally randomizes coordinates within a radius for natural distribution."></i>
-                            <i class="bi bi-book step-docs-link" data-doc="gps_set_location" title="Full documentation"></i>
-                        </span>
+                    <!-- Group 3: Organize & Cull -->
+                    <div class="step-group">
+                        <div class="step-group-label">Organize &amp; Cull</div>
+
+                        <div class="sidebar-step" data-step="blur">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-blur" name="enable_blur" data-section="sec-blur">
+                            <span class="sidebar-step-label"><i class="bi bi-eye"></i> Detect Blurry Photos</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_blur">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Scores image sharpness using ImageMagick, groups photos into scenes by timestamp and visual similarity, then selects the sharpest frame from each scene."></i>
+                                <i class="bi bi-book step-docs-link" data-doc="detect_blurry" title="Full documentation"></i>
+                            </span>
+                        </div>
+
+                        <div class="sidebar-step" data-step="geo">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-geo" name="enable_geo_rename" data-section="sec-geo">
+                            <span class="sidebar-step-label"><i class="bi bi-signpost-2"></i> Geo Rename Photos</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_geo_rename">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Renames photos to YYYYMMDD-HHMMSS-camera-location.ext using EXIF capture time, camera model, and reverse-geocoded GPS location. Optionally organizes into date-based folders."></i>
+                                <i class="bi bi-book step-docs-link" data-doc="geo_rename" title="Full documentation"></i>
+                            </span>
+                        </div>
+
+                        <div class="sidebar-step" data-step="gopro">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-gopro" name="enable_gopro" data-section="sec-gopro">
+                            <span class="sidebar-step-label"><i class="bi bi-camera-video"></i> GoPro Geo Rename</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_gopro">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Renames GoPro MP4 clips to YYYYMMDD-HHMM-location-duration-original.mp4 using embedded capture time, reverse-geocoded GPS coordinates, and clip duration."></i>
+                                <i class="bi bi-book step-docs-link" data-doc="gopro_geo_rename" title="Full documentation"></i>
+                            </span>
+                        </div>
                     </div>
 
-                    <div class="sidebar-step" data-step="summary">
-                        <input class="form-check-input section-toggle" type="checkbox"
-                               id="chk-summary" name="enable_extract_summary" data-section="sec-summary">
-                        <span class="sidebar-step-label"><i class="bi bi-card-text"></i> Extract Photo Summary</span>
-                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_extract_summary">Step</span>
-                        <span class="sidebar-step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Reads EXIF data (camera, lens, exposure, GPS) and generates a concise human-readable technical summary with reverse geocoding, then writes it to metadata comment/description fields."></i>
-                            <i class="bi bi-book step-docs-link" data-doc="extract_photo_summary" title="Full documentation"></i>
-                        </span>
+                    <!-- Group 4: Edit Metadata -->
+                    <div class="step-group">
+                        <div class="step-group-label">Edit Metadata</div>
+
+                        <div class="sidebar-step" data-step="mreplace">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-mreplace" name="enable_metadata_replace" data-section="sec-mreplace">
+                            <span class="sidebar-step-label"><i class="bi bi-pencil-square"></i> Metadata Replace</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_metadata_replace">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Find and replace text in EXIF/IPTC metadata fields. Keyword-aware: replaces individual keywords within lists. Supports regex and case-insensitive matching."></i>
+                                <i class="bi bi-book step-docs-link" data-doc="metadata_replace" title="Full documentation"></i>
+                            </span>
+                        </div>
+
+                        <div class="sidebar-step" data-step="mcopy">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-mcopy" name="enable_metadata_copyright" data-section="sec-mcopy">
+                            <span class="sidebar-step-label"><i class="bi bi-c-circle"></i> Copyright / Creator</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_metadata_copyright">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Batch-writes photographer name, copyright notice, contact email/website, credit, and source to IPTC/EXIF fields. Fills empty fields by default — use Force to overwrite."></i>
+                                <i class="bi bi-book step-docs-link" data-doc="metadata_copyright" title="Full documentation"></i>
+                            </span>
+                        </div>
                     </div>
 
-                    <div class="sidebar-step" data-step="desc">
-                        <input class="form-check-input section-toggle" type="checkbox"
-                               id="chk-desc" name="enable_annotate_desc" data-section="sec-desc">
-                        <span class="sidebar-step-label"><i class="bi bi-chat-left-text"></i> Annotate - Description</span>
-                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_annotate_desc">Step</span>
-                        <span class="sidebar-step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Uses Ollama LLM (e.g. gemma3:27b) to analyze each photo and generate a natural-language description, which is written to EXIF/IPTC metadata fields."></i>
-                            <i class="bi bi-book step-docs-link" data-doc="annotate_desc" title="Full documentation"></i>
-                        </span>
-                    </div>
+                    <!-- Group 5: Finalize -->
+                    <div class="step-group">
+                        <div class="step-group-label">Finalize</div>
 
-                    <div class="sidebar-step" data-step="kw">
-                        <input class="form-check-input section-toggle" type="checkbox"
-                               id="chk-kw" name="enable_annotate_kw" data-section="sec-kw">
-                        <span class="sidebar-step-label"><i class="bi bi-tags"></i> Annotate - Keywords</span>
-                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_annotate_kw">Step</span>
-                        <span class="sidebar-step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Uses Ollama LLM to analyze each photo and generate relevant keywords/tags, which are written to IPTC keyword metadata fields for cataloging and search."></i>
-                            <i class="bi bi-book step-docs-link" data-doc="annotate_kw" title="Full documentation"></i>
-                        </span>
-                    </div>
+                        <div class="sidebar-step" data-step="catupd">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-catupd" name="enable_catalog_update" data-section="sec-catupd">
+                            <span class="sidebar-step-label"><i class="bi bi-database-gear"></i> Update Catalog</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_catalog_update">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Updates the SQLite photo catalog. Creates it if missing, prunes deleted files, indexes new files. Enable Rebuild to recreate from scratch."></i>
+                            </span>
+                        </div>
 
-                    <div class="sidebar-step" data-step="hl">
-                        <input class="form-check-input section-toggle" type="checkbox"
-                               id="chk-hl" name="enable_annotate_hl" data-section="sec-hl">
-                        <span class="sidebar-step-label"><i class="bi bi-newspaper"></i> Annotate - Headline</span>
-                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_annotate_hl">Step</span>
-                        <span class="sidebar-step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Uses Ollama LLM to generate a short, punchy headline for each photo and writes it to the IPTC Headline metadata field."></i>
-                            <i class="bi bi-book step-docs-link" data-doc="annotate_hl" title="Full documentation"></i>
-                        </span>
-                    </div>
+                        <div class="sidebar-step" data-step="cs">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-cs" name="enable_contact_sheet" data-section="sec-cs">
+                            <span class="sidebar-step-label"><i class="bi bi-grid-3x3"></i> Contact Sheet</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_contact_sheet">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Generates a contact/proof sheet image with thumbnails and metadata captions (filename, date, camera, exposure) using ImageMagick. Supports light/dark themes."></i>
+                                <i class="bi bi-book step-docs-link" data-doc="contact_sheet" title="Full documentation"></i>
+                            </span>
+                        </div>
 
-                    <div class="sidebar-step" data-step="blur">
-                        <input class="form-check-input section-toggle" type="checkbox"
-                               id="chk-blur" name="enable_blur" data-section="sec-blur">
-                        <span class="sidebar-step-label"><i class="bi bi-eye"></i> Detect Blurry Photos</span>
-                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_blur">Step</span>
-                        <span class="sidebar-step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Scores image sharpness using ImageMagick, groups photos into scenes by timestamp and visual similarity, then selects the sharpest frame from each scene."></i>
-                            <i class="bi bi-book step-docs-link" data-doc="detect_blurry" title="Full documentation"></i>
-                        </span>
-                    </div>
-
-                    <div class="sidebar-step" data-step="geo">
-                        <input class="form-check-input section-toggle" type="checkbox"
-                               id="chk-geo" name="enable_geo_rename" data-section="sec-geo">
-                        <span class="sidebar-step-label"><i class="bi bi-signpost-2"></i> Geo Rename Photos</span>
-                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_geo_rename">Step</span>
-                        <span class="sidebar-step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Renames photos to YYYYMMDD-HHMMSS-camera-location.ext using EXIF capture time, camera model, and reverse-geocoded GPS location. Optionally organizes into date-based folders."></i>
-                            <i class="bi bi-book step-docs-link" data-doc="geo_rename" title="Full documentation"></i>
-                        </span>
-                    </div>
-
-                    <div class="sidebar-step" data-step="gopro">
-                        <input class="form-check-input section-toggle" type="checkbox"
-                               id="chk-gopro" name="enable_gopro" data-section="sec-gopro">
-                        <span class="sidebar-step-label"><i class="bi bi-camera-video"></i> GoPro Geo Rename</span>
-                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_gopro">Step</span>
-                        <span class="sidebar-step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Renames GoPro MP4 clips to YYYYMMDD-HHMM-location-duration-original.mp4 using embedded capture time, reverse-geocoded GPS coordinates, and clip duration."></i>
-                            <i class="bi bi-book step-docs-link" data-doc="gopro_geo_rename" title="Full documentation"></i>
-                        </span>
-                    </div>
-
-                    <div class="sidebar-step" data-step="mreplace">
-                        <input class="form-check-input section-toggle" type="checkbox"
-                               id="chk-mreplace" name="enable_metadata_replace" data-section="sec-mreplace">
-                        <span class="sidebar-step-label"><i class="bi bi-pencil-square"></i> Metadata Replace</span>
-                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_metadata_replace">Step</span>
-                        <span class="sidebar-step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Find and replace text in EXIF/IPTC metadata fields. Keyword-aware: replaces individual keywords within lists. Supports regex and case-insensitive matching."></i>
-                            <i class="bi bi-book step-docs-link" data-doc="metadata_replace" title="Full documentation"></i>
-                        </span>
-                    </div>
-
-                    <div class="sidebar-step" data-step="mcopy">
-                        <input class="form-check-input section-toggle" type="checkbox"
-                               id="chk-mcopy" name="enable_metadata_copyright" data-section="sec-mcopy">
-                        <span class="sidebar-step-label"><i class="bi bi-c-circle"></i> Copyright / Creator</span>
-                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_metadata_copyright">Step</span>
-                        <span class="sidebar-step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Batch-writes photographer name, copyright notice, contact email/website, credit, and source to IPTC/EXIF fields. Fills empty fields by default — use Force to overwrite."></i>
-                            <i class="bi bi-book step-docs-link" data-doc="metadata_copyright" title="Full documentation"></i>
-                        </span>
-                    </div>
-
-                    <div class="sidebar-step" data-step="mcon">
-                        <input class="form-check-input section-toggle" type="checkbox"
-                               id="chk-mcon" name="enable_metadata_consistency" data-section="sec-mcon">
-                        <span class="sidebar-step-label"><i class="bi bi-clipboard-check"></i> Consistency Audit</span>
-                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_metadata_consistency">Step</span>
-                        <span class="sidebar-step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Uses Ollama to read all descriptions in a folder and detect outliers — wrong event names, location mismatches, tone drift. Report-only by default; enable Fix to auto-correct."></i>
-                            <i class="bi bi-book step-docs-link" data-doc="metadata_consistency" title="Full documentation"></i>
-                        </span>
-                    </div>
-
-                    <div class="sidebar-step" data-step="catupd">
-                        <input class="form-check-input section-toggle" type="checkbox"
-                               id="chk-catupd" name="enable_catalog_update" data-section="sec-catupd">
-                        <span class="sidebar-step-label"><i class="bi bi-database-gear"></i> Update Catalog</span>
-                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_catalog_update">Step</span>
-                        <span class="sidebar-step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Updates the SQLite photo catalog. Creates it if missing, prunes deleted files, indexes new files. Enable Rebuild to recreate from scratch."></i>
-                        </span>
-                    </div>
-
-                    <div class="sidebar-step" data-step="cs">
-                        <input class="form-check-input section-toggle" type="checkbox"
-                               id="chk-cs" name="enable_contact_sheet" data-section="sec-cs">
-                        <span class="sidebar-step-label"><i class="bi bi-grid-3x3"></i> Contact Sheet</span>
-                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_contact_sheet">Step</span>
-                        <span class="sidebar-step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Generates a contact/proof sheet image with thumbnails and metadata captions (filename, date, camera, exposure) using ImageMagick. Supports light/dark themes."></i>
-                            <i class="bi bi-book step-docs-link" data-doc="contact_sheet" title="Full documentation"></i>
-                        </span>
-                    </div>
-
-                    <div class="sidebar-step" data-step="scrub">
-                        <input class="form-check-input section-toggle" type="checkbox"
-                               id="chk-scrub" name="enable_scrub" data-section="sec-scrub">
-                        <span class="sidebar-step-label"><i class="bi bi-eraser"></i> Scrub Metadata</span>
-                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_scrub">Step</span>
-                        <span class="sidebar-step-actions">
-                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
-                               data-bs-toggle="popover" data-bs-trigger="hover focus"
-                               data-bs-content="Clears selected EXIF/IPTC metadata fields from image files. Defaults to removing UserComment, ImageDescription, Caption, Caption-Abstract, and Keywords. Supports custom tag selection."></i>
-                            <i class="bi bi-book step-docs-link" data-doc="scrub_metadata" title="Full documentation"></i>
-                        </span>
+                        <div class="sidebar-step" data-step="scrub">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-scrub" name="enable_scrub" data-section="sec-scrub">
+                            <span class="sidebar-step-label"><i class="bi bi-eraser"></i> Scrub Metadata</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_scrub">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Clears selected EXIF/IPTC metadata fields from image files. Defaults to removing UserComment, ImageDescription, Caption, Caption-Abstract, and Keywords. Supports custom tag selection."></i>
+                                <i class="bi bi-book step-docs-link" data-doc="scrub_metadata" title="Full documentation"></i>
+                            </span>
+                        </div>
                     </div>
 
                 </div>
@@ -1090,6 +1115,13 @@
                             <i class="bi bi-database"></i> Catalog
                         </button>
                     </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="tab-ai-search" data-bs-toggle="tab"
+                                data-bs-target="#panel-ai-search" type="button" role="tab"
+                                aria-controls="panel-ai-search" aria-selected="false">
+                            <i class="bi bi-stars"></i> AI Search
+                        </button>
+                    </li>
                 </ul>
             </div>
 
@@ -1220,7 +1252,6 @@
                         <div id="text-search-results" style="display:none"></div>
                     </div>
                 </div>
-            </div>
 
                 <!-- Catalog Tab -->
                 <div class="tab-pane fade" id="panel-catalog" role="tabpanel">
@@ -1336,6 +1367,63 @@
                             <div id="catalog-results-header" style="font-size:11px;color:var(--ps-text-muted);margin-bottom:8px"></div>
                             <div id="catalog-results-grid" class="search-results-grid"></div>
                             <div id="catalog-results-pagination" class="d-flex justify-content-center gap-2 mt-2"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Search tab panel -->
+                <div class="tab-pane fade" id="panel-ai-search" role="tabpanel">
+                    <div class="search-panel-body">
+                        <div id="ai-search-no-catalog" style="color:var(--ps-text-muted);font-size:12px;padding:8px 0">
+                            <i class="bi bi-info-circle"></i> Build a catalog first (Catalog tab) to enable AI search.
+                        </div>
+
+                        <div id="ai-search-controls" style="display:none">
+                            <!-- Query input -->
+                            <div class="mb-3">
+                                <label class="form-label">Describe what you're looking for</label>
+                                <textarea class="form-control" id="ai-search-query" rows="2"
+                                          placeholder="e.g. photos of children playing on a beach at sunset"></textarea>
+                            </div>
+
+                            <!-- Prompt & model selectors -->
+                            <div class="field-row mb-3">
+                                <div style="flex:2">
+                                    <label class="form-label">Search mode</label>
+                                    <select class="form-select prompt-select" id="ais-prompt-select" data-workflow="ai_search">
+                                        <option value="1" selected>1 — (loading...)</option>
+                                    </select>
+                                </div>
+                                <div style="flex:1">
+                                    <label class="form-label">Model</label>
+                                    <select class="form-select ollama-model-select" id="ais-model-select"></select>
+                                </div>
+                            </div>
+
+                            <!-- Prompt preview -->
+                            <div class="mb-3" id="ais-prompt-preview-wrap" style="display:none">
+                                <textarea class="form-control prompt-text-area" id="ais-prompt-text" rows="3"
+                                          style="font-size:11px;line-height:1.4" readonly></textarea>
+                            </div>
+
+                            <!-- Search / cancel -->
+                            <div class="d-flex gap-2 align-items-center">
+                                <button type="button" class="btn btn-sm btn-primary-ps" id="btn-ai-search" style="padding:6px 20px">
+                                    <i class="bi bi-stars"></i> Search
+                                </button>
+                                <button type="button" class="btn btn-sm btn-cancel" id="btn-ai-search-cancel" style="display:none;padding:6px 16px">
+                                    <i class="bi bi-x-circle"></i> Cancel
+                                </button>
+                                <span id="ai-search-status" class="field-help"></span>
+                                <a href="#" id="ais-toggle-prompt" style="font-size:11px;color:var(--ps-text-dim);margin-left:auto">show prompt</a>
+                            </div>
+                        </div>
+
+                        <!-- AI search results -->
+                        <div id="ai-search-results" style="display:none;margin-top:12px">
+                            <div id="ai-search-results-header" style="font-size:11px;color:var(--ps-text-muted);margin-bottom:8px"></div>
+                            <div id="ai-search-results-grid" class="search-results-grid"></div>
+                            <div id="ai-search-results-pagination" class="d-flex justify-content-center gap-2 mt-2"></div>
                         </div>
                     </div>
                 </div>

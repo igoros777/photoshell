@@ -31,45 +31,45 @@ flowchart LR
     C --> D[Description]
     D --> E[Keywords]
     E --> E2[Headline]
-    E2 --> F[Geo Rename]
+    E2 --> E3[Consistency]
+    E3 --> H[Blur Detect]
+    H --> F[Geo Rename]
     F --> G[GoPro Rename]
-    G --> H[Blur Detect]
-    H --> H2[Meta Replace]
+    G --> H2[Meta Replace]
     H2 --> H3[Copyright]
-    H3 --> H4[Consistency]
-    H4 --> H5[Catalog Update]
+    H3 --> H5[Catalog Update]
     H5 --> I[Contact Sheet]
     I --> J[Scrub]
 ```
 
-| Step | What it does |
-|------|-------------|
-| **Sync EXIF & Rename** | Copies metadata from original RAW files to exported JPEGs |
-| **GPS Gap Fill** | Fills missing GPS coordinates from the nearest photo that has them |
-| **Set GPS Location** | Geocodes a place name and writes GPS coordinates (with optional spread radius) |
-| **Extract Photo Summary** | Writes a concise technical summary (camera, lens, ISO, location) to metadata |
-| **Annotate - Description** | Uses Ollama to generate a natural-language description of each photo |
-| **Annotate - Keywords** | Uses Ollama to generate searchable IPTC keywords for each photo |
-| **Annotate - Headline** | Uses Ollama to generate a short headline for IPTC Headline field |
-| **Detect Blurry Photos** | Measures sharpness, groups photos into scenes, selects the sharpest per scene |
-| **Geo Rename Photos** | Renames files to `YYYYMMDD-HHMMSS-camera-location.ext` using GPS data |
-| **GoPro Geo Rename** | Same naming pattern for GoPro MP4 clips |
-| **Metadata Replace** | Find and replace text across 20 EXIF/IPTC/XMP fields with keyword-aware handling |
-| **Copyright / Creator** | Batch-write photographer name, copyright, email, website, credit, source |
-| **Consistency Audit** | Ollama-powered detection of outliers in descriptions (wrong names, locations, tone) |
-| **Update Catalog** | Keeps the SQLite catalog in sync — creates, prunes, and indexes in one step |
-| **Contact Sheet** | Generates a proof sheet image with thumbnails and metadata captions |
-| **Scrub Metadata** | Clears selected EXIF/IPTC fields (destructive — use with care) |
+| Group | Step | What it does |
+|-------|------|-------------|
+| **Ingest & Prepare** | Sync EXIF & Rename | Copies metadata from original RAW files to exported JPEGs |
+| | GPS Gap Fill | Fills missing GPS coordinates from the nearest photo that has them |
+| | Set GPS Location | Geocodes a place name and writes GPS coordinates (with optional spread radius) |
+| | Extract Photo Summary | Writes a concise technical summary (camera, lens, ISO, location) to metadata |
+| **AI Annotate & Audit** | Annotate - Description | Uses Ollama to generate a natural-language description of each photo |
+| | Annotate - Keywords | Uses Ollama to generate searchable IPTC keywords for each photo |
+| | Annotate - Headline | Uses Ollama to generate a short headline for IPTC Headline field |
+| | Consistency Audit | Ollama-powered detection of outliers in descriptions (wrong names, locations, tone) |
+| **Organize & Cull** | Detect Blurry Photos | Measures sharpness, groups photos into scenes, selects the sharpest per scene |
+| | Geo Rename Photos | Renames files to `YYYYMMDD-HHMMSS-camera-location.ext` using GPS data |
+| | GoPro Geo Rename | Same naming pattern for GoPro MP4 clips |
+| **Edit Metadata** | Metadata Replace | Find and replace text across 20 EXIF/IPTC/XMP fields with keyword-aware handling |
+| | Copyright / Creator | Batch-write photographer name, copyright, email, website, credit, source |
+| **Finalize** | Update Catalog | Keeps the SQLite catalog in sync — creates, prunes, and indexes in one step |
+| | Contact Sheet | Generates a proof sheet image with thumbnails and metadata captions |
+| | Scrub Metadata | Clears selected EXIF/IPTC fields (destructive — use with care) |
 
 ## Step Ordering
 
-PhotoShell validates step order automatically. If steps are in a suboptimal order (e.g., Geo Rename before GPS Fill), a warning appears with a **Reorder** button to fix it.
+Steps are organized into five groups in the sidebar. PhotoShell validates step order automatically. If steps are in a suboptimal order (e.g., Geo Rename before GPS Fill), a warning appears with a **Reorder** button to fix it.
 
-The recommended order follows a logical pipeline: sync metadata first, fill GPS gaps, enrich with summaries and AI annotations, then rename and produce outputs.
+The recommended order follows a logical pipeline: ingest and prepare metadata first, then AI annotation and auditing, then organize and cull, then manual metadata editing, and finally catalog/output steps.
 
 ## Ollama Integration
 
-The **Annotate - Description**, **Annotate - Keywords**, and **Annotate - Headline** steps use [Ollama](https://ollama.com) to analyze photos with a local vision model.
+The **Annotate - Description**, **Annotate - Keywords**, **Annotate - Headline**, and **Consistency Audit** steps use [Ollama](https://ollama.com) to analyze photos with a local vision model.
 
 - The **Model** dropdown auto-discovers installed Ollama models
 - **Vision models** (those with image understanding) are shown first with a "recommended" label
@@ -119,7 +119,7 @@ After running metadata-modifying steps, an **Undo** button appears in the sideba
 
 ## Search
 
-The search panel has three tabs:
+The search panel has four tabs:
 
 ### Structured Search
 Discover available EXIF/IPTC fields from your photos, then filter by numeric ranges, date ranges, camera model, lens, file type, keywords, and captions. Results appear as a thumbnail grid with pagination.
@@ -129,6 +129,9 @@ Grep-style metadata search with field and media type filters. Press Enter in the
 
 ### Catalog
 Build a SQLite index of EXIF/IPTC metadata for instant searching across large collections. Supports build, update, prune, and remove operations. Includes both quick search (free text across all fields) and structured filters (same layout as the Structured tab). See the **Catalog** section below.
+
+### AI Search
+Semantic search powered by Ollama. Describe what you're looking for in natural language (e.g., "photos of children playing on a beach at sunset") and Ollama generates search keywords and synonyms from your description, then SQL matches them across all catalog text fields (ImageDescription, UserComment, Caption, Headline, Keywords, location). Requires a catalog and a running Ollama server. Four search modes: General, Mood/Atmosphere, Subject/Activity, and Location/Setting. Results ranked by keyword match count with a 1-10 relevance score and metadata snippets. The generated keywords are displayed so you can see exactly what was searched.
 
 ## Photo Catalog
 

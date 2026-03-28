@@ -83,6 +83,8 @@ COLUMN_LABELS = {
     "image_height": "Height (px)",
     "gps_latitude": "GPS Latitude",
     "gps_longitude": "GPS Longitude",
+    "image_description": "Description",
+    "user_comment": "Comment",
     "headline": "Headline",
     "caption": "Caption",
     "keywords": "Keywords",
@@ -109,6 +111,8 @@ SEARCHABLE_COLUMNS = {
     "image_height": "numeric",
     "gps_latitude": "numeric",
     "gps_longitude": "numeric",
+    "image_description": "text",
+    "user_comment": "text",
     "headline": "text",
     "caption": "text",
     "keywords": "text",
@@ -224,26 +228,32 @@ def catalog_search(db_path, query="", filters=None, page=1, per_page=50):
         conditions = []
         params = []
 
+        # Detect existing columns for forward-compatible queries
+        _existing = {row[1] for row in conn.execute("PRAGMA table_info(photos)").fetchall()}
+
         # Free-text search across multiple fields
         if query and query.strip():
             q = query.strip()
             text_fields = [
                 "file_name", "file_path", "make", "model", "lens_model",
+                "image_description", "user_comment",
                 "headline", "caption", "keywords", "city", "state", "country",
             ]
             text_conds = []
             for field in text_fields:
-                text_conds.append("{} LIKE ?".format(field))
-                params.append("%{}%".format(q))
-            conditions.append("(" + " OR ".join(text_conds) + ")")
+                if field in _existing:
+                    text_conds.append("{} LIKE ?".format(field))
+                    params.append("%{}%".format(q))
+            if text_conds:
+                conditions.append("(" + " OR ".join(text_conds) + ")")
 
         # Structured filters
         if filters:
             for f in filters:
                 field = f.get("field", "")
                 op = f.get("op", "")
-                # Validate field name against whitelist
-                if field not in SEARCHABLE_COLUMNS:
+                # Validate field name against whitelist and actual columns
+                if field not in SEARCHABLE_COLUMNS or field not in _existing:
                     continue
 
                 if op == "contains":
@@ -281,17 +291,17 @@ def catalog_search(db_path, query="", filters=None, page=1, per_page=50):
 
         # Fetch page
         offset = (page - 1) * per_page
-        select_sql = """
-            SELECT file_path, file_name, file_type, make, model, lens_model,
-                   date_time_original, f_number, focal_length, iso,
-                   image_width, image_height,
-                   gps_latitude, gps_longitude,
-                   headline, caption, keywords, city, state, country
-            FROM photos
-            WHERE {}
-            ORDER BY date_time_original DESC, file_name ASC
-            LIMIT ? OFFSET ?
-        """.format(where)
+        base_cols = [
+            "file_path", "file_name", "file_type", "make", "model", "lens_model",
+            "date_time_original", "f_number", "focal_length", "iso",
+            "image_width", "image_height",
+            "gps_latitude", "gps_longitude",
+            "image_description", "user_comment",
+            "headline", "caption", "keywords", "city", "state", "country",
+        ]
+        select_cols = [c for c in base_cols if c in _existing]
+        select_sql = "SELECT {} FROM photos WHERE {} ORDER BY date_time_original DESC, file_name ASC LIMIT ? OFFSET ?".format(
+            ", ".join(select_cols), where)
         rows = conn.execute(select_sql, params + [per_page, offset]).fetchall()
 
         results = []
@@ -333,6 +343,70 @@ def catalog_lookup_files(db_path, file_paths):
         for row in rows:
             result[row["file_path"]] = {k: row[k] for k in row.keys()}
         return result
+    finally:
+        conn.close()
+
+
+def catalog_text_metadata(db_path, limit=0):
+    """Pull text metadata fields for AI search.
+
+    Returns a list of dicts with file_path, file_name, and all available
+    text fields.  Only rows with at least one non-empty text field are
+    included.  Gracefully handles catalogs built before
+    image_description / user_comment columns were added.
+
+    Args:
+        db_path: Path to the catalog SQLite database.
+        limit: Maximum rows to return (0 = unlimited).
+    """
+    if not os.path.isfile(db_path):
+        return []
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        # Detect which text columns actually exist in this catalog
+        cur = conn.execute("PRAGMA table_info(photos)")
+        existing_cols = {row["name"] for row in cur.fetchall()}
+
+        # Build SELECT list and WHERE filter dynamically
+        text_cols = []
+        for col, alias in [
+            ("image_description", "description"),
+            ("user_comment", "comment"),
+            ("caption", "caption"),
+            ("headline", "headline"),
+            ("keywords", "keywords"),
+            ("copyright", "author"),
+            ("city", "city"),
+            ("state", "state"),
+            ("country", "country"),
+        ]:
+            if col in existing_cols:
+                text_cols.append((col, alias))
+
+        if not text_cols:
+            return []
+
+        select_parts = ["file_path", "file_name"]
+        where_parts = []
+        for col, alias in text_cols:
+            select_parts.append("COALESCE(%s, '') AS %s" % (col, alias))
+            # Only filter on the primary content fields
+            if col in ("image_description", "user_comment", "caption",
+                       "headline", "keywords"):
+                where_parts.append("COALESCE(%s,'') != ''" % col)
+
+        where_clause = " OR ".join(where_parts) if where_parts else "1=1"
+        sql = "SELECT %s FROM photos WHERE %s" % (
+            ", ".join(select_parts), where_clause)
+        if limit > 0:
+            sql += " LIMIT %d" % limit
+
+        rows = conn.execute(sql).fetchall()
+        return [{k: row[k] for k in row.keys()} for row in rows]
+    except Exception:
+        return []
     finally:
         conn.close()
 

@@ -21,6 +21,23 @@
 - "Rebuild from scratch" option for a clean recreation
 - Positioned late in the pipeline so all metadata enrichment happens before indexing
 
+### AI Search
+- New **AI Search** tab in the Search panel — describe what you're looking for in plain language and Ollama generates search keywords and synonyms, then SQL matches them against your catalog metadata (descriptions, captions, headlines, keywords, locations)
+- Two-phase architecture: one Ollama call for keyword generation, then instant SQL scoring across all text fields — fast and reliable with any catalog size
+- Four search modes: General, Mood/Atmosphere, Subject/Activity, and Location/Setting
+- Results ranked by keyword match count with a 1-10 relevance score, plus metadata snippets under each thumbnail
+- Requires an existing catalog and running Ollama server — uses text models (not vision) for speed
+
+### Sidebar Step Groups
+- Workflow steps in the sidebar are now organized into 5 logical groups: Ingest & Prepare, AI Annotate & Audit, Organize & Cull, Edit Metadata, and Finalize
+- Each group has a thin rounded outline and section label matching the design system
+- Consistency Audit moved into the AI Annotate & Audit group (alongside Description, Keywords, Headline)
+
+### Catalog Schema Expansion
+- `catalog_build.sh` now indexes `ImageDescription` and `UserComment` fields alongside existing IPTC fields — rebuild your catalog to pick up the new columns
+- Catalog quick search and structured filters now cover all text fields including Description and Comment
+- All catalog queries detect available columns dynamically so older catalogs continue to work without rebuilding
+
 ### Thumbnail Enhancements
 - Folder browser thumbnails now show filename + camera summary (model · date · focal · aperture · ISO) when a catalog exists
 - Hovering over a thumbnail shows the full IPTC caption in a tooltip

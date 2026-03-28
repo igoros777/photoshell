@@ -191,6 +191,24 @@ body {
     color: var(--ps-text-muted);
 }
 
+/* ---- Sidebar step groups ---- */
+
+.step-group {
+    border: 1px solid var(--ps-border);
+    border-radius: var(--ps-radius-md);
+    padding: var(--ps-space-xs) 0;
+    margin-bottom: var(--ps-space-sm);
+}
+
+.step-group-label {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: var(--ps-text-dim);
+    padding: 2px var(--ps-space-sm) 4px;
+}
+
 /* ---- Sidebar step list ---- */
 
 .sidebar-step {
@@ -354,6 +372,11 @@ body {
 @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+}
+
+.spin {
+    display: inline-block;
+    animation: spin 1s linear infinite;
 }
 
 /* ---- Buttons ---- */

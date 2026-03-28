@@ -31,7 +31,7 @@ from functions.constants import (
     STEP_TOOL_DEPS,
     TOOL_LABELS,
 )
-from functions.catalog import catalog_exists, catalog_stats, catalog_search, catalog_discover, catalog_remove, catalog_lookup_files, get_catalog_path
+from functions.catalog import catalog_exists, catalog_stats, catalog_search, catalog_discover, catalog_remove, catalog_lookup_files, catalog_text_metadata, get_catalog_path
 from functions.structured_search import count_photo_files, discover_fields, structured_search
 
 logging.basicConfig(
@@ -659,6 +659,7 @@ PROMPTS_FILES = {
     "keywords": os.path.join(SCRIPTS_DIR, "annotate_photos_with_ollama.keywords.prompts.txt"),
     "headline": os.path.join(SCRIPTS_DIR, "annotate_photos_with_ollama.headline.prompts.txt"),
     "consistency": os.path.join(SCRIPTS_DIR, "metadata_consistency.prompts.txt"),
+    "ai_search": os.path.join(SCRIPTS_DIR, "ai_search.prompts.txt"),
 }
 
 BUILTIN_PROMPTS = {
@@ -675,6 +676,12 @@ BUILTIN_PROMPTS = {
                    "tone differences, factual contradictions. For each inconsistency, output "
                    "a JSON line with file, issue, current, and suggested fields. If everything "
                    "is consistent, output: []",
+    "ai_search": "You are a photo search keyword generator. The user will describe what photos "
+                 "they are looking for. Generate 10 to 20 search keywords and short phrases that "
+                 "would appear in photo descriptions, captions, headlines, or keyword tags for "
+                 "matching photos. Include synonyms and closely related terms. "
+                 "Return ONLY a JSON array of lowercase strings, nothing else. "
+                 'Example: ["sunset", "golden hour", "beach", "ocean waves", "evening sky"]',
 }
 
 
@@ -2167,6 +2174,208 @@ def api_catalog_remove():
     db_path = get_catalog_path(target)
     removed = catalog_remove(db_path)
     return jsonify({"ok": removed})
+
+
+# ---------------------------------------------------------------------------
+# AI Search — semantic metadata search via Ollama
+# ---------------------------------------------------------------------------
+
+@app.route("/api/ai_search", methods=["POST"])
+def api_ai_search():
+    """AI-powered semantic search over catalog metadata.
+
+    Two-phase approach:
+      1. LLM converts the user's free-form query into search keywords + synonyms
+      2. SQL LIKE queries search those keywords across all text metadata fields
+      3. Results scored by number of keyword hits and returned ranked
+
+    Accepts: {path, query, model, prompt_id, prompt_text}
+    Returns: {results, keywords, total} synchronously.
+    """
+    import urllib.request
+    import sqlite3
+
+    body = request.get_json(force=True) or {}
+    path = (body.get("path") or "").strip()
+    query = (body.get("query") or "").strip()
+    model = (body.get("model") or "").strip()
+    prompt_id = body.get("prompt_id")
+    prompt_text = (body.get("prompt_text") or "").strip()
+
+    if not path:
+        return jsonify({"error": "No path specified"}), 400
+    if not query:
+        return jsonify({"error": "No search query"}), 400
+    if not model:
+        return jsonify({"error": "No model specified"}), 400
+
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError:
+        return jsonify({"error": "Invalid path"}), 400
+    target, error = _resolve_directory(path)
+    if error:
+        return jsonify({"error": "Directory not accessible"}), 400
+
+    db_path = get_catalog_path(target)
+    if not os.path.isfile(db_path):
+        return jsonify({"error": "No catalog found — build one first"}), 400
+
+    # ---- Phase 1: LLM generates search keywords ----
+
+    if not prompt_text:
+        prompts_file = PROMPTS_FILES.get("ai_search", "")
+        file_prompts = _parse_prompts_file(prompts_file)
+        if prompt_id is not None:
+            pid = int(prompt_id)
+            if pid == 0:
+                prompt_text = BUILTIN_PROMPTS.get("ai_search", "")
+            else:
+                match = [p for p in file_prompts if p["id"] == pid]
+                prompt_text = match[0]["text"] if match else BUILTIN_PROMPTS.get("ai_search", "")
+        else:
+            prompt_text = BUILTIN_PROMPTS.get("ai_search", "")
+
+    full_prompt = "%s\n\nUser is searching for: %s" % (prompt_text, query)
+
+    payload = json.dumps({
+        "model": model,
+        "prompt": full_prompt,
+        "stream": False,
+        "options": {"temperature": 0.3},
+    }).encode("utf-8")
+
+    try:
+        req = urllib.request.Request(
+            OLLAMA_BASE_URL + "/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        resp = urllib.request.urlopen(req, timeout=60)
+        resp_data = json.loads(resp.read().decode("utf-8"))
+        raw_response = resp_data.get("response", "")
+    except Exception as exc:
+        logger.warning("AI search keyword generation failed: %s", exc)
+        return jsonify({"error": "Ollama request failed: %s" % str(exc)}), 502
+
+    # Parse keywords from LLM response
+    text = raw_response.strip()
+    # Strip markdown fences
+    if text.startswith("```"):
+        lines = text.split("\n")
+        lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
+    keywords = []
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, list):
+            keywords = [str(k).strip().lower() for k in parsed if str(k).strip()]
+    except (json.JSONDecodeError, ValueError):
+        arr_match = re.search(r'\[.*?\]', text, re.DOTALL)
+        if arr_match:
+            try:
+                parsed = json.loads(arr_match.group())
+                if isinstance(parsed, list):
+                    keywords = [str(k).strip().lower() for k in parsed if str(k).strip()]
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+    # Always include the original query terms as keywords too
+    for word in query.lower().split():
+        w = word.strip(".,!?;:'\"")
+        if len(w) >= 2 and w not in keywords:
+            keywords.append(w)
+
+    if not keywords:
+        return jsonify({"error": "Could not generate search keywords from query",
+                        "raw_response": raw_response[:500]}), 400
+
+    logger.info("AI search: query=%r, generated %d keywords: %s",
+                query, len(keywords), keywords[:20])
+
+    # ---- Phase 2: SQL search across catalog text fields ----
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        # Detect available text columns
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(photos)").fetchall()}
+        text_cols = [c for c in [
+            "image_description", "user_comment", "caption", "headline",
+            "keywords", "city", "state", "country",
+        ] if c in existing]
+
+        if not text_cols:
+            return jsonify({"error": "Catalog has no text fields to search"}), 400
+
+        # Build a scoring query: count how many keywords match per file
+        # For each keyword, create a CASE expression that checks all text columns
+        case_parts = []
+        params = []
+        for kw in keywords:
+            col_checks = []
+            for col in text_cols:
+                col_checks.append("%s LIKE ?" % col)
+                params.append("%%%s%%" % kw)
+            case_parts.append("(CASE WHEN %s THEN 1 ELSE 0 END)" % " OR ".join(col_checks))
+
+        score_expr = " + ".join(case_parts)
+
+        # Build the WHERE clause: at least one keyword must match at least one field
+        where_parts = []
+        where_params = []
+        for kw in keywords:
+            for col in text_cols:
+                where_parts.append("%s LIKE ?" % col)
+                where_params.append("%%%s%%" % kw)
+
+        # Select columns for results
+        result_cols = [c for c in [
+            "file_path", "file_name", "file_type", "make", "model", "lens_model",
+            "date_time_original", "f_number", "focal_length", "iso",
+            "gps_latitude", "gps_longitude",
+            "image_description", "user_comment",
+            "headline", "caption", "keywords", "city", "state", "country",
+        ] if c in existing or c in ("file_path", "file_name")]
+
+        sql = """
+            SELECT {cols}, ({score}) AS match_score
+            FROM photos
+            WHERE {where}
+            ORDER BY match_score DESC, date_time_original DESC
+            LIMIT 200
+        """.format(
+            cols=", ".join(result_cols),
+            score=score_expr,
+            where=" OR ".join(where_parts),
+        )
+
+        rows = conn.execute(sql, params + where_params).fetchall()
+
+        results = []
+        max_score = len(keywords)
+        for row in rows:
+            r = {k: row[k] for k in row.keys()}
+            raw_score = r.pop("match_score", 0)
+            # Normalize to 1-10 scale
+            r["relevance"] = max(1, min(10, round(raw_score / max(1, max_score) * 10)))
+            r["matched_keywords"] = raw_score
+            # Build a reason string from which fields matched
+            r["file"] = r.get("file_name", "")
+            results.append(r)
+
+        logger.info("AI search: %d results from %d keywords", len(results), len(keywords))
+
+        return jsonify({
+            "results": results,
+            "keywords": keywords,
+            "total": len(results),
+        })
+    finally:
+        conn.close()
 
 
 @app.route("/api/download")

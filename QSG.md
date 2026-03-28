@@ -182,6 +182,8 @@ For large collections, build a SQLite catalog for instant searching across thous
 - **Prune** — removes entries for deleted files
 - **Remove** — deletes the catalog database
 
+**AI Search:** Once a catalog exists, switch to the **AI Search** tab and describe what you're looking for in plain language (e.g., "sunset over the ocean"). Ollama generates search keywords and SQL matches them against your catalog metadata. Four search modes are available: General, Mood/Atmosphere, Subject/Activity, and Location/Setting.
+
 ---
 
 ## 8. CLI Scripts (No UI Required)

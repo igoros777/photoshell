@@ -60,9 +60,9 @@ TOOL_LABELS = {
 DEFAULT_STEP_ORDER = [
     "enable_sync_exif", "enable_gps_gap_fill", "enable_gps_set_loc", "enable_extract_summary",
     "enable_annotate_desc", "enable_annotate_kw", "enable_annotate_hl",
-    "enable_geo_rename", "enable_gopro", "enable_blur",
-    "enable_metadata_replace", "enable_metadata_copyright",
     "enable_metadata_consistency",
+    "enable_blur", "enable_geo_rename", "enable_gopro",
+    "enable_metadata_replace", "enable_metadata_copyright",
     "enable_catalog_update",
     "enable_contact_sheet", "enable_scrub",
 ]

@@ -252,12 +252,12 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_annotate_desc":    5,
         "enable_annotate_kw":      6,
         "enable_annotate_hl":      7,
-        "enable_geo_rename":       8,
-        "enable_gopro":            9,
-        "enable_blur":            10,
-        "enable_metadata_replace":   11,
-        "enable_metadata_copyright": 12,
-        "enable_metadata_consistency": 13,
+        "enable_metadata_consistency": 8,
+        "enable_blur":             9,
+        "enable_geo_rename":      10,
+        "enable_gopro":           11,
+        "enable_metadata_replace":   12,
+        "enable_metadata_copyright": 13,
         "enable_catalog_update":  14,
         "enable_contact_sheet":   15,
         "enable_scrub":           16
@@ -2499,6 +2499,7 @@ document.addEventListener("DOMContentLoaded", function() {
         if (workflow === "keywords") return "kw";
         if (workflow === "headline") return "hl";
         if (workflow === "consistency") return "mcon";
+        if (workflow === "ai_search") return "ais";
         return workflow;
     }
 
@@ -4220,10 +4221,6 @@ document.addEventListener("DOMContentLoaded", function() {
     var searchDirInput = document.getElementById("search-dir");
 
     function onSearchDirChanged() {
-        // Only act when the Catalog tab is active
-        var catalogTabActive = document.getElementById("tab-catalog").classList.contains("active");
-        if (!catalogTabActive) return;
-
         var dir = searchDirInput.value.trim();
         if (!dir) {
             catalogStatus.textContent = "Enter a directory above to check for an existing catalog.";
@@ -4238,11 +4235,11 @@ document.addEventListener("DOMContentLoaded", function() {
                 if (data.valid) {
                     searchDirInput.classList.remove("is-invalid");
                     searchDirInput.classList.add("is-valid");
-                    // Update the input with the resolved path if expanded
                     if (data.path && data.path !== dir) {
                         searchDirInput.value = data.path;
                     }
                     checkCatalogStatus();
+                    _aiSearchCheckCatalog();
                 } else {
                     searchDirInput.classList.remove("is-valid");
                     searchDirInput.classList.add("is-invalid");
@@ -5076,6 +5073,324 @@ document.addEventListener("DOMContentLoaded", function() {
             photoDirInput.placeholder = "Paste the folder path here (browser security prevents auto-fill)";
         }
     });
+
+    // ---- AI Search ----
+
+    var aiSearchQuery = document.getElementById("ai-search-query");
+    var aiSearchBtn = document.getElementById("btn-ai-search");
+    var aiSearchCancel = document.getElementById("btn-ai-search-cancel");
+    var aiSearchStatus = document.getElementById("ai-search-status");
+    var aiSearchResults = document.getElementById("ai-search-results");
+    var aiSearchResultsHeader = document.getElementById("ai-search-results-header");
+    var aiSearchResultsGrid = document.getElementById("ai-search-results-grid");
+    var aiSearchResultsPagination = document.getElementById("ai-search-results-pagination");
+    var aiSearchNoCatalog = document.getElementById("ai-search-no-catalog");
+    var aiSearchControls = document.getElementById("ai-search-controls");
+    var aisModelSelect = document.getElementById("ais-model-select");
+    var aisPromptSelect = document.getElementById("ais-prompt-select");
+    var aisPromptText = document.getElementById("ais-prompt-text");
+    var aisPromptPreviewWrap = document.getElementById("ais-prompt-preview-wrap");
+    var aisTogglePrompt = document.getElementById("ais-toggle-prompt");
+    var _aiSearchResultFiles = [];
+    var _aiSearchAbort = null;
+
+    if (aisTogglePrompt) {
+        aisTogglePrompt.addEventListener("click", function(e) {
+            e.preventDefault();
+            if (aisPromptPreviewWrap.style.display === "none") {
+                aisPromptPreviewWrap.style.display = "";
+                aisTogglePrompt.textContent = "hide prompt";
+            } else {
+                aisPromptPreviewWrap.style.display = "none";
+                aisTogglePrompt.textContent = "show prompt";
+            }
+        });
+    }
+
+    var tabAiSearch = document.getElementById("tab-ai-search");
+    if (tabAiSearch) {
+        tabAiSearch.addEventListener("shown.bs.tab", function() {
+            fetchPrompts("ai_search");
+            fetchOllamaModels();
+            _aiSearchCheckCatalog();
+        });
+    }
+
+    if (aisPromptSelect) {
+        aisPromptSelect.addEventListener("change", function() {
+            updatePromptText("ai_search");
+        });
+    }
+
+    function _aiSearchCheckCatalog() {
+        var dir = document.getElementById("search-dir") ? document.getElementById("search-dir").value.trim() : "";
+        if (!dir) dir = photoDirInput ? photoDirInput.value.trim() : "";
+        if (!dir) {
+            aiSearchNoCatalog.style.display = "";
+            aiSearchControls.style.display = "none";
+            return;
+        }
+        fetch("/api/catalog/status?path=" + encodeURIComponent(dir))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.exists) {
+                    aiSearchNoCatalog.style.display = "none";
+                    aiSearchControls.style.display = "";
+                } else {
+                    aiSearchNoCatalog.style.display = "";
+                    aiSearchControls.style.display = "none";
+                }
+            })
+            .catch(function() {
+                aiSearchNoCatalog.style.display = "";
+                aiSearchControls.style.display = "none";
+            });
+    }
+
+    var searchDirEl = document.getElementById("search-dir");
+    if (searchDirEl) {
+        searchDirEl.addEventListener("change", function() {
+            _aiSearchCheckCatalog();
+        });
+    }
+
+    // Launch AI search — single request, LLM generates keywords then SQL searches catalog
+    if (aiSearchBtn) {
+        aiSearchBtn.addEventListener("click", function() {
+            var query = aiSearchQuery ? aiSearchQuery.value.trim() : "";
+            if (!query) {
+                aiSearchStatus.innerHTML = '<span style="color:var(--ps-warning)">Enter a search description</span>';
+                return;
+            }
+
+            var dir = searchDirEl ? searchDirEl.value.trim() : "";
+            if (!dir) dir = photoDirInput ? photoDirInput.value.trim() : "";
+            if (!dir) {
+                aiSearchStatus.innerHTML = '<span style="color:var(--ps-warning)">No directory specified</span>';
+                return;
+            }
+
+            var model = aisModelSelect ? aisModelSelect.value : "";
+            if (!model) {
+                aiSearchStatus.innerHTML = '<span style="color:var(--ps-warning)">Select an Ollama model</span>';
+                return;
+            }
+
+            var promptId = aisPromptSelect ? aisPromptSelect.value : "1";
+            var promptText = "";
+            if (aisPromptText && !aisPromptText.readOnly) {
+                promptText = aisPromptText.value.trim();
+            }
+
+            aiSearchBtn.style.display = "none";
+            aiSearchCancel.style.display = "";
+            aiSearchStatus.innerHTML = '<span class="text-muted"><i class="bi bi-arrow-repeat spin"></i> Generating keywords &amp; searching catalog...</span>';
+            aiSearchResults.style.display = "none";
+            aiSearchResultsGrid.innerHTML = "";
+            aiSearchResultsPagination.innerHTML = "";
+
+            var controller = new AbortController();
+            _aiSearchAbort = controller;
+
+            fetch("/api/ai_search", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                    path: dir,
+                    query: query,
+                    model: model,
+                    prompt_id: parseInt(promptId, 10),
+                    prompt_text: promptText,
+                }),
+                signal: controller.signal,
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                aiSearchBtn.style.display = "";
+                aiSearchCancel.style.display = "none";
+                _aiSearchAbort = null;
+
+                if (data.error) {
+                    aiSearchStatus.innerHTML = '<span style="color:var(--ps-danger)">' + escapeHtml(data.error) + '</span>';
+                    return;
+                }
+
+                var results = data.results || [];
+                var keywords = data.keywords || [];
+
+                if (results.length === 0) {
+                    aiSearchStatus.innerHTML = '<span style="color:var(--ps-text-muted)">No matches found</span>' +
+                        (keywords.length ? '<br><span style="font-size:10px;color:var(--ps-text-dim)">Keywords used: ' + escapeHtml(keywords.join(", ")) + '</span>' : '');
+                    aiSearchResults.style.display = "none";
+                    return;
+                }
+
+                aiSearchStatus.innerHTML =
+                    '<span style="color:var(--ps-success)"><i class="bi bi-check-circle"></i> ' +
+                    results.length + ' match' + (results.length !== 1 ? 'es' : '') + '</span>' +
+                    '<br><span style="font-size:10px;color:var(--ps-text-dim)">Keywords: ' + escapeHtml(keywords.join(", ")) + '</span>';
+
+                _aiSearchResultFiles = results;
+                _renderAiSearchResults(results, 1);
+            })
+            .catch(function(err) {
+                _aiSearchAbort = null;
+                aiSearchBtn.style.display = "";
+                aiSearchCancel.style.display = "none";
+                if (err.name !== "AbortError") {
+                    aiSearchStatus.innerHTML = '<span style="color:var(--ps-danger)">Request failed</span>';
+                }
+            });
+        });
+    }
+
+    if (aiSearchQuery) {
+        aiSearchQuery.addEventListener("keydown", function(e) {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (aiSearchBtn && aiSearchBtn.style.display !== "none") {
+                    aiSearchBtn.click();
+                }
+            }
+        });
+    }
+
+    if (aiSearchCancel) {
+        aiSearchCancel.addEventListener("click", function() {
+            if (_aiSearchAbort) {
+                _aiSearchAbort.abort();
+                _aiSearchAbort = null;
+            }
+            aiSearchBtn.style.display = "";
+            aiSearchCancel.style.display = "none";
+            aiSearchStatus.innerHTML = '<span style="color:var(--ps-text-muted)">Cancelled</span>';
+        });
+    }
+
+    function _renderAiSearchResults(results, page) {
+        var perPage = 50;
+        var totalPages = Math.max(1, Math.ceil(results.length / perPage));
+        page = Math.max(1, Math.min(page, totalPages));
+
+        var start = (page - 1) * perPage;
+        var pageResults = results.slice(start, start + perPage);
+
+        aiSearchResultsHeader.textContent =
+            results.length + " match" + (results.length !== 1 ? "es" : "") +
+            " (page " + page + " of " + totalPages + ")";
+
+        aiSearchResultsGrid.innerHTML = "";
+
+        pageResults.forEach(function(r, idx) {
+            var card = document.createElement("div");
+            card.className = "search-result-card";
+            card.style.cursor = "pointer";
+
+            var globalIdx = start + idx;
+            card.addEventListener("click", function() {
+                _openAiSearchPreview(globalIdx);
+            });
+
+            var img = document.createElement("img");
+            img.loading = "eager";
+            img.src = "/api/thumbnail?path=" + encodeURIComponent(r.file_path) + "&size=200";
+            img.alt = r.file || "";
+            card.appendChild(img);
+
+            var meta = document.createElement("div");
+            meta.className = "search-result-meta";
+
+            var fn = document.createElement("div");
+            fn.className = "search-result-filename";
+            fn.textContent = r.file || "";
+            meta.appendChild(fn);
+
+            // Relevance score + matched keywords count
+            var relDiv = document.createElement("div");
+            relDiv.className = "search-result-field";
+            var relScore = r.relevance || 0;
+            var matchCount = r.matched_keywords || 0;
+            var relColor = relScore >= 8 ? "var(--ps-success)" :
+                           relScore >= 5 ? "var(--ps-accent)" : "var(--ps-text-muted)";
+            relDiv.innerHTML = '<span style="color:' + relColor + ';font-weight:600">' +
+                relScore + '/10</span> <span style="color:var(--ps-text-dim)">(' + matchCount + ' keywords matched)</span>';
+            meta.appendChild(relDiv);
+
+            // Show headline/caption snippet if available
+            var snippet = r.headline || r.caption || r.image_description || r.user_comment || "";
+            if (snippet) {
+                var snipDiv = document.createElement("div");
+                snipDiv.className = "search-result-field";
+                snipDiv.style.fontSize = "10px";
+                snipDiv.style.color = "var(--ps-text-muted)";
+                snipDiv.textContent = snippet.length > 120 ? snippet.substring(0, 120) + "..." : snippet;
+                meta.appendChild(snipDiv);
+            }
+
+            card.appendChild(meta);
+            aiSearchResultsGrid.appendChild(card);
+        });
+
+        aiSearchResultsPagination.innerHTML = "";
+        if (totalPages > 1) {
+            if (page > 1) {
+                var prevBtn = document.createElement("button");
+                prevBtn.className = "btn btn-sm btn-photoshell";
+                prevBtn.textContent = "Previous";
+                prevBtn.addEventListener("click", function() { _renderAiSearchResults(results, page - 1); });
+                aiSearchResultsPagination.appendChild(prevBtn);
+            }
+            var pageInfo = document.createElement("span");
+            pageInfo.className = "field-help";
+            pageInfo.textContent = "Page " + page + " of " + totalPages;
+            pageInfo.style.alignSelf = "center";
+            aiSearchResultsPagination.appendChild(pageInfo);
+            if (page < totalPages) {
+                var nextBtn = document.createElement("button");
+                nextBtn.className = "btn btn-sm btn-photoshell";
+                nextBtn.textContent = "Next";
+                nextBtn.addEventListener("click", function() { _renderAiSearchResults(results, page + 1); });
+                aiSearchResultsPagination.appendChild(nextBtn);
+            }
+        }
+
+        aiSearchResults.style.display = "";
+    }
+
+    function _openAiSearchPreview(idx) {
+        if (idx < 0 || idx >= _aiSearchResultFiles.length) return;
+        var r = _aiSearchResultFiles[idx];
+        var filePath = r.file_path;
+        var fileName = r.file || filePath.split("/").pop();
+
+        var modal = document.getElementById("photoPreviewModal");
+        var title = document.getElementById("photo-preview-title");
+        var img = document.getElementById("photo-preview-img");
+        var footer = document.getElementById("photo-preview-footer");
+
+        if (title) title.textContent = fileName;
+        if (img) {
+            img.style.display = "none";
+            img.onload = function() { img.style.display = ""; };
+            img.src = "/api/thumbnail?path=" + encodeURIComponent(filePath) + "&size=1600";
+            img.dataset.fullPath = filePath;
+            img.style.transform = "";
+            img.style.maxHeight = "";
+            img.style.maxWidth = "";
+        }
+
+        if (footer) {
+            var footerParts = ['<span style="color:var(--ps-text-dim)">"' + escapeHtml(filePath) + '"</span>'];
+            if (r.relevance) footerParts.push('<span style="color:var(--ps-accent);font-weight:600">Score: ' + r.relevance + '/10</span>');
+            if (r.headline) footerParts.push(escapeHtml(r.headline));
+            if (r.caption) footerParts.push(escapeHtml(r.caption));
+            if (r.keywords) footerParts.push('<span style="font-size:11px">' + escapeHtml(r.keywords) + '</span>');
+            footer.innerHTML = footerParts.join(' &nbsp;·&nbsp; ');
+        }
+
+        var bsModal = bootstrap.Modal.getOrCreateInstance(modal);
+        bsModal.show();
+    }
 
     // ---- Keyboard shortcuts ----
 

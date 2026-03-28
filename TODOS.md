@@ -6,6 +6,18 @@
 
 ## Completed
 
+### AI Search
+**Completed:** v1.7.0 (2026-03-27)
+New AI Search tab in the Search panel. Ollama converts free-form queries into search keywords + synonyms, then SQL matches them against catalog text fields (ImageDescription, UserComment, Caption, Headline, Keywords, location). Four search modes with prompt templates. Two-phase architecture: one LLM call + instant SQL scoring.
+
+### Sidebar Step Groups
+**Completed:** v1.7.0 (2026-03-27)
+16 workflow steps organized into 5 logical groups (Ingest & Prepare, AI Annotate & Audit, Organize & Cull, Edit Metadata, Finalize) with thin rounded outlines and section labels. Consistency Audit moved into the AI group. Step order updated in backend and frontend.
+
+### Catalog Schema Expansion
+**Completed:** v1.7.0 (2026-03-27)
+`catalog_build.sh` now indexes `ImageDescription` and `UserComment` EXIF fields. All catalog queries use `PRAGMA table_info` to detect available columns dynamically — older catalogs work without rebuilding.
+
 ### Photo Catalog (SQLite)
 **Completed:** v1.5.0 (2026-03-23)
 `catalog_build.sh` indexes EXIF/IPTC into SQLite with parallel exiftool workers. Catalog tab in UI with build/update/prune/remove, structured filters (Discover Fields), free-text search, progress bar, subcatalog detection.

@@ -129,6 +129,9 @@ CREATE TABLE IF NOT EXISTS photos (
     flash TEXT,
     white_balance TEXT,
     color_space TEXT,
+    -- EXIF text
+    image_description TEXT,
+    user_comment TEXT,
     -- IPTC
     headline TEXT,
     caption TEXT,
@@ -242,6 +245,7 @@ EXIFTOOL_TAGS=(
   -ImageWidth -ImageHeight -Orientation
   -GPSLatitude -GPSLongitude -GPSAltitude
   -ExposureProgram -MeteringMode -Flash -WhiteBalance -ColorSpace
+  -ImageDescription -UserComment
   "-IPTC:Headline" "-IPTC:Caption-Abstract" "-IPTC:Keywords"
   "-IPTC:CopyrightNotice" "-IPTC:Credit" "-IPTC:Source"
   "-IPTC:City" "-IPTC:Province-State" "-IPTC:Country-PrimaryLocationName"
@@ -287,10 +291,11 @@ for rec in data:
         image_width, image_height, orientation,
         gps_latitude, gps_longitude, gps_altitude,
         exposure_program, metering_mode, flash, white_balance, color_space,
+        image_description, user_comment,
         headline, caption, keywords, copyright, credit, source,
         city, state, country, updated_at
     ) VALUES (
-        ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now')
+        ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now')
     )''', (
         fp,
         rec.get('FileName', ''),
@@ -318,6 +323,8 @@ for rec in data:
         str(rec.get('Flash', '')),
         str(rec.get('WhiteBalance', '')),
         str(rec.get('ColorSpace', '')),
+        rec.get('ImageDescription', ''),
+        rec.get('UserComment', ''),
         rec.get('Headline', ''),
         rec.get('Caption-Abstract', ''),
         kw,
