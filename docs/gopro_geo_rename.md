@@ -2,6 +2,8 @@
 
 `gopro_geo_rename.sh` renames GoPro MP4 files into descriptive filenames that include capture time, location, and duration.
 
+
+
 ## Why This Script Exists
 
 GoPro clips are usually exported with generic names such as `GH010135.MP4`, which are hard to search and sort in large archives.
