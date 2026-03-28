@@ -15,6 +15,18 @@
 ### XMP Field Support
 - Metadata Replace now covers XMP-dc (Description, Title, Subject, Rights, Creator) and XMP-iptcCore (AltTextAccessibility, Location, CreatorWorkEmail, CreatorWorkURL) — 20 searchable fields total
 
+### Update Catalog Workflow Step
+- New "Update Catalog" pipeline step keeps the SQLite catalog in sync with the folder
+- Auto-creates if missing, prunes deleted files, indexes new files — all in one step
+- "Rebuild from scratch" option for a clean recreation
+- Positioned late in the pipeline so all metadata enrichment happens before indexing
+
+### Thumbnail Enhancements
+- Folder browser thumbnails now show filename + camera summary (model · date · focal · aperture · ISO) when a catalog exists
+- Hovering over a thumbnail shows the full IPTC caption in a tooltip
+- Photo preview modal now fetches and displays headline, description, caption, summary, and keywords
+- Thumbnail grid size matches catalog search results (180px)
+
 ## 1.6.0 — 2026-03-25
 
 ### Set GPS Location

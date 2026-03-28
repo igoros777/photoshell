@@ -37,7 +37,8 @@ flowchart LR
     H --> H2[Meta Replace]
     H2 --> H3[Copyright]
     H3 --> H4[Consistency]
-    H4 --> I[Contact Sheet]
+    H4 --> H5[Catalog Update]
+    H5 --> I[Contact Sheet]
     I --> J[Scrub]
 ```
 
@@ -56,6 +57,7 @@ flowchart LR
 | **Metadata Replace** | Find and replace text across 20 EXIF/IPTC/XMP fields with keyword-aware handling |
 | **Copyright / Creator** | Batch-write photographer name, copyright, email, website, credit, source |
 | **Consistency Audit** | Ollama-powered detection of outliers in descriptions (wrong names, locations, tone) |
+| **Update Catalog** | Keeps the SQLite catalog in sync — creates, prunes, and indexes in one step |
 | **Contact Sheet** | Generates a proof sheet image with thumbnails and metadata captions |
 | **Scrub Metadata** | Clears selected EXIF/IPTC fields (destructive — use with care) |
 
