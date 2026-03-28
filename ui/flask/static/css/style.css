@@ -953,20 +953,22 @@ body {
     overflow: hidden;
 }
 
-.photo-thumb-item .thumb-meta-headline {
-    color: var(--ps-accent);
+.photo-thumb-item .thumb-meta-filename {
+    color: var(--ps-text);
     font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.photo-thumb-item .thumb-meta-caption {
+.photo-thumb-item .thumb-meta-summary {
     color: var(--ps-text-muted);
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+    font-size: 9px;
+    white-space: nowrap;
     overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .photo-thumbs-footer {

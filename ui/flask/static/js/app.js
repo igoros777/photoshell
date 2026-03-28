@@ -1502,21 +1502,31 @@ document.addEventListener("DOMContentLoaded", function() {
                 var metaDiv = document.createElement("div");
                 metaDiv.className = "thumb-meta";
 
-                if (meta.headline) {
-                    var hl = document.createElement("div");
-                    hl.className = "thumb-meta-headline";
-                    hl.textContent = meta.headline;
-                    metaDiv.appendChild(hl);
-                }
-                if (meta.caption) {
-                    var cap = document.createElement("div");
-                    cap.className = "thumb-meta-caption";
-                    cap.textContent = meta.caption;
-                    metaDiv.appendChild(cap);
+                // Filename
+                var fnDiv = document.createElement("div");
+                fnDiv.className = "thumb-meta-filename";
+                fnDiv.textContent = meta.file_name || "";
+                metaDiv.appendChild(fnDiv);
+
+                // Summary line: Model · Date · Focal · Aperture · ISO
+                var parts = [];
+                if (meta.model) parts.push(meta.model);
+                if (meta.date_time_original) parts.push(meta.date_time_original.split(" ")[0]);
+                if (meta.focal_length) parts.push(meta.focal_length + "mm");
+                if (meta.f_number) parts.push("f/" + meta.f_number);
+                if (meta.iso) parts.push("ISO " + meta.iso);
+                if (parts.length > 0) {
+                    var sumDiv = document.createElement("div");
+                    sumDiv.className = "thumb-meta-summary";
+                    sumDiv.textContent = parts.join(" \u00b7 ");
+                    metaDiv.appendChild(sumDiv);
                 }
 
-                if (metaDiv.children.length > 0) {
-                    item.appendChild(metaDiv);
+                item.appendChild(metaDiv);
+
+                // Hover tooltip with caption
+                if (meta.caption) {
+                    item.title = meta.caption;
                 }
             });
         })
