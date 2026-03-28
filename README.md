@@ -3,6 +3,8 @@ PhotoShell is a practical Bash toolkit for photographers who need fast, repeatab
 
 It focuses on common archive-cleanup tasks such as repairing missing GPS tags, generating standardized metadata summaries, and renaming photos/videos into searchable, context-rich filenames.
 
+![](./images/fjgstzwvekzs316k0a3q5pdlu2c.jpg)
+
 The scripts are designed for batch processing in a working directory and are built around `exiftool` and a small set of standard CLI utilities.
 
 **New here?** See the [Quick Start Guide](QSG.md) to get up and running in 10 minutes.
