@@ -8,6 +8,8 @@
 - `--keywords`: generate keywords and populate `IPTC:Keywords` only when it is empty.
 - `--headline`: generate a short headline and populate `IPTC:Headline` only when it is empty. Includes Adobe Stock-optimized title prompts.
 
+![](./images/cdnmf5r4z6m6vie6gpeyfy8i0n1.jpg)
+
 ## Why This Script Exists
 
 Photo collections often have inconsistent captions and missing keyword tags.
