@@ -2,6 +2,8 @@
 
 The PhotoShell web interface lets you configure, validate, and run your photo processing workflow from a browser — no command line needed.
 
+![](../images/14kej7c98tnlup988xaxeaf1njo.jpg)
+
 ## Quick Start
 
 1. Set the **Target Folder** to a directory containing photos

@@ -2,6 +2,8 @@
 
 `search_exif_iptc.sh` searches EXIF and IPTC metadata text across supported media files in a folder.
 
+![](../images/64p0wckd0vu2xqnntcl6b6o2wzd.jpg)
+
 ## Why This Script Exists
 
 When archives grow, metadata search inside file managers is often inconsistent across formats.

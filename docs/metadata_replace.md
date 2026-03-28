@@ -2,6 +2,8 @@
 
 `metadata_replace.sh` finds and replaces text in selected EXIF/IPTC metadata fields across photos. Keywords are handled individually — replacing within a keyword list replaces the matching keyword, not the entire field.
 
+![](../images/ilx4dzqw6mnkf5do1fwq3qsbj3b.jpg)
+
 ## Why This Script Exists
 
 After generating metadata with Ollama or importing from other tools, photographers often need to fix inconsistencies in bulk: typos across hundreds of files, outdated tags that need renaming, or location names that need standardizing.

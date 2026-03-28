@@ -2,6 +2,8 @@
 
 `sync_exif_and_rename.sh` repairs exported JPEG metadata by copying EXIF from matching source files in your originals archive, then renames exports to the original base filename.
 
+![](../images/moybidf7n3jwyyvbjp9l5ba5wg8.jpg)
+
 ## Why This Script Exists
 
 Many edit/export workflows produce files with:

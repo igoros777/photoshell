@@ -3,6 +3,8 @@
 Aesthetic reference: **DaVinci Resolve** — dark, dense, information-rich, professional.
 Not Lightroom (too much whitespace), not a Bootstrap template (too generic).
 
+![](./images/1scfw87n3m0zain63cj2bkd07o1.jpg)
+
 ## Color Palette
 
 ```

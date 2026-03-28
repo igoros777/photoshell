@@ -2,6 +2,8 @@
 
 PhotoShell is a local-first photo workflow toolkit. It has two layers: a set of standalone Bash scripts for metadata processing, and an optional Flask web UI that orchestrates those scripts.
 
+![](./images/cdnmf5r4z6m6vie6gpeyfy8i0n1.jpg)
+
 ## System Overview
 
 ```

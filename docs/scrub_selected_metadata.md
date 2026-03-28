@@ -2,6 +2,8 @@
 
 `scrub_selected_metadata.sh` removes selected EXIF/IPTC metadata fields from supported image files in a directory.
 
+![](../images/fjgstzwvekzs316k0a3q5pdlu2c.jpg)
+
 ## Why This Script Exists
 
 Photo workflows often need targeted metadata cleanup before publishing, sharing, or downstream processing.

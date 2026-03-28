@@ -9,6 +9,8 @@ Available variants:
 
 The script logic is intentionally generic. The actual folder model comes from an external config file.
 
+![](../images/81gp5vc7vj70z2mu5bjq4pron1l.jpg)
+
 ## Why This Exists
 
 Using a deterministic on-disk structure solves a different problem than a catalog app:

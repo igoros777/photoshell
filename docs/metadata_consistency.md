@@ -2,6 +2,8 @@
 
 `metadata_consistency.sh` uses Ollama to audit descriptions across a photo set for consistency. It reads all captions/headlines, sends them to a vision LLM, and identifies outliers — wrong event names, location mismatches, tone drift, or factual contradictions.
 
+![](../images/cgvefn8mobat1j80cm4t56us3dd.jpg)
+
 ## Why This Script Exists
 
 When AI generates descriptions for hundreds of photos in a shoot, most will be correct — but a few will have errors. The AI might hallucinate a location name, use the wrong event name for a handful of photos, or produce descriptions with inconsistent tone.

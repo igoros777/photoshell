@@ -2,7 +2,7 @@
 
 `gopro_geo_rename.sh` renames GoPro MP4 files into descriptive filenames that include capture time, location, and duration.
 
-
+![](../images/sflye0jj63hke8qcsg8ewwbsv5u.jpg)
 
 ## Why This Script Exists
 

@@ -2,6 +2,8 @@
 
 `gps_gap_fill.sh` fills missing GPS metadata in photos by borrowing coordinates from the closest photo in time that already has valid geotags.
 
+![](../images/lm7uy16skcw13udqv22p113uuc4.jpg)
+
 ## Why This Script Exists
 
 In real photo workflows, GPS data is often incomplete:

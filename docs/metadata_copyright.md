@@ -2,6 +2,8 @@
 
 `metadata_copyright.sh` batch-writes photographer name, copyright notice, and contact information to IPTC/EXIF fields across photos. By default it only fills empty fields — use `--force` to overwrite existing values.
 
+![](../images/sflye0jj63hke8qcsg8ewwbsv5u.jpg)
+
 ## Why This Script Exists
 
 Every photo shoot needs copyright and creator attribution stamped into the metadata. Without it, images lose provenance when shared, uploaded to stock sites, or archived. Doing this manually per file or per folder is tedious and easy to forget.

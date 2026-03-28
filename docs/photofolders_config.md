@@ -5,6 +5,8 @@ This file defines the folder template consumed by:
 - `scripts/photofolders.bat` via `scripts/photofolders.config.cmd`
 - `scripts/photofolders.sh` via `scripts/photofolders.config.sh`
 
+![](../images/xmjygj1jbywn6ui1ajuxed3rfxm.jpg)
+
 ## Purpose
 
 `photofolders` handles argument parsing, validation, and directory creation.

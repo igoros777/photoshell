@@ -2,6 +2,8 @@
 
 `gps_set_location.sh` geocodes a named location via the Geocod.io API and writes GPS coordinates to photo EXIF metadata. Optionally randomizes coordinates within a radius for natural-looking distribution.
 
+![](../images/gaac25strlj9za0xel1bx484tt9.jpg)
+
 ## Why This Script Exists
 
 Many photos have no GPS data at all — the camera lacks a GPS module, or GPS was disabled. When you know where the photos were taken, this script lets you write GPS coordinates in bulk from a place name, without manually looking up coordinates.
