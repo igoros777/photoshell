@@ -26,22 +26,34 @@ Click any step name in the sidebar to see its configuration options in the inspe
 Steps run in the order shown. Enable only the steps you need.
 
 ```mermaid
-flowchart LR
-    A[Sync EXIF] --> B[GPS Fill]
-    B --> B2[Set GPS Loc]
-    B2 --> C[Summary]
-    C --> D[Description]
-    D --> E[Keywords]
-    E --> E2[Headline]
-    E2 --> E3[Consistency]
-    E3 --> H[Blur Detect]
-    H --> F[Geo Rename]
-    F --> G[GoPro Rename]
-    G --> H2[Meta Replace]
-    H2 --> H3[Copyright]
-    H3 --> H5[Catalog Update]
-    H5 --> I[Contact Sheet]
-    I --> J[Scrub]
+flowchart TD
+    subgraph G1 [Ingest & Prepare]
+        A[Sync EXIF] --> B[GPS Fill]
+        B --> B2[Set GPS Loc]
+        B2 --> C[Summary]
+    end
+
+    subgraph G2 [AI Annotate & Audit]
+        D[Description] --> E[Keywords]
+        E --> E2[Headline]
+        E2 --> E3[Consistency]
+    end
+
+    subgraph G3 [Organize & Cull]
+        H[Blur Detect] --> F[Geo Rename]
+        F --> G[GoPro Rename]
+    end
+
+    subgraph G4 [Edit Metadata]
+        H2[Meta Replace] --> H3[Copyright]
+    end
+
+    subgraph G5 [Finalize]
+        H5[Catalog Update] --> I[Contact Sheet]
+        I --> J[Scrub]
+    end
+
+    G1 --> G2 --> G3 --> G4 --> G5
 ```
 
 | Group | Step | What it does |
