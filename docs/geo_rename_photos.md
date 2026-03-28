@@ -2,6 +2,8 @@
 
 `geo_rename_photos.sh` renames photo files into consistent, metadata-rich filenames using capture time, camera model, and reverse-geocoded location.
 
+![](../images/14kej7c98tnlup988xaxeaf1njo.jpg)
+
 ## Why This Script Exists
 
 Camera filenames like `DSC01234.JPG` or `IMG_8472.HEIC` are not descriptive and become hard to manage in large archives.

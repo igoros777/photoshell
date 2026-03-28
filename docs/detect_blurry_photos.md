@@ -9,6 +9,8 @@ It can:
 - split photos into scenes by EXIF timestamp gaps plus visual similarity
 - pick one sharpest photo per scene into a `selected` folder
 
+![](../images/moybidf7n3jwyyvbjp9l5ba5wg8.jpg)
+
 ## Requirements
 
 - Linux Bash

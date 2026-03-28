@@ -9,6 +9,8 @@ Each tile includes:
 3. Otherwise caption from `EXIF:UserComment`.
 4. Otherwise a brief EXIF summary (`Model`, `Lens`, `FNumber`, `ExposureTime`, `ISO`, `FocalLength`, `DateTimeOriginal`/`CreateDate`).
 
+![](../images/rlb7lldqn61790dxrme0ovlac3m.jpg)
+
 ## Why This Script Exists
 
 Photo review and client proofing often needs one sheet that shows many frames plus useful notes.

@@ -2,6 +2,8 @@
 
 `extract_photo_summary.sh` reads EXIF data from one image, builds a concise human-readable technical summary, and writes that summary into common comment/description metadata fields.
 
+![](../images/1scfw87n3m0zain63cj2bkd07o1.jpg)
+
 ## Why This Script Exists
 
 Photo files often contain rich EXIF data, but it is spread across many tags and not easy to scan quickly inside DAM tools or file viewers.
