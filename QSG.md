@@ -2,6 +2,8 @@
 
 Get PhotoShell running in 10 minutes: install dependencies, clone the repo, start the web UI, and process your first batch of photos.
 
+![./images/22g3h2fuqexche5vyuatne0ks4z.jpg]()
+
 ---
 
 ## 1. System Requirements
