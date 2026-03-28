@@ -260,6 +260,18 @@
                         </span>
                     </div>
 
+                    <div class="sidebar-step" data-step="catupd">
+                        <input class="form-check-input section-toggle" type="checkbox"
+                               id="chk-catupd" name="enable_catalog_update" data-section="sec-catupd">
+                        <span class="sidebar-step-label"><i class="bi bi-database-gear"></i> Update Catalog</span>
+                        <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_catalog_update">Step</span>
+                        <span class="sidebar-step-actions">
+                            <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                               data-bs-toggle="popover" data-bs-trigger="hover focus"
+                               data-bs-content="Updates the SQLite photo catalog. Creates it if missing, prunes deleted files, indexes new files. Enable Rebuild to recreate from scratch."></i>
+                        </span>
+                    </div>
+
                     <div class="sidebar-step" data-step="cs">
                         <input class="form-check-input section-toggle" type="checkbox"
                                id="chk-cs" name="enable_contact_sheet" data-section="sec-cs">
@@ -852,6 +864,25 @@
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="mcon_fix" id="mcon-fix">
                         <label class="form-check-label" for="mcon-fix">Auto-fix inconsistencies</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Update Catalog -->
+            <div class="step-config" id="config-catupd" style="display:none">
+                <p class="section-desc">
+                    Keeps the SQLite photo catalog in sync with the folder contents.
+                    Creates the catalog if it doesn't exist. Prunes entries for deleted files,
+                    then indexes any new files. Enable Rebuild to drop and recreate from scratch.
+                </p>
+                <div class="d-flex flex-wrap gap-3 mt-2">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="cat_recursive" id="cat-rec">
+                        <label class="form-check-label" for="cat-rec">Include subfolders</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="cat_rebuild" id="cat-rebuild">
+                        <label class="form-check-label" for="cat-rebuild">Rebuild from scratch</label>
                     </div>
                 </div>
             </div>

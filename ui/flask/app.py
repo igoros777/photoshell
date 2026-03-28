@@ -468,6 +468,40 @@ def _build_step(key, data):
             cmd += ["-t", data["mcon_types"]]
         return {"label": "Consistency Audit", "cmd": cmd}
 
+    if key == "enable_catalog_update" and data.get(key):
+        photo_dir = data["photo_dir"]
+        rebuild = data.get("cat_rebuild", False)
+        recursive = data.get("cat_recursive", False)
+
+        db_path = os.path.join(photo_dir, ".photoshell", "catalog.db")
+        catalog_present = os.path.isfile(db_path)
+
+        if rebuild or not catalog_present:
+            # Full build (or first-time creation)
+            mode = "build"
+        else:
+            # Prune + update: run prune first, then update
+            # We'll chain two calls via a wrapper script invocation
+            mode = "update"
+
+        cmd = ["bash", "-c"]
+        script = _script("catalog_build.sh")
+        rec_flag = ""
+        if not recursive:
+            rec_flag = "-D 1"
+
+        if mode == "build":
+            cmd.append("bash %s -m build -v %s %s" % (
+                shlex.quote(script), rec_flag, shlex.quote(photo_dir)))
+        else:
+            # Prune dead entries, then update with new files
+            cmd.append(
+                "bash %s -m prune -v %s && bash %s -m update -v %s %s" % (
+                    shlex.quote(script), shlex.quote(photo_dir),
+                    shlex.quote(script), rec_flag, shlex.quote(photo_dir)))
+
+        return {"label": "Update Catalog", "cmd": cmd}
+
     if key == "enable_scrub" and data.get(key):
         cmd = ["bash", _script("scrub_selected_metadata.sh")]
         if data.get("scrub_exif_tags"):

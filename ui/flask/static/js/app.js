@@ -258,8 +258,9 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_metadata_replace":   11,
         "enable_metadata_copyright": 12,
         "enable_metadata_consistency": 13,
-        "enable_contact_sheet":   14,
-        "enable_scrub":           15
+        "enable_catalog_update":  14,
+        "enable_contact_sheet":   15,
+        "enable_scrub":           16
     };
 
     var STEP_LABELS = {
@@ -276,6 +277,7 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_metadata_replace":   "Metadata Replace",
         "enable_metadata_copyright": "Copyright / Creator",
         "enable_metadata_consistency": "Consistency Audit",
+        "enable_catalog_update":  "Update Catalog",
         "enable_contact_sheet":   "Contact Sheet",
         "enable_scrub":           "Scrub Metadata"
     };
@@ -295,6 +297,7 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_metadata_replace":   "config-mreplace",
         "enable_metadata_copyright": "config-mcopy",
         "enable_metadata_consistency": "config-mcon",
+        "enable_catalog_update":  "config-catupd",
         "enable_contact_sheet":   "config-cs",
         "enable_scrub":           "config-scrub"
     };
@@ -314,6 +317,7 @@ document.addEventListener("DOMContentLoaded", function() {
         "mreplace":"enable_metadata_replace",
         "mcopy":   "enable_metadata_copyright",
         "mcon":    "enable_metadata_consistency",
+        "catupd":  "enable_catalog_update",
         "cs":      "enable_contact_sheet",
         "scrub":   "enable_scrub"
     };
