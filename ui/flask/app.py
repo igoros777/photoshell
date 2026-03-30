@@ -278,6 +278,21 @@ def _build_step(key, data):
     """Build a single {label, cmd} dict for a given step key, or None."""
     photo_dir = data["photo_dir"]
 
+    if key == "enable_photofolders" and data.get(key):
+        project_name = (data.get("pf_project_name") or "").strip()
+        if not project_name:
+            return None
+        root_dir = (data.get("pf_root_dir") or "").strip()
+        config_path = (data.get("pf_config_path") or "").strip()
+        cmd = ["bash", _script("photofolders.sh"), "--project", project_name]
+        if root_dir:
+            cmd += ["--root", root_dir]
+        if config_path:
+            cmd += ["--config", config_path]
+        if data.get("pf_dry_run"):
+            cmd.append("--dry-run")
+        return {"label": "Create Project Folders", "cmd": cmd}
+
     if key == "enable_sync_exif" and data.get(key):
         cmd = ["bash", _script("sync_exif_and_rename.sh"), photo_dir]
         if data.get("sync_orig_dir"):
@@ -633,6 +648,7 @@ def run_preflight(enabled_steps):
 
 
 DOCS_MAP = {
+    "photofolders": "photofolders.md",
     "sync_exif_and_rename": "sync_exif_and_rename.md",
     "gps_gap_fill": "gps_gap_fill.md",
     "gps_set_location": "gps_set_location.md",
@@ -770,6 +786,13 @@ def api_prompts_save(workflow):
 
     logger.info("Saved prompt ID %d for %s workflow", prompt_id, workflow)
     return jsonify({"ok": True, "id": prompt_id, "workflow": workflow})
+
+
+@app.route("/api/env_check")
+def api_env_check():
+    """Check for required environment variables."""
+    geocodio = bool(os.environ.get("GEOCODIO_API_KEY", "").strip())
+    return jsonify({"geocodio_api_key": geocodio})
 
 
 @app.route("/")
@@ -2177,6 +2200,220 @@ def api_catalog_remove():
 
 
 # ---------------------------------------------------------------------------
+# Author profiles (Copyright / Creator step)
+# ---------------------------------------------------------------------------
+
+AUTHORS_DIR = os.path.join(PHOTOSHELL_DIR, "authors")
+
+
+@app.route("/api/author_profiles")
+def api_author_profiles():
+    """List all saved author profiles."""
+    if not os.path.isdir(AUTHORS_DIR):
+        return jsonify({"profiles": []})
+
+    profiles = []
+    for fname in sorted(os.listdir(AUTHORS_DIR)):
+        if not fname.endswith(".json"):
+            continue
+        filepath = os.path.join(AUTHORS_DIR, fname)
+        try:
+            with open(filepath, "r") as f:
+                data = json.loads(f.read())
+            data["_filename"] = fname
+            profiles.append(data)
+        except Exception:
+            continue
+    return jsonify({"profiles": profiles})
+
+
+@app.route("/api/author_profiles/save", methods=["POST"])
+def api_author_profiles_save():
+    """Save or update an author profile."""
+    body = request.get_json(force=True) or {}
+    profile_name = (body.get("profile_name") or "").strip()
+    if not profile_name:
+        return jsonify({"error": "Profile name is required"}), 400
+
+    # Sanitize filename
+    safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', profile_name)
+    if not safe_name:
+        return jsonify({"error": "Invalid profile name"}), 400
+
+    os.makedirs(AUTHORS_DIR, exist_ok=True)
+    filepath = os.path.join(AUTHORS_DIR, safe_name + ".json")
+
+    profile = {
+        "profile_name": profile_name,
+        "author": (body.get("author") or "").strip(),
+        "copyright": (body.get("copyright") or "").strip(),
+        "email": (body.get("email") or "").strip(),
+        "website": (body.get("website") or "").strip(),
+        "credit": (body.get("credit") or "").strip(),
+        "source": (body.get("source") or "").strip(),
+    }
+
+    with open(filepath, "w") as f:
+        f.write(json.dumps(profile, indent=2))
+
+    return jsonify({"ok": True, "filename": safe_name + ".json"})
+
+
+@app.route("/api/author_profiles/<name>", methods=["DELETE"])
+def api_author_profiles_delete(name):
+    """Delete an author profile."""
+    safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', name)
+    filepath = os.path.join(AUTHORS_DIR, safe_name + ".json")
+    if not os.path.isfile(filepath):
+        return jsonify({"error": "Profile not found"}), 404
+    os.remove(filepath)
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Photofolders config API
+# ---------------------------------------------------------------------------
+
+
+def _parse_photofolders_config(config_path):
+    """Parse a photofolders.config.sh file into structured JSON."""
+    if not os.path.isfile(config_path):
+        return None
+
+    result = {"categories": [], "processed_subfolders": ""}
+    cat_ids = ""
+
+    with open(config_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            # Parse VAR="value" or VAR=value
+            m = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)="?(.*?)"?\s*$', line)
+            if not m:
+                continue
+            var, val = m.group(1), m.group(2)
+
+            if var == "CFG_CATEGORY_IDS":
+                cat_ids = val
+            elif var == "CFG_PROCESSED_SUBFOLDERS":
+                result["processed_subfolders"] = val
+            elif var.startswith("CFG_CATEGORY_PATH_"):
+                cid = var[len("CFG_CATEGORY_PATH_"):]
+                cat = next((c for c in result["categories"] if c["id"] == cid), None)
+                if not cat:
+                    cat = {"id": cid, "path": "", "equipment": "", "subfolders": ""}
+                    result["categories"].append(cat)
+                cat["path"] = val
+            elif var.startswith("CFG_CATEGORY_EQUIPMENT_"):
+                cid = var[len("CFG_CATEGORY_EQUIPMENT_"):]
+                cat = next((c for c in result["categories"] if c["id"] == cid), None)
+                if not cat:
+                    cat = {"id": cid, "path": "", "equipment": "", "subfolders": ""}
+                    result["categories"].append(cat)
+                cat["equipment"] = val
+            elif var.startswith("CFG_CATEGORY_SUBFOLDERS_"):
+                cid = var[len("CFG_CATEGORY_SUBFOLDERS_"):]
+                cat = next((c for c in result["categories"] if c["id"] == cid), None)
+                if not cat:
+                    cat = {"id": cid, "path": "", "equipment": "", "subfolders": ""}
+                    result["categories"].append(cat)
+                cat["subfolders"] = val
+
+    # Preserve order from CFG_CATEGORY_IDS
+    if cat_ids:
+        id_order = [x.strip() for x in cat_ids.split(";") if x.strip()]
+        ordered = []
+        for cid in id_order:
+            cat = next((c for c in result["categories"] if c["id"] == cid), None)
+            if cat:
+                ordered.append(cat)
+        # Append any categories not in the id list
+        for cat in result["categories"]:
+            if cat not in ordered:
+                ordered.append(cat)
+        result["categories"] = ordered
+
+    return result
+
+
+def _write_photofolders_config(config_path, data):
+    """Write structured JSON back to a photofolders.config.sh file."""
+    lines = [
+        "# PhotoShell folder template configuration (Bash)",
+        "# ---------------------------------------------------------------------------",
+        "# List delimiter is semicolon (;)",
+        "#",
+        "# Required variables:",
+        "#   CFG_CATEGORY_IDS",
+        "#   CFG_CATEGORY_PATH_<id>",
+        "#   CFG_CATEGORY_EQUIPMENT_<id>",
+        "#   CFG_CATEGORY_SUBFOLDERS_<id>",
+        "#   CFG_PROCESSED_SUBFOLDERS",
+        "# ---------------------------------------------------------------------------",
+        "",
+        "# 1) Equipment categories",
+    ]
+
+    categories = data.get("categories", [])
+    cat_ids = ";".join(c["id"] for c in categories)
+    lines.append('CFG_CATEGORY_IDS="%s"' % cat_ids)
+    lines.append("")
+
+    for i, cat in enumerate(categories):
+        lines.append("# %d) %s" % (i + 2, cat["id"]))
+        lines.append('CFG_CATEGORY_PATH_%s="%s"' % (cat["id"], cat.get("path", cat["id"])))
+        lines.append('CFG_CATEGORY_EQUIPMENT_%s="%s"' % (cat["id"], cat.get("equipment", "")))
+        lines.append('CFG_CATEGORY_SUBFOLDERS_%s="%s"' % (cat["id"], cat.get("subfolders", "")))
+        lines.append("")
+
+    lines.append("# Standardized processed output folders")
+    lines.append('CFG_PROCESSED_SUBFOLDERS="%s"' % data.get("processed_subfolders", ""))
+
+    os.makedirs(os.path.dirname(config_path), exist_ok=True)
+    with open(config_path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+@app.route("/api/photofolders/config")
+def api_photofolders_config():
+    """Read the photofolders config file and return structured JSON."""
+    config_path = request.args.get("path", "").strip()
+    if not config_path:
+        config_path = os.path.join(SCRIPTS_DIR, "photofolders.config.sh")
+
+    data = _parse_photofolders_config(config_path)
+    if data is None:
+        return jsonify({"error": "Config file not found: %s" % config_path}), 404
+    data["config_path"] = config_path
+    return jsonify(data)
+
+
+@app.route("/api/photofolders/config/save", methods=["POST"])
+def api_photofolders_config_save():
+    """Save equipment customization to a config file."""
+    body = request.get_json(force=True) or {}
+    config_path = (body.get("config_path") or "").strip()
+    if not config_path:
+        return jsonify({"error": "No config path specified"}), 400
+
+    # Only allow writing inside the scripts directory or .photoshell
+    scripts_abs = os.path.realpath(SCRIPTS_DIR)
+    config_abs = os.path.realpath(config_path)
+    if not (config_abs.startswith(scripts_abs) or "/.photoshell/" in config_abs
+            or "\\.photoshell\\" in config_abs):
+        return jsonify({"error": "Config path must be inside scripts/ or .photoshell/"}), 400
+
+    try:
+        _write_photofolders_config(config_path, body)
+    except Exception as exc:
+        logger.warning("Failed to write photofolders config: %s", exc)
+        return jsonify({"error": "Failed to write config: %s" % str(exc)}), 500
+
+    return jsonify({"ok": True, "config_path": config_path})
+
+
+# ---------------------------------------------------------------------------
 # AI Search — semantic metadata search via Ollama
 # ---------------------------------------------------------------------------
 
@@ -2704,11 +2941,17 @@ def api_run():
 
     data = request.get_json(force=True)
     photo_dir = data.get("photo_dir", "").strip()
-    if not photo_dir:
+
+    # Check if only photofolders is enabled (it creates directories, doesn't need one)
+    enabled_keys = [k for k in DEFAULT_STEP_ORDER if data.get(k)]
+    only_photofolders = enabled_keys == ["enable_photofolders"]
+
+    if not photo_dir and not only_photofolders:
         return jsonify({"error": "photo_dir is required"}), 400
 
-    # Normalize the path for the current platform (e.g. C:\... -> /mnt/c/... on WSL)
-    photo_dir = _normalize_browser_path(photo_dir)
+    if photo_dir:
+        # Normalize the path for the current platform (e.g. C:\... -> /mnt/c/... on WSL)
+        photo_dir = _normalize_browser_path(photo_dir)
     data["photo_dir"] = photo_dir
 
     steps = build_pipeline(data)
@@ -2780,7 +3023,8 @@ def api_run():
         }
     logger.info("Job %s created with %d steps for %s", job_id, len(steps), photo_dir)
 
-    t = threading.Thread(target=_run_pipeline, args=(job_id, steps, photo_dir))
+    pipeline_cwd = photo_dir if photo_dir else os.path.expanduser("~")
+    t = threading.Thread(target=_run_pipeline, args=(job_id, steps, pipeline_cwd))
     t.daemon = True
     t.start()
 

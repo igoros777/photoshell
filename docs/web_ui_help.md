@@ -28,7 +28,8 @@ Steps run in the order shown. Enable only the steps you need.
 ```mermaid
 flowchart TD
     subgraph G1 [Ingest & Prepare]
-        A[Sync EXIF] --> B[GPS Fill]
+        PF[Project Folders] --> A[Sync EXIF]
+        A --> B[GPS Fill]
         B --> B2[Set GPS Loc]
         B2 --> C[Summary]
     end
@@ -58,7 +59,8 @@ flowchart TD
 
 | Group | Step | What it does |
 |-------|------|-------------|
-| **Ingest & Prepare** | Sync EXIF & Rename | Copies metadata from original RAW files to exported JPEGs |
+| **Ingest & Prepare** | Create Project Folders | Creates a standardized folder hierarchy (originals + processed) for a new photo project based on equipment config |
+| | Sync EXIF & Rename | Copies metadata from original RAW files to exported JPEGs |
 | | GPS Gap Fill | Fills missing GPS coordinates from the nearest photo that has them |
 | | Set GPS Location | Geocodes a place name and writes GPS coordinates (with optional spread radius) |
 | | Extract Photo Summary | Writes a concise technical summary (camera, lens, ISO, location) to metadata |

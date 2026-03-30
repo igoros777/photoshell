@@ -981,9 +981,8 @@ body {
     font-weight: 600;
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    word-break: break-all;
+    line-height: 1.2;
 }
 
 .photo-thumb-item .thumb-meta-summary {

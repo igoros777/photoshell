@@ -12,7 +12,7 @@
 # Filename pattern:
 #   YYYYMMDD-HHMMSS-<camera_model>-<location>.<ext>
 # Metadata sources:
-# - timestamp: DateTimeOriginal (fallback: CreateDate)
+# - timestamp: DateTimeOriginal (fallback: CreateDate, then ModifyDate)
 # - model    : Model
 # - GPS      : GPSLatitude,GPSLongitude -> geocod.io reverse lookup
 # Fallbacks:
@@ -288,9 +288,10 @@ process_photo() {
 
   dt_raw="$(exiftool -s -s -s -DateTimeOriginal "${file}" 2>/dev/null || true)"
   [[ -z "${dt_raw}" ]] && dt_raw="$(exiftool -s -s -s -CreateDate "${file}" 2>/dev/null || true)"
+  [[ -z "${dt_raw}" ]] && dt_raw="$(exiftool -s -s -s -ModifyDate "${file}" 2>/dev/null || true)"
 
   if [[ -z "${dt_raw}" ]]; then
-    echo "SKIP $(basename "${file}"): no DateTimeOriginal/CreateDate"
+    echo "SKIP $(basename "${file}"): no DateTimeOriginal/CreateDate/ModifyDate"
     ((SKIPPED+=1))
     return
   fi

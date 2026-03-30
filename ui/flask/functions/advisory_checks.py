@@ -629,11 +629,72 @@ def extract_gps_data(photo_dir, limit=500):
     }
 
 
+# RAW file extensions that vision models typically cannot process correctly.
+_RAW_EXTENSIONS = {
+    ".dng", ".nef", ".cr2", ".cr3", ".arw", ".orf", ".rw2",
+    ".srw", ".raf", ".pef", ".x3f", ".iiq", ".3fr", ".rwl",
+    ".raw", ".crw", ".mrw", ".dcr", ".mos",
+}
+
+_AI_ANNOTATE_STEPS = {
+    "enable_annotate_desc", "enable_annotate_kw", "enable_annotate_hl",
+}
+
+
+def check_raw_files_for_ai(photo_dir, enabled_steps, cached_data=None):
+    """Warn when AI annotation steps target a folder containing RAW files.
+
+    Most vision models (including Ollama's) cannot decode RAW sensor data
+    and tend to hallucinate descriptions when fed these files.
+    """
+    if not _AI_ANNOTATE_STEPS.intersection(enabled_steps):
+        return None
+
+    raw_count = 0
+    total = 0
+    raw_exts_found = set()
+    try:
+        with os.scandir(photo_dir) as it:
+            for entry in it:
+                try:
+                    if not entry.is_file():
+                        continue
+                except (OSError, PermissionError):
+                    continue
+                ext = os.path.splitext(entry.name)[1].lower()
+                if ext in PHOTO_EXTENSIONS or ext in _RAW_EXTENSIONS:
+                    total += 1
+                    if ext in _RAW_EXTENSIONS:
+                        raw_count += 1
+                        raw_exts_found.add(ext.upper().lstrip("."))
+    except (OSError, PermissionError):
+        return None
+
+    if raw_count == 0:
+        return None
+
+    pct = _pct(raw_count, total)
+    ext_list = ", ".join(sorted(raw_exts_found))
+    return {
+        "key": "raw_ai_warning",
+        "level": "warning",
+        "icon": "bi-exclamation-triangle",
+        "title": "RAW files detected — AI may hallucinate",
+        "detail": (
+            "%d of %d files (%d%%) are RAW format (%s). Most AI vision models "
+            "cannot read RAW sensor data and are likely to produce inaccurate or "
+            "fabricated descriptions. Consider converting to JPEG first, or exclude "
+            "RAW files from the annotation workflow."
+        ) % (raw_count, total, pct, ext_list),
+    }
+
+
 ALL_CHECKS = [
     check_gps_coverage,
     check_summary_already_done,
     check_description_already_done,
     check_keywords_already_done,
+    check_raw_files_for_ai,
     check_geo_rename_done,
     check_contact_sheet_exists,
     check_blurry_output_exists,

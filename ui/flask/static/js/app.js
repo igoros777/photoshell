@@ -71,6 +71,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // Multi-folder project mode state
     var detectedSubfolders = [];
+    var detectedPhotoCount = 0;
 
     // Blur view state
     var blurScenes = [];
@@ -245,6 +246,7 @@ document.addEventListener("DOMContentLoaded", function() {
     // ---- Step sequencing and order validation ----
 
     var STEP_RECOMMENDED_ORDER = {
+        "enable_photofolders":     0,
         "enable_sync_exif":        1,
         "enable_gps_gap_fill":     2,
         "enable_gps_set_loc":      3,
@@ -264,6 +266,7 @@ document.addEventListener("DOMContentLoaded", function() {
     };
 
     var STEP_LABELS = {
+        "enable_photofolders":    "Create Project Folders",
         "enable_sync_exif":       "Sync EXIF & Rename",
         "enable_gps_gap_fill":    "GPS Gap Fill",
         "enable_gps_set_loc":     "Set GPS Location",
@@ -284,6 +287,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // Map step keys to config panel IDs
     var STEP_CONFIG_MAP = {
+        "enable_photofolders":    "config-pf",
         "enable_sync_exif":       "config-sync",
         "enable_gps_gap_fill":    "config-gps",
         "enable_gps_set_loc":     "config-gps-set",
@@ -304,6 +308,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // Map sidebar data-step attribute to step keys
     var SIDEBAR_STEP_MAP = {
+        "pf":      "enable_photofolders",
         "sync":    "enable_sync_exif",
         "gps":     "enable_gps_gap_fill",
         "gps_set": "enable_gps_set_loc",
@@ -609,13 +614,26 @@ document.addEventListener("DOMContentLoaded", function() {
         var result = { valid: true, errors: [], warnings: [] };
         var data = collectFormData();
 
-        // 1) Folder check
-        if (!data.photo_dir) {
+        // Check which steps are enabled
+        var enabledSteps = selectionOrder.filter(function(key) { return data[key]; });
+        var onlyPhotofolders = enabledSteps.length === 1 && enabledSteps[0] === "enable_photofolders";
+        var hasPhotofolders = enabledSteps.indexOf("enable_photofolders") >= 0;
+
+        // 1) Folder check — skip if ONLY photofolders is enabled (it creates folders, doesn't need one)
+        if (!onlyPhotofolders) {
+            if (!data.photo_dir) {
+                result.valid = false;
+                result.errors.push("No photo directory specified.");
+            } else if (!folderValid) {
+                result.valid = false;
+                result.errors.push("Photo directory has not been validated. Click the check button or type a valid path.");
+            }
+        }
+
+        // Photofolders-specific validation
+        if (hasPhotofolders && !data.pf_project_name) {
             result.valid = false;
-            result.errors.push("No photo directory specified.");
-        } else if (!folderValid) {
-            result.valid = false;
-            result.errors.push("Photo directory has not been validated. Click the check button or type a valid path.");
+            result.errors.push("Create Project Folders: project name is required.");
         }
 
         // 2) At least one step
@@ -740,6 +758,30 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // ---- Toggle step enable/disable based on checkboxes ----
 
+    // Photofolders is mutually exclusive with all other steps
+    function _syncPhotofoldersExclusion() {
+        var pfCb = document.querySelector('input[name="enable_photofolders"]');
+        if (!pfCb) return;
+        var pfChecked = pfCb.checked;
+
+        document.querySelectorAll(".section-toggle").forEach(function(other) {
+            if (other.name === "enable_photofolders") return;
+            var step = other.closest(".sidebar-step");
+            if (pfChecked) {
+                other.disabled = true;
+                if (other.checked) {
+                    other.checked = false;
+                    var idx = selectionOrder.indexOf(other.name);
+                    if (idx >= 0) selectionOrder.splice(idx, 1);
+                }
+                if (step) step.style.opacity = "0.35";
+            } else {
+                other.disabled = false;
+                if (step) step.style.opacity = "";
+            }
+        });
+    }
+
     document.querySelectorAll(".section-toggle").forEach(function(cb) {
         function syncState() {
             if (cb.checked) {
@@ -752,6 +794,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 var idx = selectionOrder.indexOf(cb.name);
                 if (idx >= 0) selectionOrder.splice(idx, 1);
             }
+            _syncPhotofoldersExclusion();
             updateStepSequencing();
         }
 
@@ -761,6 +804,32 @@ document.addEventListener("DOMContentLoaded", function() {
         });
         syncState();
     });
+
+    // ---- Environment variable checks (disable steps missing required keys) ----
+
+    var GEOCODIO_STEPS = [
+        "enable_gps_set_loc", "enable_extract_summary",
+        "enable_geo_rename", "enable_gopro"
+    ];
+
+    fetch("/api/env_check")
+        .then(function(res) { return res.json(); })
+        .then(function(env) {
+            if (!env.geocodio_api_key) {
+                GEOCODIO_STEPS.forEach(function(stepKey) {
+                    var cb = document.querySelector('input[name="' + stepKey + '"]');
+                    if (!cb) return;
+                    cb.disabled = true;
+                    cb.title = "Requires GEOCODIO_API_KEY environment variable";
+                    var step = cb.closest(".sidebar-step");
+                    if (step) {
+                        step.style.opacity = "0.35";
+                        step.title = "Requires GEOCODIO_API_KEY environment variable";
+                    }
+                });
+            }
+        })
+        .catch(function() {});
 
     // ---- Header meta update ----
 
@@ -897,8 +966,9 @@ document.addEventListener("DOMContentLoaded", function() {
                     showContentViewTabs();
                     showBackupRow();
 
-                    // Store detected subfolders for project mode
+                    // Store detected subfolders and photo count for project mode
                     detectedSubfolders = data.subfolders || [];
+                    detectedPhotoCount = data.photo_count || 0;
                     if (detectedSubfolders.length > 0 && data.photo_count === 0) {
                         var totalSub = detectedSubfolders.reduce(function(s, f) { return s + f.photo_count; }, 0);
                         setFolderStatus(
@@ -1475,6 +1545,15 @@ document.addEventListener("DOMContentLoaded", function() {
                 item.appendChild(badge);
             }
 
+            // Always show filename under thumbnail
+            var metaDiv = document.createElement("div");
+            metaDiv.className = "thumb-meta";
+            var fnDiv = document.createElement("div");
+            fnDiv.className = "thumb-meta-filename";
+            fnDiv.textContent = file.name;
+            metaDiv.appendChild(fnDiv);
+            item.appendChild(metaDiv);
+
             item.addEventListener("click", function() {
                 openThumbPreview(parseInt(item.dataset.idx, 10));
             });
@@ -1495,24 +1574,21 @@ document.addEventListener("DOMContentLoaded", function() {
         .then(function(res) { return res.json(); })
         .then(function(data) {
             if (!data.results || Object.keys(data.results).length === 0) return;
-            // Find thumb items and add metadata
             photoThumbsGrid.querySelectorAll(".photo-thumb-item").forEach(function(item) {
                 var fp = item.dataset.filepath;
                 var meta = data.results[fp];
                 if (!meta) return;
-                // Skip if already enriched
-                if (item.querySelector(".thumb-meta")) return;
+                // Skip if already enriched with summary
+                if (item.querySelector(".thumb-meta-summary")) return;
 
-                var metaDiv = document.createElement("div");
-                metaDiv.className = "thumb-meta";
+                var metaDiv = item.querySelector(".thumb-meta");
+                if (!metaDiv) {
+                    metaDiv = document.createElement("div");
+                    metaDiv.className = "thumb-meta";
+                    item.appendChild(metaDiv);
+                }
 
-                // Filename
-                var fnDiv = document.createElement("div");
-                fnDiv.className = "thumb-meta-filename";
-                fnDiv.textContent = meta.file_name || "";
-                metaDiv.appendChild(fnDiv);
-
-                // Summary line: Model · Date · Focal · Aperture · ISO
+                // Add summary line: Model · Date · Focal · Aperture · ISO
                 var parts = [];
                 if (meta.model) parts.push(meta.model);
                 if (meta.date_time_original) parts.push(meta.date_time_original.split(" ")[0]);
@@ -1526,11 +1602,10 @@ document.addEventListener("DOMContentLoaded", function() {
                     metaDiv.appendChild(sumDiv);
                 }
 
-                item.appendChild(metaDiv);
-
-                // Hover tooltip with caption
-                if (meta.caption) {
-                    item.title = meta.caption;
+                // Hover tooltip: prefer caption or headline over bare filename
+                var tooltip = meta.caption || meta.headline || "";
+                if (tooltip) {
+                    item.title = tooltip;
                 }
             });
         })
@@ -3007,8 +3082,9 @@ document.addEventListener("DOMContentLoaded", function() {
         }
         appendLogLines(header);
 
-        // Project mode: include subfolder paths if the current folder has subfolders
-        if (detectedSubfolders.length > 0) {
+        // Project mode: only if the target folder has NO photos of its own
+        // (i.e. it is a project root containing subfolders with photos)
+        if (detectedSubfolders.length > 0 && detectedPhotoCount === 0) {
             data.project_folders = detectedSubfolders.map(function(f) { return f.path; });
             appendLogLines("Project mode: " + detectedSubfolders.length + " subfolders\n");
         }
@@ -4989,8 +5065,9 @@ document.addEventListener("DOMContentLoaded", function() {
             sel.selectedIndex = 0;
         });
 
-        // Clear step selection order
+        // Clear step selection order and restore all step checkboxes
         selectionOrder = [];
+        _syncPhotofoldersExclusion();
         updateStepSequencing();
 
         // Close inspector
@@ -5073,6 +5150,347 @@ document.addEventListener("DOMContentLoaded", function() {
             photoDirInput.placeholder = "Paste the folder path here (browser security prevents auto-fill)";
         }
     });
+
+    // ---- Author Profile Management (Copyright / Creator step) ----
+
+    var mcProfileSelect = document.getElementById("mc-profile-select");
+    var mcProfilePreview = document.getElementById("mc-profile-preview");
+    var mcProfileStatus = document.getElementById("mc-profile-status");
+    var btnMcSave = document.getElementById("btn-mc-save-profile");
+    var btnMcDelete = document.getElementById("btn-mc-delete-profile");
+    var _mcProfiles = [];
+    var _mcProfilesLoaded = false;
+
+    // Field name -> form input name mapping
+    var MC_FIELDS = ["author", "copyright", "email", "website", "credit", "source"];
+
+    function _mcGetField(field) {
+        var el = document.querySelector('[name="mc_' + field + '"]');
+        return el ? el.value.trim() : "";
+    }
+
+    function _mcSetField(field, val) {
+        var el = document.querySelector('[name="mc_' + field + '"]');
+        if (el) el.value = val || "";
+    }
+
+    function _mcLoadProfiles() {
+        fetch("/api/author_profiles")
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                _mcProfiles = data.profiles || [];
+                _mcProfilesLoaded = true;
+                _mcRenderSelect();
+            })
+            .catch(function() {});
+    }
+
+    function _mcRenderSelect() {
+        if (!mcProfileSelect) return;
+        var curVal = mcProfileSelect.value;
+        mcProfileSelect.innerHTML = '<option value="">(none — enter manually)</option>';
+        _mcProfiles.forEach(function(p) {
+            var opt = document.createElement("option");
+            opt.value = p.profile_name;
+            var label = p.profile_name;
+            var extras = [];
+            if (p.email) extras.push(p.email);
+            if (p.website) extras.push(p.website);
+            if (extras.length) label += " — " + extras.join(" · ");
+            opt.textContent = label;
+            mcProfileSelect.appendChild(opt);
+        });
+        // Restore selection if still valid
+        for (var i = 0; i < mcProfileSelect.options.length; i++) {
+            if (mcProfileSelect.options[i].value === curVal) {
+                mcProfileSelect.value = curVal;
+                break;
+            }
+        }
+        _mcUpdatePreviewAndDelete();
+    }
+
+    function _mcUpdatePreviewAndDelete() {
+        var sel = mcProfileSelect ? mcProfileSelect.value : "";
+        if (btnMcDelete) btnMcDelete.style.display = sel ? "" : "none";
+
+        if (!mcProfilePreview) return;
+        if (!sel) {
+            mcProfilePreview.style.display = "none";
+            return;
+        }
+
+        var p = _mcProfiles.find(function(x) { return x.profile_name === sel; });
+        if (!p) {
+            mcProfilePreview.style.display = "none";
+            return;
+        }
+
+        var parts = [];
+        if (p.author) parts.push("<b>Author:</b> " + escapeHtml(p.author));
+        if (p.copyright) parts.push("<b>Copyright:</b> " + escapeHtml(p.copyright));
+        if (p.email) parts.push("<b>Email:</b> " + escapeHtml(p.email));
+        if (p.website) parts.push("<b>Web:</b> " + escapeHtml(p.website));
+        if (p.credit) parts.push("<b>Credit:</b> " + escapeHtml(p.credit));
+        if (p.source) parts.push("<b>Source:</b> " + escapeHtml(p.source));
+
+        mcProfilePreview.innerHTML = parts.join(" &nbsp;·&nbsp; ");
+        mcProfilePreview.style.display = parts.length ? "" : "none";
+    }
+
+    // When a profile is selected from the dropdown, populate the fields
+    if (mcProfileSelect) {
+        mcProfileSelect.addEventListener("change", function() {
+            var sel = mcProfileSelect.value;
+            _mcUpdatePreviewAndDelete();
+
+            if (!sel) return; // "(none)" selected — leave fields as-is
+
+            var p = _mcProfiles.find(function(x) { return x.profile_name === sel; });
+            if (!p) return;
+
+            MC_FIELDS.forEach(function(f) {
+                _mcSetField(f, p[f] || "");
+            });
+        });
+    }
+
+    // Save current fields as a profile
+    if (btnMcSave) {
+        btnMcSave.addEventListener("click", function() {
+            var author = _mcGetField("author");
+            if (!author) {
+                if (mcProfileStatus) mcProfileStatus.innerHTML = '<span style="color:var(--ps-warning)">Enter an author name first</span>';
+                return;
+            }
+
+            // Use author name as default profile name, let user confirm
+            var profileName = mcProfileSelect && mcProfileSelect.value ? mcProfileSelect.value : author;
+            var input = prompt("Save profile as:", profileName);
+            if (!input) return;
+
+            var body = { profile_name: input };
+            MC_FIELDS.forEach(function(f) { body[f] = _mcGetField(f); });
+
+            if (mcProfileStatus) mcProfileStatus.innerHTML = '<span class="text-muted">Saving...</span>';
+
+            fetch("/api/author_profiles/save", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(body),
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    if (mcProfileStatus) mcProfileStatus.innerHTML = '<span style="color:var(--ps-danger)">' + escapeHtml(data.error) + '</span>';
+                    return;
+                }
+                if (mcProfileStatus) mcProfileStatus.innerHTML = '<span style="color:var(--ps-success)"><i class="bi bi-check-circle"></i> Saved</span>';
+                // Reload profiles and select the new one
+                fetch("/api/author_profiles")
+                    .then(function(res) { return res.json(); })
+                    .then(function(data2) {
+                        _mcProfiles = data2.profiles || [];
+                        _mcRenderSelect();
+                        if (mcProfileSelect) mcProfileSelect.value = input;
+                        _mcUpdatePreviewAndDelete();
+                    });
+            })
+            .catch(function() {
+                if (mcProfileStatus) mcProfileStatus.innerHTML = '<span style="color:var(--ps-danger)">Save failed</span>';
+            });
+        });
+    }
+
+    // Delete selected profile
+    if (btnMcDelete) {
+        btnMcDelete.addEventListener("click", function() {
+            var sel = mcProfileSelect ? mcProfileSelect.value : "";
+            if (!sel) return;
+            if (!confirm('Delete author profile "' + sel + '"?')) return;
+
+            var safeName = sel.replace(/[^a-zA-Z0-9_\-]/g, '_');
+
+            fetch("/api/author_profiles/" + encodeURIComponent(safeName), { method: "DELETE" })
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    if (data.ok) {
+                        if (mcProfileStatus) mcProfileStatus.innerHTML = '<span style="color:var(--ps-success)"><i class="bi bi-check-circle"></i> Deleted</span>';
+                        mcProfileSelect.value = "";
+                        _mcLoadProfiles();
+                    }
+                })
+                .catch(function() {});
+        });
+    }
+
+    // Auto-fill copyright when author is typed and copyright is empty or was auto-filled
+    var _mcAuthorEl = document.querySelector('[name="mc_author"]');
+    var _mcCopyrightEl = document.querySelector('[name="mc_copyright"]');
+    var _mcCopyrightAutoFilled = false;
+    if (_mcAuthorEl && _mcCopyrightEl) {
+        _mcAuthorEl.addEventListener("input", function() {
+            var name = _mcAuthorEl.value.trim();
+            var cur = _mcCopyrightEl.value.trim();
+            // Auto-fill only if copyright is empty or was previously auto-filled
+            if (!cur || _mcCopyrightAutoFilled) {
+                _mcCopyrightEl.value = name ? "\u00A9 %Y " + name : "";
+                _mcCopyrightAutoFilled = !!name;
+            }
+        });
+        // Reset auto-fill flag if user manually edits copyright
+        _mcCopyrightEl.addEventListener("input", function() {
+            _mcCopyrightAutoFilled = false;
+        });
+    }
+
+    // Auto-load profiles when the Copyright/Creator step is first clicked
+    var mcStepEl = document.querySelector('.sidebar-step[data-step="mcopy"]');
+    if (mcStepEl) {
+        mcStepEl.addEventListener("click", function() {
+            if (!_mcProfilesLoaded) _mcLoadProfiles();
+        });
+    }
+
+    // ---- Photofolders Equipment Editor ----
+
+    var pfCategoriesEditor = document.getElementById("pf-categories-editor");
+    var pfProcessedInput = document.getElementById("pf-processed-subfolders");
+    var pfConfigPathInput = document.getElementById("pf-config-path");
+    var pfConfigStatus = document.getElementById("pf-config-status");
+    var pfLoadBtn = document.getElementById("btn-pf-load-config");
+    var pfSaveBtn = document.getElementById("btn-pf-save-config");
+    var pfAddCatBtn = document.getElementById("btn-pf-add-category");
+
+    function _pfRenderCategories(categories) {
+        if (!pfCategoriesEditor) return;
+        pfCategoriesEditor.innerHTML = "";
+
+        categories.forEach(function(cat, idx) {
+            var card = document.createElement("div");
+            card.className = "pf-category-card";
+            card.style.cssText = "border:1px solid var(--ps-border);border-radius:var(--ps-radius-md);padding:8px 10px;margin-bottom:6px;position:relative";
+
+            card.innerHTML =
+                '<div class="d-flex gap-2 mb-1 align-items-center">' +
+                '  <div style="flex:1"><label class="form-label" style="font-size:10px;margin:0">Category ID</label>' +
+                '  <input type="text" class="form-control form-control-sm pf-cat-id" value="' + escapeHtml(cat.id || "") + '" placeholder="e.g. photo_cameras" style="font-size:11px"></div>' +
+                '  <div style="flex:1"><label class="form-label" style="font-size:10px;margin:0">Folder Name</label>' +
+                '  <input type="text" class="form-control form-control-sm pf-cat-path" value="' + escapeHtml(cat.path || "") + '" placeholder="e.g. photo_cameras" style="font-size:11px"></div>' +
+                '  <button type="button" class="btn btn-sm pf-remove-cat" title="Remove category" style="color:var(--ps-danger);align-self:flex-end;padding:4px 6px"><i class="bi bi-trash"></i></button>' +
+                '</div>' +
+                '<div class="mb-1"><label class="form-label" style="font-size:10px;margin:0">Equipment <span class="field-help">(semicolon-separated)</span></label>' +
+                '<input type="text" class="form-control form-control-sm pf-cat-equip" value="' + escapeHtml(cat.equipment || "") + '" placeholder="e.g. X-T3;Z9;D750" style="font-size:11px"></div>' +
+                '<div><label class="form-label" style="font-size:10px;margin:0">Subfolders <span class="field-help">(semicolon-separated)</span></label>' +
+                '<input type="text" class="form-control form-control-sm pf-cat-subs" value="' + escapeHtml(cat.subfolders || "") + '" placeholder="e.g. photos;photos/jpg;photos/raw;videos" style="font-size:11px"></div>';
+
+            card.querySelector(".pf-remove-cat").addEventListener("click", function() {
+                card.remove();
+            });
+
+            pfCategoriesEditor.appendChild(card);
+        });
+    }
+
+    function _pfCollectCategories() {
+        var categories = [];
+        if (!pfCategoriesEditor) return categories;
+        pfCategoriesEditor.querySelectorAll(".pf-category-card").forEach(function(card) {
+            var id = card.querySelector(".pf-cat-id").value.trim();
+            if (!id) return;
+            categories.push({
+                id: id,
+                path: card.querySelector(".pf-cat-path").value.trim() || id,
+                equipment: card.querySelector(".pf-cat-equip").value.trim(),
+                subfolders: card.querySelector(".pf-cat-subs").value.trim(),
+            });
+        });
+        return categories;
+    }
+
+    // Load config from file
+    if (pfLoadBtn) {
+        pfLoadBtn.addEventListener("click", function() {
+            var configPath = pfConfigPathInput ? pfConfigPathInput.value.trim() : "";
+            var url = "/api/photofolders/config";
+            if (configPath) url += "?path=" + encodeURIComponent(configPath);
+
+            pfConfigStatus.innerHTML = '<span class="text-muted">Loading...</span>';
+
+            fetch(url)
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    if (data.error) {
+                        pfConfigStatus.innerHTML = '<span style="color:var(--ps-danger)">' + escapeHtml(data.error) + '</span>';
+                        return;
+                    }
+                    _pfRenderCategories(data.categories || []);
+                    if (pfProcessedInput) pfProcessedInput.value = data.processed_subfolders || "";
+                    if (pfConfigPathInput && data.config_path) pfConfigPathInput.value = data.config_path;
+                    pfConfigStatus.innerHTML = '<span style="color:var(--ps-success)"><i class="bi bi-check-circle"></i> Loaded ' + (data.categories || []).length + ' categories</span>';
+                })
+                .catch(function() {
+                    pfConfigStatus.innerHTML = '<span style="color:var(--ps-danger)">Failed to load config</span>';
+                });
+        });
+    }
+
+    // Save config to file
+    if (pfSaveBtn) {
+        pfSaveBtn.addEventListener("click", function() {
+            var configPath = pfConfigPathInput ? pfConfigPathInput.value.trim() : "";
+            if (!configPath) {
+                pfConfigStatus.innerHTML = '<span style="color:var(--ps-warning)">Enter a config file path</span>';
+                return;
+            }
+
+            var body = {
+                config_path: configPath,
+                categories: _pfCollectCategories(),
+                processed_subfolders: pfProcessedInput ? pfProcessedInput.value.trim() : "",
+            };
+
+            pfConfigStatus.innerHTML = '<span class="text-muted">Saving...</span>';
+
+            fetch("/api/photofolders/config/save", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(body),
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.error) {
+                    pfConfigStatus.innerHTML = '<span style="color:var(--ps-danger)">' + escapeHtml(data.error) + '</span>';
+                    return;
+                }
+                pfConfigStatus.innerHTML = '<span style="color:var(--ps-success)"><i class="bi bi-check-circle"></i> Saved</span>';
+            })
+            .catch(function() {
+                pfConfigStatus.innerHTML = '<span style="color:var(--ps-danger)">Save failed</span>';
+            });
+        });
+    }
+
+    // Add new empty category
+    if (pfAddCatBtn) {
+        pfAddCatBtn.addEventListener("click", function() {
+            _pfRenderCategories(_pfCollectCategories().concat([{
+                id: "", path: "", equipment: "", subfolders: "photos;photos/jpg;photos/raw;videos;videos/original"
+            }]));
+        });
+    }
+
+    // Auto-load default config when the step is first clicked
+    var pfStepEl = document.querySelector('.sidebar-step[data-step="pf"]');
+    var pfConfigLoaded = false;
+    if (pfStepEl) {
+        pfStepEl.addEventListener("click", function() {
+            if (!pfConfigLoaded && pfCategoriesEditor && pfCategoriesEditor.children.length === 0) {
+                pfConfigLoaded = true;
+                if (pfLoadBtn) pfLoadBtn.click();
+            }
+        });
+    }
 
     // ---- AI Search ----
 

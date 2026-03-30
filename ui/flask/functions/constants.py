@@ -9,6 +9,7 @@ PHOTO_EXTENSIONS = {
 
 # Human-readable labels used in preflight messages.
 STEP_PREFLIGHT_LABELS = {
+    "enable_photofolders":    "Create Project Folders",
     "enable_sync_exif":       "Sync EXIF & Rename",
     "enable_gps_gap_fill":    "GPS Gap Fill",
     "enable_gps_set_loc":     "Set GPS Location",
@@ -29,6 +30,7 @@ STEP_PREFLIGHT_LABELS = {
 
 # Maps each step key to the external tools it requires.
 STEP_TOOL_DEPS = {
+    "enable_photofolders":    [],
     "enable_sync_exif":       ["exiftool"],
     "enable_gps_gap_fill":    ["exiftool"],
     "enable_gps_set_loc":     ["exiftool", "curl"],
@@ -58,6 +60,7 @@ TOOL_LABELS = {
 
 # Default step order (used when client doesn't send step_order).
 DEFAULT_STEP_ORDER = [
+    "enable_photofolders",
     "enable_sync_exif", "enable_gps_gap_fill", "enable_gps_set_loc", "enable_extract_summary",
     "enable_annotate_desc", "enable_annotate_kw", "enable_annotate_hl",
     "enable_metadata_consistency",
