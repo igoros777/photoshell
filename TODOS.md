@@ -6,6 +6,22 @@
 
 ## Completed
 
+### Stock Compliance Checker
+**Completed:** v1.7.0 (2026-04-02)
+`stock_compliance.sh` validates photos against 9 stock agency rules (file size, dimensions, format, color space, metadata). JSON spec file with all agency constraints. UI shows red/yellow tags on thumbnails with click-to-expand per-agency detail modal. Agency checkbox selector in the Finalize group.
+
+### Author Profiles
+**Completed:** v1.7.0 (2026-04-02)
+Save/load photographer identity as named JSON profiles in `.photoshell/authors/`. Dropdown with email+URL preview in Copyright/Creator step. Auto-fill copyright from author name.
+
+### Create Project Folders Step
+**Completed:** v1.7.0 (2026-04-02)
+`photofolders.sh` integrated as the first workflow step in Ingest & Prepare. Visual equipment category editor with load/save config. Mutually exclusive with other steps.
+
+### EXIF Write Resilience
+**Completed:** v1.7.0 (2026-04-02)
+All metadata-writing scripts handle multi-segment EXIF (Nikon Z exports) by falling back to IPTC+XMP. Summary writes to ImageDescription instead of UserComment to avoid visible charset prefix.
+
 ### AI Search
 **Completed:** v1.7.0 (2026-03-27)
 New AI Search tab in the Search panel. Ollama converts free-form queries into search keywords + synonyms, then SQL matches them against catalog text fields (ImageDescription, UserComment, Caption, Headline, Keywords, location). Four search modes with prompt templates. Two-phase architecture: one LLM call + instant SQL scoring.

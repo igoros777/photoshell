@@ -148,6 +148,7 @@ Check the steps you want to run in the sidebar. Common workflow:
 5. **Annotate - Keywords** — AI-generated tags (requires Ollama)
 6. **Annotate - Headline** — short title for stock/catalog use (requires Ollama)
 7. **Detect Blurry Photos** — scores sharpness, groups scenes, and picks the best
+8. **Stock Compliance** — check photos against Shutterstock, Adobe Stock, Getty, Alamy, and other agency requirements
 
 Click any step name to configure its options in the inspector panel.
 

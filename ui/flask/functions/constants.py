@@ -25,6 +25,7 @@ STEP_PREFLIGHT_LABELS = {
     "enable_metadata_consistency": "Consistency Audit",
     "enable_catalog_update":  "Update Catalog",
     "enable_contact_sheet":   "Contact Sheet",
+    "enable_stock_compliance": "Stock Compliance",
     "enable_scrub":           "Scrub Metadata",
 }
 
@@ -46,6 +47,7 @@ STEP_TOOL_DEPS = {
     "enable_metadata_consistency": ["exiftool", "ollama"],
     "enable_catalog_update":  ["exiftool"],
     "enable_contact_sheet":   ["exiftool", "imagemagick"],
+    "enable_stock_compliance": ["exiftool"],
     "enable_scrub":           ["exiftool"],
 }
 
@@ -67,5 +69,5 @@ DEFAULT_STEP_ORDER = [
     "enable_blur", "enable_geo_rename", "enable_gopro",
     "enable_metadata_replace", "enable_metadata_copyright",
     "enable_catalog_update",
-    "enable_contact_sheet", "enable_scrub",
+    "enable_contact_sheet", "enable_stock_compliance", "enable_scrub",
 ]

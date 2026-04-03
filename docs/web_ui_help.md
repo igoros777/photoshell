@@ -51,7 +51,8 @@ flowchart TD
 
     subgraph G5 [Finalize]
         H5[Catalog Update] --> I[Contact Sheet]
-        I --> J[Scrub]
+        I --> SC[Stock Check]
+        SC --> J[Scrub]
     end
 
     G1 --> G2 --> G3 --> G4 --> G5
@@ -75,6 +76,7 @@ flowchart TD
 | | Copyright / Creator | Batch-write photographer name, copyright, email, website, credit, source |
 | **Finalize** | Update Catalog | Keeps the SQLite catalog in sync — creates, prunes, and indexes in one step |
 | | Contact Sheet | Generates a proof sheet image with thumbnails and metadata captions |
+| | Stock Compliance | Validates photos against stock agency submission rules (file size, dimensions, format, color space, metadata) |
 | | Scrub Metadata | Clears selected EXIF/IPTC fields (destructive — use with care) |
 
 ## Step Ordering

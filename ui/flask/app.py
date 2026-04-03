@@ -517,6 +517,20 @@ def _build_step(key, data):
 
         return {"label": "Update Catalog", "cmd": cmd}
 
+    if key == "enable_stock_compliance" and data.get(key):
+        cmd = ["bash", _script("stock_compliance.sh")]
+        agencies = (data.get("sc_agencies") or "").strip()
+        if agencies:
+            cmd += ["-a", agencies]
+        if data.get("sc_recursive"):
+            cmd.append("--recursive")
+        if data.get("sc_json"):
+            cmd.append("--json")
+        rules_path = (data.get("sc_rules_path") or "").strip()
+        if rules_path:
+            cmd += ["--rules", rules_path]
+        return {"label": "Stock Compliance", "cmd": cmd}
+
     if key == "enable_scrub" and data.get(key):
         cmd = ["bash", _script("scrub_selected_metadata.sh")]
         if data.get("scrub_exif_tags"):
@@ -2613,6 +2627,33 @@ def api_ai_search():
         })
     finally:
         conn.close()
+
+
+@app.route("/api/stock_compliance_results")
+def api_stock_compliance_results():
+    """Return stock compliance check results for a directory."""
+    path = request.args.get("path", "").strip()
+    if not path:
+        return jsonify({"has_results": False})
+    try:
+        path = _sanitize_dir_path(path)
+    except ValueError:
+        return jsonify({"has_results": False})
+    target, error = _resolve_directory(path)
+    if error:
+        return jsonify({"has_results": False})
+
+    results_path = os.path.join(target, ".photoshell", "stock_compliance_results.json")
+    if not os.path.isfile(results_path):
+        return jsonify({"has_results": False})
+
+    try:
+        with open(results_path, "r") as f:
+            data = json.loads(f.read())
+        data["has_results"] = True
+        return jsonify(data)
+    except Exception:
+        return jsonify({"has_results": False})
 
 
 @app.route("/api/download")

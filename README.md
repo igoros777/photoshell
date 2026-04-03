@@ -199,7 +199,10 @@ Use `--host` and `--port` to customize the bind address (e.g., `python3 app.py -
 - **EXIF/IPTC viewer** — click any photo thumbnail to preview it, then view full EXIF or IPTC metadata in a scrollable table with one click
 - **Drag-and-drop** — drop a folder onto the UI to set the photo directory
 - **Contact sheet splitting** — automatically split large collections across multiple sheets (configurable max images per sheet)
-- **Backup** — create timestamped `.tar.gz` archives with size estimation before running
+- **Stock compliance** — validate photos against stock agency submission rules (Shutterstock, Adobe Stock, Getty, Alamy, and 5 more) checking file size, dimensions, format, color space, and metadata. Per-file pass/fail/warning results shown as colored tags on thumbnails with a click-to-expand detail modal
+- **Author profiles** — save and load photographer identity (name, copyright, email, website, credit, source) as named profiles in the Copyright/Creator step. Dropdown with email + URL preview, auto-fill copyright from author name
+- **Create Project Folders** — new workflow step wrapping `photofolders.sh` to create standardized folder hierarchies with a visual equipment editor, config load/save, and dry-run preview
+- **Backup** — create timestamped archives with size estimation. Compression options: none (default for photos), pigz (parallel, `-0` store mode), gzip, or auto-detect. Cancel button removes incomplete archives
 - **Keyboard shortcuts** — `R` (run), `Esc` (cancel), `/` (focus path), `V` (validate), `?` (help)
 - **Completion sounds** — audio notification on pipeline success or failure
 - **Responsive** — works on desktop and mobile viewports
@@ -229,6 +232,8 @@ The UI follows a DaVinci Resolve-inspired dark pro-tool aesthetic with warm ambe
 - [`scripts/metadata_replace.sh`](scripts/metadata_replace.sh): Find and replace text across 20 EXIF/IPTC/XMP metadata fields. Keyword-aware, regex support, case-insensitive matching, dry-run preview.
 - [`scripts/metadata_copyright.sh`](scripts/metadata_copyright.sh): Batch-write photographer name, copyright notice (with `%Y` year substitution), email, website, credit, and source to IPTC/EXIF/XMP fields.
 - [`scripts/metadata_consistency.sh`](scripts/metadata_consistency.sh): Ollama-powered consistency audit — reads all descriptions in a folder, detects outliers, and optionally fixes them. Four prompt modes: general, event/location, tone/style, hallucination detection.
+- [`scripts/stock_compliance.sh`](scripts/stock_compliance.sh): Validate photos against stock agency submission requirements (file size, dimensions, format, color space, metadata). Checks 9 agencies from a JSON rules file. Human-readable or JSON output.
+- [`scripts/stock_compliance.json`](scripts/stock_compliance.json): Stock agency submission rules for Shutterstock, Adobe Stock, Getty Images, iStock, Alamy, 500px, Dreamstime, Depositphotos, and 123RF.
 - [`scripts/ai_search.prompts.txt`](scripts/ai_search.prompts.txt): Prompt templates for the AI Search feature — four modes (General, Mood/Atmosphere, Subject/Activity, Location/Setting) that guide keyword generation from natural-language queries.
 
 ## Documentation

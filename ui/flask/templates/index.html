@@ -331,6 +331,18 @@
                             </span>
                         </div>
 
+                        <div class="sidebar-step" data-step="stockchk">
+                            <input class="form-check-input section-toggle" type="checkbox"
+                                   id="chk-stockchk" name="enable_stock_compliance" data-section="sec-stockchk">
+                            <span class="sidebar-step-label"><i class="bi bi-patch-check"></i> Stock Compliance</span>
+                            <span class="sidebar-step-badge step-badge" style="display:none" data-step-key="enable_stock_compliance">Step</span>
+                            <span class="sidebar-step-actions">
+                                <i class="bi bi-info-circle step-tooltip" tabindex="0"
+                                   data-bs-toggle="popover" data-bs-trigger="hover focus"
+                                   data-bs-content="Validates photos against stock agency submission rules — file size, dimensions, format, color space, and metadata (title, keywords, caption). Checks Shutterstock, Adobe Stock, Getty, Alamy, and more."></i>
+                            </span>
+                        </div>
+
                         <div class="sidebar-step" data-step="scrub">
                             <input class="form-check-input section-toggle" type="checkbox"
                                    id="chk-scrub" name="enable_scrub" data-section="sec-scrub">
@@ -1010,6 +1022,73 @@
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="cat_rebuild" id="cat-rebuild">
                         <label class="form-check-label" for="cat-rebuild">Rebuild from scratch</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stock Compliance Check -->
+            <div class="step-config" id="config-stockchk" style="display:none">
+                <p class="section-desc">
+                    Validates photos against stock agency submission requirements — file size, dimensions,
+                    format, color space, and metadata (title length, keyword count, caption).
+                </p>
+                <div class="mb-3">
+                    <label class="form-label">Agencies to check</label>
+                    <div id="sc-agency-checkboxes" class="d-flex flex-wrap gap-3" style="font-size:12px">
+                        <div class="form-check">
+                            <input class="form-check-input sc-agency-cb" type="checkbox" value="Shutterstock" id="sc-ag-ss" checked>
+                            <label class="form-check-label" for="sc-ag-ss">Shutterstock</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input sc-agency-cb" type="checkbox" value="Adobe Stock" id="sc-ag-as" checked>
+                            <label class="form-check-label" for="sc-ag-as">Adobe Stock</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input sc-agency-cb" type="checkbox" value="Getty Images" id="sc-ag-gi" checked>
+                            <label class="form-check-label" for="sc-ag-gi">Getty Images</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input sc-agency-cb" type="checkbox" value="iStock" id="sc-ag-is">
+                            <label class="form-check-label" for="sc-ag-is">iStock</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input sc-agency-cb" type="checkbox" value="Alamy" id="sc-ag-al" checked>
+                            <label class="form-check-label" for="sc-ag-al">Alamy</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input sc-agency-cb" type="checkbox" value="500px" id="sc-ag-5x">
+                            <label class="form-check-label" for="sc-ag-5x">500px</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input sc-agency-cb" type="checkbox" value="Dreamstime" id="sc-ag-dt">
+                            <label class="form-check-label" for="sc-ag-dt">Dreamstime</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input sc-agency-cb" type="checkbox" value="Depositphotos" id="sc-ag-dp">
+                            <label class="form-check-label" for="sc-ag-dp">Depositphotos</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input sc-agency-cb" type="checkbox" value="123RF" id="sc-ag-rf">
+                            <label class="form-check-label" for="sc-ag-rf">123RF</label>
+                        </div>
+                    </div>
+                    <input type="hidden" name="sc_agencies" id="sc-agencies-hidden" value="">
+                </div>
+                <div class="field-row">
+                    <div>
+                        <label class="form-label">Custom Rules File (optional)</label>
+                        <input type="text" class="form-control form-control-sm" name="sc_rules_path"
+                               placeholder="Default: scripts/stock_compliance.json">
+                    </div>
+                </div>
+                <div class="d-flex flex-wrap gap-3 mt-2">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="sc_recursive" id="sc-rec">
+                        <label class="form-check-label" for="sc-rec">Include subfolders</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="sc_json" id="sc-json">
+                        <label class="form-check-label" for="sc-json">JSON output</label>
                     </div>
                 </div>
             </div>

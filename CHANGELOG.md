@@ -38,9 +38,47 @@
 - Catalog quick search and structured filters now cover all text fields including Description and Comment
 - All catalog queries detect available columns dynamically so older catalogs continue to work without rebuilding
 
+### Stock Compliance Checker
+- New **Stock Compliance** workflow step validates photos against 9 stock agency submission rules (Shutterstock, Adobe Stock, Getty, iStock, Alamy, 500px, Dreamstime, Depositphotos, 123RF)
+- Checks file size, dimensions (megapixels), format, color space, title length/content, and keyword count per agency
+- Results saved as JSON and displayed as red (fail) / yellow (warn) tags on thumbnails — click any tag for a per-agency breakdown modal
+- Agency rules stored in an editable `stock_compliance.json` spec file
+- UI panel with checkboxes for each agency (top 5 checked by default)
+
+### Author Profiles
+- Save and load photographer identity as named profiles in the Copyright/Creator step
+- Dropdown shows profile name, email, and website for quick identification
+- Selecting a profile auto-fills all 6 form fields (author, copyright, email, website, credit, source)
+- Auto-fill copyright field (`© %Y <name>`) when author name is entered
+
+### Create Project Folders
+- New first step in "Ingest & Prepare" wraps `photofolders.sh` with a visual equipment category editor
+- Add, remove, and customize equipment categories and their subfolder templates directly in the UI
+- Load/Save config files for reuse across projects
+- Mutually exclusive with all other workflow steps (grays out the rest when enabled)
+
+### Backup Improvements
+- Compression selector: none (default), pigz (parallel `-0` store), gzip, or auto-detect
+- Cancel button kills the backup process and removes the incomplete archive file
+- pigz uses `-0` (store mode) by default since photo files barely compress
+
+### EXIF Write Resilience
+- All metadata-writing scripts now handle multi-segment EXIF files (common in Nikon Z exports) by falling back to IPTC+XMP when EXIF writes fail
+- Affects: `extract_photo_summary.sh`, `annotate_photos_with_ollama.sh` (description, keywords, headline), `gps_gap_fill.sh`, `gps_set_location.sh`
+- Summary no longer writes to `UserComment` (which has a visible `ASCII` charset prefix) — uses `ImageDescription` + `IPTC:Caption-Abstract` + `XMP:Description` instead
+
+### Geo Rename Resilience
+- `geo_rename_photos.sh` now falls back to `ModifyDate` when `DateTimeOriginal` and `CreateDate` are missing — fixes skipped files from image editors that strip original dates
+
+### Environment & Advisory Checks
+- `GEOCODIO_API_KEY` is checked on page load — steps requiring it (Set GPS Location, Extract Photo Summary, Geo Rename, GoPro Rename) are grayed out with a tooltip if the key is not set
+- RAW file advisory: warns when AI annotation steps target a folder containing RAW formats that vision models cannot process correctly
+
 ### Thumbnail Enhancements
 - Folder browser thumbnails now show filename + camera summary (model · date · focal · aperture · ISO) when a catalog exists
-- Hovering over a thumbnail shows the full IPTC caption in a tooltip
+- Filenames and summaries wrap instead of truncating — readable even with long geo-renamed names
+- Hovering over a thumbnail shows caption or headline (not bare filename) when catalog data exists
+- Thumbnail always shows filename regardless of catalog availability
 - Photo preview modal now fetches and displays headline, description, caption, summary, and keywords
 - Thumbnail grid size matches catalog search results (180px)
 

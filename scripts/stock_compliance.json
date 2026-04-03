@@ -1,0 +1,105 @@
+{
+  "generated_on": "2026-03-31",
+  "timezone": "America/New_York",
+  "services": [
+    {
+      "service": "Shutterstock",
+      "file_size": { "min_bytes": null, "max_bytes": 52428800 },
+      "image_dimensions": { "min_mp": 4.0, "max_mp": 150.0 },
+      "allowed_formats": ["jpeg", "tiff"],
+      "color_space": "sRGB",
+      "title": { "min_words": 5, "max_chars": 2048, "language": "english", "no_special_chars": true },
+      "keywords": { "min": 7, "max": 50, "separator": "comma" },
+      "ai_policy": "allowed_with_labeling",
+      "notes": "Commercial titles must be English, descriptive, >=5 words. Categories required."
+    },
+    {
+      "service": "Adobe Stock",
+      "file_size": { "min_bytes": null, "max_bytes": 47185920 },
+      "image_dimensions": { "min_mp": 4.0, "max_mp": 100.0 },
+      "allowed_formats": ["jpeg"],
+      "color_space": "sRGB",
+      "title": { "min_words": null, "max_chars": 70, "language": null, "no_special_chars": false },
+      "keywords": { "min": null, "max": 49, "separator": null },
+      "ai_policy": "allowed_with_labeling",
+      "notes": "sRGB required. Do not enlarge files. Keyword order matters (top 10 prioritized). No logos/trademarks/watermarks."
+    },
+    {
+      "service": "Getty Images",
+      "file_size": { "min_bytes": null, "max_bytes": 52428800 },
+      "image_dimensions": { "min_mp": 3.0, "max_mp": 256.0 },
+      "allowed_formats": ["jpeg"],
+      "color_space": null,
+      "title": { "min_words": null, "max_chars": null, "language": null, "no_special_chars": false },
+      "keywords": { "min": null, "max": null, "separator": null },
+      "ai_policy": "rejected",
+      "notes": "No content created or modified with generative AI. Releases required for recognizable people/property."
+    },
+    {
+      "service": "iStock",
+      "file_size": { "min_bytes": null, "max_bytes": 52428800 },
+      "image_dimensions": { "min_mp": 3.0, "max_mp": 256.0 },
+      "allowed_formats": ["jpeg"],
+      "color_space": null,
+      "title": { "min_words": null, "max_chars": null, "language": null, "no_special_chars": false },
+      "keywords": { "min": null, "max": null, "separator": null },
+      "ai_policy": "rejected",
+      "notes": "Policy aligns with Getty: no generative-AI content."
+    },
+    {
+      "service": "Alamy",
+      "file_size": { "min_bytes": 17825792, "max_bytes": null },
+      "image_dimensions": { "min_mp": null, "max_mp": null },
+      "allowed_formats": ["jpeg"],
+      "color_space": "sRGB",
+      "title": { "min_words": null, "max_chars": null, "language": "english", "no_special_chars": false },
+      "keywords": { "min": 5, "max": 50, "separator": null },
+      "ai_policy": "rejected",
+      "notes": "Min uncompressed >17MB. High-quality JPEG (level 8+). Caption required to sell. No AI-generated images."
+    },
+    {
+      "service": "500px",
+      "file_size": { "min_bytes": null, "max_bytes": null },
+      "image_dimensions": { "min_mp": 3.0, "max_mp": null },
+      "allowed_formats": ["jpeg"],
+      "color_space": "sRGB",
+      "title": { "min_words": null, "max_chars": null, "language": null, "no_special_chars": false },
+      "keywords": { "min": 5, "max": null, "separator": null },
+      "ai_policy": "rejected",
+      "notes": "RGB and JPEG required. Licensing excludes AI-generated content."
+    },
+    {
+      "service": "Dreamstime",
+      "file_size": { "min_bytes": null, "max_bytes": 1073741824 },
+      "image_dimensions": { "min_mp": 3.0, "max_mp": 70.0 },
+      "allowed_formats": ["jpeg"],
+      "color_space": "sRGB",
+      "title": { "min_words": null, "max_chars": null, "language": "english", "no_special_chars": false },
+      "keywords": { "min": null, "max": null, "separator": null },
+      "ai_policy": "unspecified",
+      "notes": "English required for title/description/keywords. RGB/sRGB; CMYK can cause issues."
+    },
+    {
+      "service": "Depositphotos",
+      "file_size": { "min_bytes": null, "max_bytes": 52428800 },
+      "image_dimensions": { "min_mp": 3.4, "max_mp": null },
+      "allowed_formats": ["jpeg", "png"],
+      "color_space": "sRGB",
+      "title": { "min_words": null, "max_chars": null, "language": "english", "no_special_chars": false },
+      "keywords": { "min": null, "max": 50, "separator": null },
+      "ai_policy": "rejected",
+      "notes": "Must not resize from original. No AI-generated files."
+    },
+    {
+      "service": "123RF",
+      "file_size": { "min_bytes": null, "max_bytes": null },
+      "image_dimensions": { "min_mp": 6.0, "max_mp": null },
+      "allowed_formats": ["jpeg"],
+      "color_space": null,
+      "title": { "min_words": null, "max_chars": null, "language": null, "no_special_chars": false },
+      "keywords": { "min": 7, "max": null, "separator": null },
+      "ai_policy": "unspecified",
+      "notes": "JPEG only, minimum 80% quality. Scans suggest >=300 DPI."
+    }
+  ]
+}

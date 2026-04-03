@@ -262,7 +262,8 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_metadata_copyright": 13,
         "enable_catalog_update":  14,
         "enable_contact_sheet":   15,
-        "enable_scrub":           16
+        "enable_stock_compliance": 16,
+        "enable_scrub":           17
     };
 
     var STEP_LABELS = {
@@ -282,6 +283,7 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_metadata_consistency": "Consistency Audit",
         "enable_catalog_update":  "Update Catalog",
         "enable_contact_sheet":   "Contact Sheet",
+        "enable_stock_compliance": "Stock Compliance",
         "enable_scrub":           "Scrub Metadata"
     };
 
@@ -303,6 +305,7 @@ document.addEventListener("DOMContentLoaded", function() {
         "enable_metadata_consistency": "config-mcon",
         "enable_catalog_update":  "config-catupd",
         "enable_contact_sheet":   "config-cs",
+        "enable_stock_compliance": "config-stockchk",
         "enable_scrub":           "config-scrub"
     };
 
@@ -324,6 +327,7 @@ document.addEventListener("DOMContentLoaded", function() {
         "mcon":    "enable_metadata_consistency",
         "catupd":  "enable_catalog_update",
         "cs":      "enable_contact_sheet",
+        "stockchk":"enable_stock_compliance",
         "scrub":   "enable_scrub"
     };
 
@@ -1529,6 +1533,9 @@ document.addEventListener("DOMContentLoaded", function() {
 
                 // Enrich thumbnails with catalog metadata (if catalog exists)
                 enrichThumbsFromCatalog(resolvedPath, data.files);
+
+                // Overlay stock compliance tags (if results exist)
+                fetchStockComplianceResults(resolvedPath);
 
                 // Load more button
                 photoThumbsFooter.innerHTML = "";
@@ -3190,10 +3197,11 @@ document.addEventListener("DOMContentLoaded", function() {
                         // Play completion sound
                         if (data.status === "done") playSuccessSound();
                         else if (data.status === "failed" || data.status === "cancelled") playErrorSound();
-                        // Re-check blur/undo availability after pipeline completes
+                        // Re-check blur/undo/compliance availability after pipeline completes
                         if (lastResolvedPath) {
                             checkBlurResultsAvailable(lastResolvedPath);
                             checkUndoAvailable(lastResolvedPath);
+                            fetchStockComplianceResults(lastResolvedPath);
                         }
                     }
                 })
@@ -5181,6 +5189,167 @@ document.addEventListener("DOMContentLoaded", function() {
             photoDirInput.placeholder = "Paste the folder path here (browser security prevents auto-fill)";
         }
     });
+
+    // ---- Stock Compliance: sync agency checkboxes + result overlays ----
+
+    function _syncStockAgencies() {
+        var hidden = document.getElementById("sc-agencies-hidden");
+        if (!hidden) return;
+        var checked = [];
+        document.querySelectorAll(".sc-agency-cb:checked").forEach(function(cb) {
+            checked.push(cb.value);
+        });
+        hidden.value = checked.join(",");
+    }
+
+    document.querySelectorAll(".sc-agency-cb").forEach(function(cb) {
+        cb.addEventListener("change", _syncStockAgencies);
+    });
+    _syncStockAgencies();
+
+    var _stockComplianceResults = null;
+
+    function fetchStockComplianceResults(dirPath) {
+        if (!dirPath) return;
+        fetch("/api/stock_compliance_results?path=" + encodeURIComponent(dirPath))
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (!data.has_results) {
+                    _stockComplianceResults = null;
+                    return;
+                }
+                _stockComplianceResults = {};
+                (data.results || []).forEach(function(r) {
+                    _stockComplianceResults[r.file] = r;
+                });
+                _overlayComplianceTags();
+            })
+            .catch(function() { _stockComplianceResults = null; });
+    }
+
+    function _overlayComplianceTags() {
+        if (!_stockComplianceResults) return;
+        photoThumbsGrid.querySelectorAll(".photo-thumb-item").forEach(function(item) {
+            // Remove any existing compliance tags
+            item.querySelectorAll(".sc-tag").forEach(function(t) { t.remove(); });
+
+            var fp = item.dataset.filepath;
+            if (!fp) return;
+            var fname = fp.split("/").pop().split("\\").pop();
+            var r = _stockComplianceResults[fname];
+            if (!r) return;
+
+            var failCount = 0;
+            var warnCount = 0;
+            var agencies = r.agencies || {};
+            for (var sname in agencies) {
+                var a = agencies[sname];
+                failCount += (a.issues || []).length;
+                warnCount += (a.warnings || []).length;
+            }
+
+            if (failCount === 0 && warnCount === 0) return;
+
+            var tagContainer = document.createElement("div");
+            tagContainer.className = "sc-tag-container";
+
+            if (failCount > 0) {
+                var failTag = document.createElement("span");
+                failTag.className = "sc-tag sc-tag-fail";
+                failTag.textContent = failCount + " fail";
+                failTag.addEventListener("click", function(e) {
+                    e.stopPropagation();
+                    _openComplianceModal(r);
+                });
+                tagContainer.appendChild(failTag);
+            }
+
+            if (warnCount > 0) {
+                var warnTag = document.createElement("span");
+                warnTag.className = "sc-tag sc-tag-warn";
+                warnTag.textContent = warnCount + " warn";
+                warnTag.addEventListener("click", function(e) {
+                    e.stopPropagation();
+                    _openComplianceModal(r);
+                });
+                tagContainer.appendChild(warnTag);
+            }
+
+            // Insert tags after the image, before thumb-meta
+            var meta = item.querySelector(".thumb-meta");
+            if (meta) {
+                item.insertBefore(tagContainer, meta);
+            } else {
+                item.appendChild(tagContainer);
+            }
+        });
+    }
+
+    function _openComplianceModal(r) {
+        var modal = document.getElementById("complianceModal");
+        if (!modal) {
+            // Create the modal dynamically on first use
+            modal = document.createElement("div");
+            modal.className = "modal fade";
+            modal.id = "complianceModal";
+            modal.tabIndex = -1;
+            modal.innerHTML =
+                '<div class="modal-dialog modal-lg modal-dialog-scrollable">' +
+                '  <div class="modal-content">' +
+                '    <div class="modal-header">' +
+                '      <h5 class="modal-title" id="compliance-modal-title"></h5>' +
+                '      <button type="button" class="btn-close" data-bs-dismiss="modal"></button>' +
+                '    </div>' +
+                '    <div class="modal-body" id="compliance-modal-body" style="font-size:13px"></div>' +
+                '  </div>' +
+                '</div>';
+            document.body.appendChild(modal);
+        }
+
+        var title = document.getElementById("compliance-modal-title");
+        var body = document.getElementById("compliance-modal-body");
+
+        title.textContent = "Stock Compliance: " + (r.file || "");
+
+        var html = '<div style="margin-bottom:12px;color:var(--ps-text-muted);font-size:12px">' +
+            r.dimensions + ' &middot; ' + r.megapixels + ' MP &middot; ' +
+            r.keyword_count + ' keywords &middot; ' + r.format.toUpperCase() +
+            ' &middot; ' + r.color_space + '</div>';
+
+        var agencies = r.agencies || {};
+        for (var sname in agencies) {
+            var a = agencies[sname];
+            var statusColor = a.status === "PASS" ? "var(--ps-success)" : "var(--ps-danger)";
+            html += '<div style="margin-bottom:10px">';
+            html += '<div style="font-weight:600;margin-bottom:4px">' +
+                '<span style="color:' + statusColor + '">' + escapeHtml(a.status) + '</span> ' +
+                escapeHtml(sname) + '</div>';
+
+            if (a.issues && a.issues.length > 0) {
+                a.issues.forEach(function(issue) {
+                    html += '<div style="color:var(--ps-danger);padding-left:12px;font-size:12px">' +
+                        '<i class="bi bi-x-circle-fill"></i> ' + escapeHtml(issue) + '</div>';
+                });
+            }
+            if (a.warnings && a.warnings.length > 0) {
+                a.warnings.forEach(function(warn) {
+                    html += '<div style="color:var(--ps-warning);padding-left:12px;font-size:12px">' +
+                        '<i class="bi bi-exclamation-triangle-fill"></i> ' + escapeHtml(warn) + '</div>';
+                });
+            }
+            if ((!a.issues || a.issues.length === 0) && (!a.warnings || a.warnings.length === 0)) {
+                html += '<div style="color:var(--ps-success);padding-left:12px;font-size:12px">' +
+                    '<i class="bi bi-check-circle-fill"></i> All checks passed</div>';
+            }
+
+            html += '</div>';
+        }
+
+        body.innerHTML = html;
+
+        var bsModal = bootstrap.Modal.getOrCreateInstance(modal);
+        bsModal.show();
+    }
 
     // ---- Author Profile Management (Copyright / Creator step) ----
 
