@@ -51,10 +51,19 @@
                     </button>
                 </div>
                 <div id="folder-status" class="mt-1"></div>
-                <div class="d-flex gap-2 mt-1 align-items-center" id="folder-backup-row" style="display:none !important">
-                    <button type="button" class="btn btn-sm btn-photoshell" id="btn-quick-backup" title="Create .tar archive of the folder">
+                <div class="d-flex gap-2 mt-1 align-items-center flex-wrap" id="folder-backup-row" style="display:none !important">
+                    <button type="button" class="btn btn-sm btn-photoshell" id="btn-quick-backup" title="Create backup archive of the folder">
                         <i class="bi bi-archive"></i> Backup
                     </button>
+                    <button type="button" class="btn btn-sm btn-cancel" id="btn-cancel-backup" style="display:none" title="Cancel backup and remove incomplete archive">
+                        <i class="bi bi-x-circle"></i> Cancel
+                    </button>
+                    <select class="form-select form-select-sm" id="backup-compress-select" style="width:auto;font-size:11px" title="Compression: photos barely compress — use gzip/pigz only for mixed content">
+                        <option value="none" selected>no compression</option>
+                        <option value="auto">auto (pigz/gzip)</option>
+                        <option value="pigz">pigz</option>
+                        <option value="gzip">gzip</option>
+                    </select>
                     <div class="form-check" style="font-size:11px">
                         <input class="form-check-input" type="checkbox" id="backup-recursive-chk">
                         <label class="form-check-label" for="backup-recursive-chk">Recursive</label>

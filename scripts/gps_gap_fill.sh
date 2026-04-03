@@ -233,12 +233,18 @@ fill_missing_gps() {
           lon_ref="W"
         fi
 
-        exiftool -overwrite_original -n \
+        if ! exiftool -overwrite_original -n \
           "-GPSLatitude=${donor_lat}" \
           "-GPSLongitude=${donor_lon}" \
           "-GPSLatitudeRef=${lat_ref}" \
           "-GPSLongitudeRef=${lon_ref}" \
-          "${FNAMES[j]}" >/dev/null 2>&1
+          "${FNAMES[j]}" >/dev/null 2>&1; then
+          # Fallback for multi-segment EXIF: write GPS via XMP
+          exiftool -m -overwrite_original -n \
+            "-XMP:GPSLatitude=${donor_lat}" \
+            "-XMP:GPSLongitude=${donor_lon}" \
+            "${FNAMES[j]}" >/dev/null 2>&1 || echo "WARNING: GPS write failed for ${FNAMES[j]}" >&2
+        fi
       fi
 
       ((tagged++)) || true

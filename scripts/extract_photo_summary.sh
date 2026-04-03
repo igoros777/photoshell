@@ -311,16 +311,29 @@ write_comment() {
     echo "Error: no summary to write" >&2
     return 1
   fi
+  # Write to ImageDescription (plain text, no charset prefix), IPTC Caption, and XMP Description.
+  # Avoid UserComment — the EXIF spec prepends a charset marker (e.g. "ASCII") that leaks
+  # into the visible text in many viewers.
   if exiftool -overwrite_original \
-    -Comment="${comment}" \
-    -UserComment="${comment}" \
+    -EXIF:ImageDescription="${comment}" \
     -IPTC:Caption-Abstract="${comment}" \
     -XMP:Description="${comment}" \
     "${file}" >/dev/null 2>&1; then
     echo "Comment written to ${file}"
   else
-    echo "Error: failed to write comment to ${file}" >&2
-    return 1
+    # Fallback: some JPEGs (e.g. Nikon Z exports) have multi-segment EXIF
+    # with external pointers that exiftool cannot modify.  Write to
+    # IPTC + XMP only — these live outside the EXIF APP1 segments.
+    echo "NOTE: EXIF write failed (multi-segment EXIF?), falling back to IPTC+XMP: ${file}" >&2
+    if exiftool -m -overwrite_original \
+      -IPTC:Caption-Abstract="${comment}" \
+      -XMP:Description="${comment}" \
+      "${file}" >/dev/null 2>&1; then
+      echo "Comment written to ${file} (IPTC+XMP only)"
+    else
+      echo "Error: failed to write comment to ${file}" >&2
+      return 1
+    fi
   fi
 }
 export -f write_comment

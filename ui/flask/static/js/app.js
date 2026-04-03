@@ -1391,10 +1391,12 @@ document.addEventListener("DOMContentLoaded", function() {
     // ---- Quick Backup ----
 
     var btnQuickBackup = document.getElementById("btn-quick-backup");
+    var btnCancelBackup = document.getElementById("btn-cancel-backup");
     var quickBackupStatus = document.getElementById("quick-backup-status");
     var folderBackupRow = document.getElementById("folder-backup-row");
+    var _backupJobId = null;
+    var _backupPollTimer = null;
 
-    // Show backup row after folder validation succeeds
     function showBackupRow() {
         if (folderBackupRow) folderBackupRow.style.cssText = "display:flex !important";
     }
@@ -1402,37 +1404,49 @@ document.addEventListener("DOMContentLoaded", function() {
         if (folderBackupRow) folderBackupRow.style.cssText = "display:none !important";
     }
 
+    function _backupDone() {
+        btnQuickBackup.disabled = false;
+        if (btnCancelBackup) btnCancelBackup.style.display = "none";
+        _backupJobId = null;
+    }
+
     btnQuickBackup.addEventListener("click", function() {
         var dir = lastResolvedPath;
         if (!dir) { alert("Validate a folder first."); return; }
         var recursive = document.getElementById("backup-recursive-chk").checked;
+        var compressSelect = document.getElementById("backup-compress-select");
+        var compress = compressSelect ? compressSelect.value : "auto";
 
         btnQuickBackup.disabled = true;
-        quickBackupStatus.innerHTML = '<i class="bi bi-hourglass-split"></i> Creating archive...';
+        if (btnCancelBackup) btnCancelBackup.style.display = "";
+        quickBackupStatus.innerHTML = '<i class="bi bi-hourglass-split spin"></i> Creating archive...';
 
         fetch("/api/quick_backup", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({path: dir, recursive: recursive})
+            body: JSON.stringify({path: dir, recursive: recursive, compress: compress})
         })
         .then(function(res) { return res.json(); })
         .then(function(data) {
             if (data.error) {
                 quickBackupStatus.innerHTML = '<span style="color:var(--ps-danger)">' + data.error + '</span>';
-                btnQuickBackup.disabled = false;
+                _backupDone();
                 return;
             }
-            // Poll for completion
-            var jobId = data.job_id;
-            var pollTimer = setInterval(function() {
-                fetch("/api/status/" + jobId)
+            _backupJobId = data.job_id;
+            _backupPollTimer = setInterval(function() {
+                fetch("/api/status/" + _backupJobId)
                     .then(function(r) { return r.json(); })
                     .then(function(d) {
                         if (d.status !== "running") {
-                            clearInterval(pollTimer);
-                            btnQuickBackup.disabled = false;
+                            clearInterval(_backupPollTimer);
+                            _backupPollTimer = null;
+                            _backupDone();
                             if (d.status === "done") {
-                                quickBackupStatus.innerHTML = '<span style="color:var(--ps-success)"><i class="bi bi-check-circle"></i> ' + data.archive + '</span>';
+                                quickBackupStatus.innerHTML = '<span style="color:var(--ps-success)"><i class="bi bi-check-circle"></i> ' + escapeHtml(data.archive) + '</span>' +
+                                    (data.compression ? ' <span style="color:var(--ps-text-dim);font-size:10px">(' + escapeHtml(data.compression) + ')</span>' : '');
+                            } else if (d.status === "cancelled") {
+                                quickBackupStatus.innerHTML = '<span style="color:var(--ps-text-muted)">Cancelled — incomplete archive removed</span>';
                             } else {
                                 quickBackupStatus.innerHTML = '<span style="color:var(--ps-danger)">Backup failed</span>';
                             }
@@ -1442,9 +1456,26 @@ document.addEventListener("DOMContentLoaded", function() {
         })
         .catch(function() {
             quickBackupStatus.innerHTML = '<span style="color:var(--ps-danger)">Request failed</span>';
-            btnQuickBackup.disabled = false;
+            _backupDone();
         });
     });
+
+    if (btnCancelBackup) {
+        btnCancelBackup.addEventListener("click", function() {
+            if (!_backupJobId) return;
+            fetch("/api/cancel/" + _backupJobId, {method: "POST"});
+            if (_backupPollTimer) {
+                clearInterval(_backupPollTimer);
+                _backupPollTimer = null;
+            }
+            quickBackupStatus.innerHTML = '<span style="color:var(--ps-text-muted)">Cancelling...</span>';
+            // Poll once more to confirm cancellation
+            setTimeout(function() {
+                _backupDone();
+                quickBackupStatus.innerHTML = '<span style="color:var(--ps-text-muted)">Cancelled — incomplete archive removed</span>';
+            }, 1500);
+        });
+    }
 
     // ---- Photo thumbnail grid ----
 

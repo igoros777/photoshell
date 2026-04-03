@@ -158,20 +158,32 @@ fi
 
 # ---- Create backup ----
 
+# Select compression program: pigz (parallel) > gzip (single-threaded)
+COMPRESS_PROG="gzip"
+COMPRESS_LABEL="gzip (single-threaded)"
+if command -v pigz >/dev/null 2>&1; then
+    CORES=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+    COMPRESS_PROG="pigz -0 -p ${CORES}"
+    COMPRESS_LABEL="pigz -0 (${CORES} threads, store — photos don't compress)"
+fi
+
 echo "Creating archive: $ARCHIVE_PATH"
+echo "Compression: ${COMPRESS_LABEL}"
 echo
 
 if $RECURSIVE; then
-    tar -czf "$ARCHIVE_PATH" -C "$(dirname "$SOURCE")" "$FOLDER_NAME"
+    tar -cf - -C "$(dirname "$SOURCE")" "$FOLDER_NAME" | ${COMPRESS_PROG} > "$ARCHIVE_PATH"
 else
     # Non-recursive: only top-level files
     # Use null-terminated strings to handle filenames with spaces/special chars
     find "$SOURCE" -maxdepth 1 -type f -printf '%f\0' 2>/dev/null \
-        | tar -czf "$ARCHIVE_PATH" -C "$SOURCE" --null -T - 2>/dev/null \
+        | tar -cf - -C "$SOURCE" --null -T - 2>/dev/null \
+        | ${COMPRESS_PROG} > "$ARCHIVE_PATH" \
     || {
         # macOS/BSD fallback: -printf not available
         cd "$SOURCE"
-        find . -maxdepth 1 -type f -print0 | sed -z 's|^\./||' | tar -czf "$ARCHIVE_PATH" --null -T -
+        find . -maxdepth 1 -type f -print0 | sed -z 's|^\./||' \
+            | tar -cf - --null -T - | ${COMPRESS_PROG} > "$ARCHIVE_PATH"
     }
 fi
 

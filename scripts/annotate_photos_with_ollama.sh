@@ -459,10 +459,16 @@ append_description_metadata() {
   local file="$1"
   local description="$2"
 
-  exiftool -overwrite_original \
+  if ! exiftool -overwrite_original \
     "-EXIF:ImageDescription=${description}" \
     "-IPTC:Caption-Abstract=${description}" \
-    "${file}" >/dev/null
+    "${file}" >/dev/null 2>&1; then
+    # Fallback for multi-segment EXIF (e.g. Nikon Z exports with large MakerNotes)
+    exiftool -m -overwrite_original \
+      "-IPTC:Caption-Abstract=${description}" \
+      "-XMP:Description=${description}" \
+      "${file}" >/dev/null 2>&1 || echo "WARNING: metadata write failed for ${file}" >&2
+  fi
 }
 
 read_existing_iptc_keywords() {
@@ -524,7 +530,11 @@ append_keywords_metadata() {
   done
   exif_args+=("${file}")
 
-  exiftool "${exif_args[@]}" >/dev/null
+  if ! exiftool "${exif_args[@]}" >/dev/null 2>&1; then
+    # Fallback with -m for multi-segment EXIF files
+    exif_args[0]="-m"
+    exiftool -overwrite_original "${exif_args[@]}" >/dev/null 2>&1 || return 1
+  fi
 }
 
 process_description_workflow() {
@@ -612,9 +622,15 @@ append_headline_metadata() {
   local file="$1"
   local headline="$2"
 
-  exiftool -overwrite_original \
+  if ! exiftool -overwrite_original \
     "-IPTC:Headline=${headline}" \
-    "${file}" >/dev/null
+    "${file}" >/dev/null 2>&1; then
+    # Fallback for multi-segment EXIF
+    exiftool -m -overwrite_original \
+      "-IPTC:Headline=${headline}" \
+      "-XMP:Headline=${headline}" \
+      "${file}" >/dev/null 2>&1 || echo "WARNING: headline write failed for ${file}" >&2
+  fi
 }
 
 process_headline_workflow() {

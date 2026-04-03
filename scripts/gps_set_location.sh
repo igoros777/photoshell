@@ -226,12 +226,18 @@ write_gps() {
     return 0
   fi
 
-  exiftool -overwrite_original -n \
+  if ! exiftool -overwrite_original -n \
     "-GPSLatitude=${abs_lat}" \
     "-GPSLongitude=${abs_lng}" \
     "-GPSLatitudeRef=${lat_ref}" \
     "-GPSLongitudeRef=${lng_ref}" \
-    "${file}" >/dev/null 2>&1
+    "${file}" >/dev/null 2>&1; then
+    # Fallback for multi-segment EXIF: write GPS via XMP
+    exiftool -m -overwrite_original -n \
+      "-XMP:GPSLatitude=${abs_lat}" \
+      "-XMP:GPSLongitude=${abs_lng}" \
+      "${file}" >/dev/null 2>&1 || echo "WARNING: GPS write failed for ${file}" >&2
+  fi
 }
 
 # ---------------------------------------------------------------------------

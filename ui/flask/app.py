@@ -2716,10 +2716,18 @@ def api_discover_text_fields():
 
 @app.route("/api/quick_backup", methods=["POST"])
 def api_quick_backup():
-    """Create a non-compressed .tar archive of the photo directory."""
+    """Create a backup archive of the photo directory.
+
+    Compression modes:
+        none   — .tar (fastest, no compression)
+        gzip   — .tar.gz (single-threaded gzip)
+        pigz   — .tar.gz (parallel gzip, auto-detected)
+        auto   — pigz if available, else gzip (default)
+    """
     body = request.get_json(silent=True) or {}
     path = (body.get("path") or "").strip()
     recursive = bool(body.get("recursive", False))
+    compress = (body.get("compress") or "auto").strip().lower()
     if not path:
         return jsonify({"error": "No path specified"}), 400
 
@@ -2731,38 +2739,89 @@ def api_quick_backup():
     if error:
         return jsonify({"error": "Directory not accessible"}), 400
 
-    # Build tar command — non-compressed archive in the working directory
     folder_name = os.path.basename(target)
     timestamp = time.strftime("%Y%m%d-%H%M%S")
-    archive_name = "%s_backup_%s.tar" % (folder_name, timestamp)
+
+    # Determine compression
+    has_pigz = shutil.which("pigz") is not None
+    if compress == "auto":
+        compress = "pigz" if has_pigz else "gzip"
+    elif compress == "pigz" and not has_pigz:
+        compress = "gzip"
+
+    if compress == "none":
+        archive_name = "%s_backup_%s.tar" % (folder_name, timestamp)
+        compress_label = "none (tar only)"
+    else:
+        archive_name = "%s_backup_%s.tar.gz" % (folder_name, timestamp)
+        if compress == "pigz":
+            cores = os.cpu_count() or 4
+            compress_label = "pigz -0 (%d threads, store)" % cores
+        else:
+            compress_label = "gzip (single-threaded)"
+
     archive_path = os.path.join(target, archive_name)
 
-    if recursive:
-        cmd = ["tar", "cf", archive_path, "-C", os.path.dirname(target), folder_name,
-               "--exclude", archive_name]
+    # Build the shell command
+    if compress == "none":
+        if recursive:
+            cmd = ["tar", "cf", archive_path, "-C", os.path.dirname(target),
+                   folder_name, "--exclude", archive_name]
+        else:
+            cmd = ["bash", "-c",
+                   "cd %s && find . -maxdepth 1 -type f -print0 | tar cf %s --null -T -"
+                   % (shlex.quote(target), shlex.quote(archive_path))]
     else:
-        # Non-recursive: only top-level files
-        cmd = ["bash", "-c",
-               "cd %s && find . -maxdepth 1 -type f -print0 | tar cf %s --null -T -"
-               % (shlex.quote(target), shlex.quote(archive_path))]
+        # Compressed: pipe tar through gzip/pigz
+        # pigz uses -0 (store) by default — photos are already compressed,
+        # so real compression wastes CPU for negligible size reduction.
+        # pigz -0 still uses multiple threads for parallel I/O.
+        if compress == "pigz":
+            cores = os.cpu_count() or 4
+            comp_cmd = "pigz -0 -p %d" % cores
+        else:
+            comp_cmd = "gzip"
+
+        if recursive:
+            cmd = ["bash", "-c",
+                   "tar cf - -C %s %s --exclude %s | %s > %s"
+                   % (shlex.quote(os.path.dirname(target)),
+                      shlex.quote(folder_name),
+                      shlex.quote(archive_name),
+                      comp_cmd,
+                      shlex.quote(archive_path))]
+        else:
+            cmd = ["bash", "-c",
+                   "cd %s && find . -maxdepth 1 -type f -print0 | tar cf - --null -T - | %s > %s"
+                   % (shlex.quote(target), comp_cmd, shlex.quote(archive_path))]
 
     job_id = str(uuid.uuid4())[:8]
     with jobs_lock:
         jobs[job_id] = {
             "status": "running",
-            "log": "Creating backup: %s\n" % archive_name,
+            "log": "Creating backup: %s\nCompression: %s\n" % (archive_name, compress_label),
             "current_step": 0,
             "steps": ["Backup"],
             "pid": None,
             "created_at": time.time(),
+            "archive_path": archive_path,
         }
 
     def _run_backup():
         _run_step(job_id, 0, cmd, target)
         with jobs_lock:
             job = jobs.get(job_id)
-            if job and job["status"] == "running":
-                # Check if archive was created
+            if not job:
+                return
+            if job["status"] == "cancelled":
+                # Clean up incomplete archive
+                if os.path.isfile(archive_path):
+                    try:
+                        os.remove(archive_path)
+                        job["log"] += "\nIncomplete archive removed: %s\n" % archive_name
+                    except OSError:
+                        pass
+            elif job["status"] == "running":
                 if os.path.isfile(archive_path):
                     size_mb = os.path.getsize(archive_path) / (1024 * 1024)
                     job["log"] += "\nBackup created: %s (%.1f MB)\n" % (archive_name, size_mb)
@@ -2775,7 +2834,7 @@ def api_quick_backup():
     t.daemon = True
     t.start()
 
-    return jsonify({"job_id": job_id, "archive": archive_name})
+    return jsonify({"job_id": job_id, "archive": archive_name, "compression": compress_label})
 
 
 @app.route("/api/file_metadata")
@@ -3080,12 +3139,24 @@ def api_cancel(job_id):
         if not job:
             return jsonify({"error": "not found"}), 404
         pid = job.get("pid")
+        archive_path = job.get("archive_path")
         job["status"] = "cancelled"
         job["log"] += "\n*** Cancelled by user ***\n"
 
     if pid:
         try:
             os.kill(pid, 9)
+        except OSError:
+            pass
+
+    # Clean up incomplete backup archive if present
+    if archive_path and os.path.isfile(archive_path):
+        try:
+            os.remove(archive_path)
+            with jobs_lock:
+                job = jobs.get(job_id)
+                if job:
+                    job["log"] += "Incomplete archive removed: %s\n" % os.path.basename(archive_path)
         except OSError:
             pass
 
