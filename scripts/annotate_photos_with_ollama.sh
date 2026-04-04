@@ -459,14 +459,14 @@ append_description_metadata() {
   local file="$1"
   local description="$2"
 
+  # Write AI description to IPTC only.  EXIF:ImageDescription is reserved
+  # for the technical photo summary (written by extract_photo_summary.sh).
   if ! exiftool -overwrite_original \
-    "-EXIF:ImageDescription=${description}" \
     "-IPTC:Caption-Abstract=${description}" \
     "${file}" >/dev/null 2>&1; then
-    # Fallback for multi-segment EXIF (e.g. Nikon Z exports with large MakerNotes)
+    # Fallback for multi-segment EXIF
     exiftool -m -overwrite_original \
       "-IPTC:Caption-Abstract=${description}" \
-      "-XMP:Description=${description}" \
       "${file}" >/dev/null 2>&1 || echo "WARNING: metadata write failed for ${file}" >&2
   fi
 }
@@ -560,7 +560,7 @@ process_description_workflow() {
       continue
     fi
 
-    log "  replaced EXIF ImageDescription and IPTC Caption-Abstract"
+    log "  replaced IPTC Caption-Abstract"
   done
 }
 

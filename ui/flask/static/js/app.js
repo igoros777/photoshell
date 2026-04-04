@@ -1602,31 +1602,43 @@ document.addEventListener("DOMContentLoaded", function() {
         photoThumbsGrid.appendChild(frag);
     }
 
-    function enrichThumbsFromCatalog(resolvedPath, files) {
-        var paths = files.map(function(f) { return f.path; });
-        fetch("/api/catalog/lookup", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({path: resolvedPath, files: paths})
-        })
-        .then(function(res) { return res.json(); })
-        .then(function(data) {
-            if (!data.results || Object.keys(data.results).length === 0) return;
-            photoThumbsGrid.querySelectorAll(".photo-thumb-item").forEach(function(item) {
-                var fp = item.dataset.filepath;
-                var meta = data.results[fp];
-                if (!meta) return;
-                // Skip if already enriched with summary
-                if (item.querySelector(".thumb-meta-summary")) return;
+    // Pick the best photo summary from EXIF fields.
+    // The technical summary written by extract_photo_summary.sh uses "|" separators
+    // (e.g. "NIKON Z 9 | 24-70mm | ISO 400 | f/9 | ...").
+    // Returns the field with the most "|"-separated segments, or "" if neither has any.
+    function _bestSummary(meta) {
+        var desc = meta.image_description || "";
+        var comment = meta.user_comment || "";
+        // Strip the "ASCII" charset prefix that EXIF UserComment sometimes has
+        if (comment.indexOf("ASCII") === 0) comment = comment.replace(/^ASCII\s*/, "");
+        var descPipes = desc.split("|").length;
+        var commentPipes = comment.split("|").length;
+        if (descPipes >= commentPipes && descPipes > 1) return desc;
+        if (commentPipes > 1) return comment;
+        return desc || comment;
+    }
 
-                var metaDiv = item.querySelector(".thumb-meta");
-                if (!metaDiv) {
-                    metaDiv = document.createElement("div");
-                    metaDiv.className = "thumb-meta";
-                    item.appendChild(metaDiv);
-                }
+    function _applyThumbSummaries(itemSelector, resultMap, keyFn) {
+        document.querySelectorAll(itemSelector).forEach(function(item) {
+            if (item.querySelector(".thumb-meta-summary")) return;
+            var key = keyFn(item);
+            var meta = key ? resultMap[key] : null;
+            if (!meta) return;
 
-                // Add summary line: Model · Date · Focal · Aperture · ISO
+            var metaDiv = item.querySelector(".thumb-meta");
+            if (!metaDiv) {
+                metaDiv = document.createElement("div");
+                metaDiv.className = "thumb-meta";
+                item.appendChild(metaDiv);
+            }
+
+            var summary = _bestSummary(meta);
+            if (summary) {
+                var sumDiv = document.createElement("div");
+                sumDiv.className = "thumb-meta-summary";
+                sumDiv.textContent = summary;
+                metaDiv.appendChild(sumDiv);
+            } else {
                 var parts = [];
                 if (meta.model) parts.push(meta.model);
                 if (meta.date_time_original) parts.push(meta.date_time_original.split(" ")[0]);
@@ -1634,17 +1646,65 @@ document.addEventListener("DOMContentLoaded", function() {
                 if (meta.f_number) parts.push("f/" + meta.f_number);
                 if (meta.iso) parts.push("ISO " + meta.iso);
                 if (parts.length > 0) {
-                    var sumDiv = document.createElement("div");
-                    sumDiv.className = "thumb-meta-summary";
-                    sumDiv.textContent = parts.join(" \u00b7 ");
-                    metaDiv.appendChild(sumDiv);
+                    var sumDiv2 = document.createElement("div");
+                    sumDiv2.className = "thumb-meta-summary";
+                    sumDiv2.textContent = parts.join(" \u00b7 ");
+                    metaDiv.appendChild(sumDiv2);
                 }
+            }
 
-                // Hover tooltip: prefer caption or headline over bare filename
-                var tooltip = meta.caption || meta.headline || "";
-                if (tooltip) {
-                    item.title = tooltip;
-                }
+            var tooltip = meta.caption || meta.headline || "";
+            if (tooltip) item.title = tooltip;
+        });
+    }
+
+    function enrichThumbsFromCatalog(resolvedPath, files) {
+        var paths = files.map(function(f) { return f.path; });
+
+        // Try catalog lookup first
+        fetch("/api/catalog/lookup", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({path: resolvedPath, files: paths})
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.results && Object.keys(data.results).length > 0) {
+                _applyThumbSummaries(".photo-thumb-item", data.results, function(item) {
+                    return item.dataset.filepath;
+                });
+                return;
+            }
+            // No catalog — fall back to reading EXIF directly from files
+            _enrichThumbsFromExif(paths);
+        })
+        .catch(function() {
+            _enrichThumbsFromExif(paths);
+        });
+    }
+
+    function _enrichThumbsFromExif(paths) {
+        if (!paths || paths.length === 0) return;
+        fetch("/api/search_meta", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({files: paths})
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (!data.results || data.results.length === 0) return;
+            // Build a map by SourceFile path
+            var byPath = {};
+            data.results.forEach(function(r) {
+                byPath[r.file] = {
+                    image_description: r.description || "",
+                    user_comment: r.comment || "",
+                    caption: r.caption || "",
+                    headline: r.headline || "",
+                };
+            });
+            _applyThumbSummaries(".photo-thumb-item", byPath, function(item) {
+                return item.dataset.filepath;
             });
         })
         .catch(function() {});
@@ -4691,6 +4751,17 @@ document.addEventListener("DOMContentLoaded", function() {
                 detailEl.className = "search-result-field";
                 detailEl.textContent = details.join(" \u00b7 ");
                 meta.appendChild(detailEl);
+            }
+
+            // EXIF summary (from extract_photo_summary.sh)
+            var catSummary = _bestSummary(r);
+            if (catSummary) {
+                var sumEl = document.createElement("div");
+                sumEl.className = "search-result-field";
+                sumEl.style.fontSize = "10px";
+                sumEl.style.color = "var(--ps-text-muted)";
+                sumEl.textContent = catSummary;
+                meta.appendChild(sumEl);
             }
 
             if (r.headline) {

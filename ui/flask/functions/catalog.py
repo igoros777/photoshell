@@ -334,10 +334,18 @@ def catalog_lookup_files(db_path, file_paths):
         result = {}
         # Batch query with IN clause
         placeholders = ",".join("?" for _ in file_paths)
+        # Detect available columns (image_description/user_comment may not exist in older catalogs)
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(photos)").fetchall()}
+        extra_cols = ""
+        if "image_description" in existing:
+            extra_cols += ", image_description"
+        if "user_comment" in existing:
+            extra_cols += ", user_comment"
+
         rows = conn.execute(
             """SELECT file_path, file_name, headline, caption, model,
-                      date_time_original, f_number, focal_length, iso
-               FROM photos WHERE file_path IN ({})""".format(placeholders),
+                      date_time_original, f_number, focal_length, iso{}
+               FROM photos WHERE file_path IN ({})""".format(extra_cols, placeholders),
             file_paths
         ).fetchall()
         for row in rows:
