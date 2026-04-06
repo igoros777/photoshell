@@ -2,11 +2,12 @@
 
 `annotate_photos_with_ollama.sh` runs one Ollama metadata workflow at a time:
 
-- `--description` (default): generate a concise technical description and replace:
-  - `EXIF:ImageDescription`
+- `--description` (default): generate a natural-language description and write it to:
   - `IPTC:Caption-Abstract`
 - `--keywords`: generate keywords and populate `IPTC:Keywords` only when it is empty.
 - `--headline`: generate a short headline and populate `IPTC:Headline` only when it is empty. Includes Adobe Stock-optimized title prompts.
+
+All AI-generated metadata stays in IPTC fields. The EXIF fields (`ImageDescription`, `UserComment`) are reserved for the technical photo summary written by `extract_photo_summary.sh`. This separation prevents AI captions from clobbering technical capture data and vice versa.
 
 ![](../images/cdnmf5r4z6m6vie6gpeyfy8i0n1.jpg)
 
@@ -22,8 +23,8 @@ Description workflow:
 
 1. Runs `ollama run` with a description prompt.
 2. Normalizes output.
-3. Replaces `EXIF:ImageDescription` and `IPTC:Caption-Abstract`.
-4. Leaves `EXIF:UserComment` unchanged.
+3. Writes to `IPTC:Caption-Abstract` only.
+4. Leaves all EXIF fields unchanged so the technical summary from `extract_photo_summary.sh` is preserved.
 
 Keywords workflow:
 
@@ -155,7 +156,8 @@ Here's a sample contact sheet generated using the `./scripts/contact_sheet.sh` s
 ## Safety Notes
 
 - Metadata writes use `exiftool -overwrite_original` (the original file is replaced).
-- Description mode overwrites `EXIF:ImageDescription` and `IPTC:Caption-Abstract`.
+- Description mode overwrites `IPTC:Caption-Abstract` only.
 - Keywords mode writes `IPTC:Keywords` only when the field is empty, and skips already-populated files.
-- `EXIF:UserComment` is intentionally left unchanged by this script.
+- All `EXIF:*` fields are intentionally left unchanged by this script — the technical photo summary lives in `EXIF:ImageDescription` and `EXIF:UserComment` (written by `extract_photo_summary.sh`).
+- On files with multi-segment EXIF (e.g. Nikon Z exports), the script falls back to writing IPTC + XMP only.
 - Test on a copy first if you need a reversible workflow.

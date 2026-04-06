@@ -62,10 +62,14 @@
 - Cancel button kills the backup process and removes the incomplete archive file
 - pigz uses `-0` (store mode) by default since photo files barely compress
 
+### EXIF / IPTC Field Ownership
+- Clear separation between technical and AI metadata: photo summary writes to `EXIF:ImageDescription` + `EXIF:UserComment` only. AI description writes to `IPTC:Caption-Abstract` only. AI headline writes to `IPTC:Headline`. AI keywords write to `IPTC:Keywords`. No more cross-writes between content types
+- Thumbnail views (primary, catalog, search) auto-pick the photo summary from whichever EXIF field has the most pipe-separated segments via a shared `_bestSummary()` helper
+- Without a catalog, thumbnails fall back to reading EXIF directly via `/api/search_meta` so the summary appears even before indexing
+
 ### EXIF Write Resilience
 - All metadata-writing scripts now handle multi-segment EXIF files (common in Nikon Z exports) by falling back to IPTC+XMP when EXIF writes fail
 - Affects: `extract_photo_summary.sh`, `annotate_photos_with_ollama.sh` (description, keywords, headline), `gps_gap_fill.sh`, `gps_set_location.sh`
-- Summary no longer writes to `UserComment` (which has a visible `ASCII` charset prefix) — uses `ImageDescription` + `IPTC:Caption-Abstract` + `XMP:Description` instead
 
 ### Geo Rename Resilience
 - `geo_rename_photos.sh` now falls back to `ModifyDate` when `DateTimeOriginal` and `CreateDate` are missing — fixes skipped files from image editors that strip original dates

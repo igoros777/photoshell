@@ -25,11 +25,13 @@ Given one input image file, it:
 3. Converts capture time into a human-friendly phrase (for example: `Feb 5, 2026, late Wed afternoon`).
 4. Reverse-geocodes GPS coordinates through geocod.io.
 5. Builds a single summary line.
-6. Writes that summary into:
-   - `Comment`
-   - `UserComment`
-   - `IPTC:Caption-Abstract`
-   - `XMP:Description`
+6. Writes that summary into the EXIF fields only:
+   - `EXIF:ImageDescription`
+   - `EXIF:UserComment`
+
+   The script does NOT write to IPTC fields. `IPTC:Caption-Abstract` is reserved for the AI-generated description (written by `annotate_photos_with_ollama.sh`). This separation ensures the technical summary and the AI description never overwrite each other.
+
+   On files with multi-segment EXIF (e.g. Nikon Z exports) where direct EXIF writes fail, the script falls back to writing `XMP:Description` and `XMP:UserComment` so the data is preserved outside the EXIF APP1 segments.
 
 ## Summary Format
 
