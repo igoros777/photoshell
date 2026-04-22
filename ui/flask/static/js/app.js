@@ -1414,13 +1414,14 @@ document.addEventListener("DOMContentLoaded", function() {
         _backupJobId = null;
     }
 
-    btnQuickBackup.addEventListener("click", function() {
-        var dir = lastResolvedPath;
-        if (!dir) { alert("Validate a folder first."); return; }
-        var recursive = document.getElementById("backup-recursive-chk").checked;
-        var compressSelect = document.getElementById("backup-compress-select");
-        var compress = compressSelect ? compressSelect.value : "auto";
+    function _humanBytes(n) {
+        if (n >= 1073741824) return (n / 1073741824).toFixed(2) + " GB";
+        if (n >= 1048576) return (n / 1048576).toFixed(1) + " MB";
+        if (n >= 1024) return (n / 1024).toFixed(0) + " KB";
+        return n + " B";
+    }
 
+    function _startBackup(dir, recursive, compress, force) {
         btnQuickBackup.disabled = true;
         if (btnCancelBackup) btnCancelBackup.style.display = "";
         quickBackupStatus.innerHTML = '<i class="bi bi-hourglass-split spin"></i> Creating archive...';
@@ -1428,12 +1429,12 @@ document.addEventListener("DOMContentLoaded", function() {
         fetch("/api/quick_backup", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({path: dir, recursive: recursive, compress: compress})
+            body: JSON.stringify({path: dir, recursive: recursive, compress: compress, force: !!force})
         })
         .then(function(res) { return res.json(); })
         .then(function(data) {
             if (data.error) {
-                quickBackupStatus.innerHTML = '<span style="color:var(--ps-danger)">' + data.error + '</span>';
+                quickBackupStatus.innerHTML = '<span style="color:var(--ps-danger)">' + escapeHtml(data.error) + '</span>';
                 _backupDone();
                 return;
             }
@@ -1450,9 +1451,13 @@ document.addEventListener("DOMContentLoaded", function() {
                                 quickBackupStatus.innerHTML = '<span style="color:var(--ps-success)"><i class="bi bi-check-circle"></i> ' + escapeHtml(data.archive) + '</span>' +
                                     (data.compression ? ' <span style="color:var(--ps-text-dim);font-size:10px">(' + escapeHtml(data.compression) + ')</span>' : '');
                             } else if (d.status === "cancelled") {
-                                quickBackupStatus.innerHTML = '<span style="color:var(--ps-text-muted)">Cancelled — incomplete archive removed</span>';
+                                quickBackupStatus.innerHTML = '<span style="color:var(--ps-text-muted)">Cancelled — partial files cleaned up</span>';
                             } else {
-                                quickBackupStatus.innerHTML = '<span style="color:var(--ps-danger)">Backup failed</span>';
+                                // Surface the last line of the log so insufficient-space / tight-refused
+                                // messages from the script show up in the status bar.
+                                var tail = (d.log || "").trim().split("\n").slice(-3).join(" · ");
+                                quickBackupStatus.innerHTML = '<span style="color:var(--ps-danger)" title="' +
+                                    escapeHtml(tail) + '">Backup failed</span>';
                             }
                         }
                     });
@@ -1462,22 +1467,112 @@ document.addEventListener("DOMContentLoaded", function() {
             quickBackupStatus.innerHTML = '<span style="color:var(--ps-danger)">Request failed</span>';
             _backupDone();
         });
+    }
+
+    btnQuickBackup.addEventListener("click", function() {
+        var dir = lastResolvedPath;
+        if (!dir) { alert("Validate a folder first."); return; }
+        var recursive = document.getElementById("backup-recursive-chk").checked;
+        var compressSelect = document.getElementById("backup-compress-select");
+        var compress = compressSelect ? compressSelect.value : "none";
+
+        // Preflight: size + space + fs classification. Always runs before a
+        // backup so the user sees what they're about to commit to.
+        quickBackupStatus.innerHTML = '<i class="bi bi-hourglass-split spin"></i> Checking disk space...';
+        btnQuickBackup.disabled = true;
+
+        fetch("/api/backup/preflight", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({path: dir, recursive: recursive, compress: compress})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(pre) {
+            if (pre.error) {
+                quickBackupStatus.innerHTML = '<span style="color:var(--ps-danger)">' + escapeHtml(pre.error) + '</span>';
+                btnQuickBackup.disabled = false;
+                return;
+            }
+
+            var modalEl = document.getElementById("backupConfirmModal");
+            var bodyEl = document.getElementById("backup-preflight-body");
+            var btnOk = document.getElementById("btn-backup-confirm");
+            var statusColor = pre.status === "ok" ? "var(--ps-success)" :
+                              pre.status === "tight" ? "var(--ps-warning, #e8b33f)" :
+                              "var(--ps-danger)";
+            var statusIcon = pre.status === "ok" ? "check-circle" :
+                             pre.status === "tight" ? "exclamation-triangle" :
+                             "x-octagon";
+            var statusLabel = pre.status === "ok" ? "Ready" :
+                              pre.status === "tight" ? "Tight — confirm to proceed" :
+                              "Insufficient space";
+
+            var html = '' +
+                '<div style="font-size:13px;line-height:1.7">' +
+                '  <div style="color:' + statusColor + ';font-weight:500;margin-bottom:8px">' +
+                '    <i class="bi bi-' + statusIcon + '"></i> ' + statusLabel +
+                '  </div>' +
+                '  <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;color:var(--ps-text)">' +
+                '    <span style="color:var(--ps-text-dim)">Source</span><span>' + _humanBytes(pre.size_bytes) + ' (' + pre.file_count + ' files)</span>' +
+                '    <span style="color:var(--ps-text-dim)">Needed</span><span>' + _humanBytes(pre.required_bytes) + '</span>' +
+                '    <span style="color:var(--ps-text-dim)">Available</span><span>' + _humanBytes(pre.available_bytes) + '</span>' +
+                '    <span style="color:var(--ps-text-dim)">Safe reserve</span><span>' + _humanBytes(pre.safe_reserve_bytes) + ' (' + escapeHtml(pre.dest_fs || "unknown") + ')</span>' +
+                '    <span style="color:var(--ps-text-dim)">Workers</span><span>' + pre.jobs + (pre.bundle ? " → single bundle" : " → loose parts") + '</span>' +
+                '  </div>';
+            if (pre.network_warning) {
+                html += '<div style="margin-top:10px;padding:8px;background:rgba(232,179,63,0.12);border-left:2px solid var(--ps-warning,#e8b33f);color:var(--ps-text-dim);font-size:11px">' +
+                        '<i class="bi bi-info-circle"></i> Network filesystem detected (' + escapeHtml(pre.network_warning) +
+                        '). The backup will run normally but may take significantly longer than on local storage.' +
+                        '</div>';
+            }
+            html += '</div>';
+            bodyEl.innerHTML = html;
+
+            // Enable/disable the proceed button based on status
+            if (pre.status === "insufficient") {
+                btnOk.disabled = true;
+                btnOk.innerHTML = '<i class="bi bi-x-octagon"></i> Not enough space';
+            } else {
+                btnOk.disabled = false;
+                btnOk.innerHTML = pre.status === "tight"
+                    ? '<i class="bi bi-exclamation-triangle"></i> Proceed anyway'
+                    : '<i class="bi bi-archive"></i> Start backup';
+            }
+
+            // Wire the proceed button (replace to clear old listeners)
+            var newBtn = btnOk.cloneNode(true);
+            btnOk.parentNode.replaceChild(newBtn, btnOk);
+            newBtn.addEventListener("click", function() {
+                bootstrap.Modal.getInstance(modalEl).hide();
+                _startBackup(dir, recursive, compress, pre.status === "tight");
+            });
+
+            // Clean up status text when modal closes without proceeding
+            modalEl.addEventListener("hidden.bs.modal", function _once() {
+                modalEl.removeEventListener("hidden.bs.modal", _once);
+                if (!_backupJobId) {
+                    quickBackupStatus.innerHTML = "";
+                    btnQuickBackup.disabled = false;
+                }
+            });
+
+            new bootstrap.Modal(modalEl).show();
+        })
+        .catch(function() {
+            quickBackupStatus.innerHTML = '<span style="color:var(--ps-danger)">Preflight failed</span>';
+            btnQuickBackup.disabled = false;
+        });
     });
 
     if (btnCancelBackup) {
         btnCancelBackup.addEventListener("click", function() {
             if (!_backupJobId) return;
-            fetch("/api/cancel/" + _backupJobId, {method: "POST"});
-            if (_backupPollTimer) {
-                clearInterval(_backupPollTimer);
-                _backupPollTimer = null;
-            }
-            quickBackupStatus.innerHTML = '<span style="color:var(--ps-text-muted)">Cancelling...</span>';
-            // Poll once more to confirm cancellation
-            setTimeout(function() {
-                _backupDone();
-                quickBackupStatus.innerHTML = '<span style="color:var(--ps-text-muted)">Cancelled — incomplete archive removed</span>';
-            }, 1500);
+            var jobId = _backupJobId;
+            quickBackupStatus.innerHTML = '<i class="bi bi-hourglass-split spin"></i> Cancelling...';
+            fetch("/api/cancel/" + jobId, {method: "POST"});
+            // Let the status poller see the cancelled state + cleanup log.
+            // Don't clear the poll timer or job id here — they'll tick once
+            // more, pick up status=cancelled, and show the final message.
         });
     }
 

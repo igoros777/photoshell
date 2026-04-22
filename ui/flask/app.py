@@ -10,6 +10,7 @@ import platform
 import re
 import shlex
 import shutil
+import signal
 import socket
 import stat
 import string
@@ -156,6 +157,11 @@ def _run_step(job_id, step_index, cmd, cwd):
             bufsize=1,
             encoding="utf-8",
             errors="replace",
+            # Put the subprocess in its own process group so cancel can kill
+            # it and every descendant via os.killpg. Without this, cancelling
+            # a parallel backup only kills the bash shim and leaves its tar
+            # workers running.
+            start_new_session=True,
         )
         with jobs_lock:
             jobs[job_id]["pid"] = proc.pid
@@ -2755,127 +2761,193 @@ def api_discover_text_fields():
     return jsonify({"fields": fields, "sampled": sampled})
 
 
+def _backup_common_validate(body):
+    """Validate + normalize shared backup request fields. Returns
+    (target, recursive, compress, jobs_param, force, no_wrap) or raises ValueError."""
+    path = (body.get("path") or "").strip()
+    if not path:
+        raise ValueError("No path specified")
+    recursive = bool(body.get("recursive", True))
+    compress = (body.get("compress") or "none").strip().lower()
+    jobs_param = str(body.get("jobs") or "auto").strip() or "auto"
+    force = bool(body.get("force", False))
+    no_wrap = bool(body.get("no_wrap", False))
+
+    if compress not in ("none", "gzip", "pigz", "zstd"):
+        raise ValueError("compress must be one of: none, gzip, pigz, zstd")
+    if jobs_param != "auto" and (not jobs_param.isdigit() or int(jobs_param) < 1):
+        raise ValueError("jobs must be a positive integer or 'auto'")
+
+    path = _sanitize_dir_path(path)  # raises ValueError
+    target, error = _resolve_directory(path)
+    if error:
+        raise ValueError("Directory not accessible")
+    return target, recursive, compress, jobs_param, force, no_wrap
+
+
+@app.route("/api/backup/preflight", methods=["POST"])
+def api_backup_preflight():
+    """Pre-flight check: returns size, available, status (ok/tight/insufficient),
+    filesystem info, and a network-mount warning. UI calls this before kicking
+    off /api/quick_backup so it can show a confirm modal or refuse outright."""
+    body = request.get_json(silent=True) or {}
+    try:
+        target, recursive, compress, jobs_param, _force, no_wrap = _backup_common_validate(body)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    cmd = ["bash", _script("backup_folder.sh"),
+           "--source", target, "--dest", target,
+           "--jobs", jobs_param, "--compress", compress,
+           "--preflight-json"]
+    if recursive:
+        cmd.append("--recursive")
+    if no_wrap:
+        cmd.append("--no-wrap")
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Preflight timed out"}), 500
+    if result.returncode != 0:
+        return jsonify({"error": "Preflight failed", "stderr": result.stderr[-1000:]}), 500
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return jsonify({"error": "Invalid preflight output", "raw": result.stdout[:500]}), 500
+    return jsonify(data)
+
+
 @app.route("/api/quick_backup", methods=["POST"])
 def api_quick_backup():
     """Create a backup archive of the photo directory.
 
-    Compression modes:
-        none   — .tar (fastest, no compression)
-        gzip   — .tar.gz (single-threaded gzip)
-        pigz   — .tar.gz (parallel gzip, auto-detected)
-        auto   — pigz if available, else gzip (default)
+    Uses backup_folder.sh with --jobs auto for parallel multi-part backup.
+    Multi-part mode produces backup_TIMESTAMP_FOLDER.partNN.<ext> files
+    written concurrently, then concatenates them into a single bundle with
+    a companion README (unless --no-wrap is passed).
+
+    The bash script's SIGTERM trap ensures that cancelling (via /api/cancel)
+    kills every tar worker and removes all partial archives — the Flask
+    layer only needs to os.killpg() the process group.
+
+    Request fields:
+        path         target folder (required)
+        recursive    include subdirectories (default True)
+        compress     none|gzip|pigz|zstd (default none)
+        jobs         "auto" or positive integer (default auto)
+        force        proceed despite "tight" preflight status (default False)
+        no_wrap      skip bundle + README, keep loose .partNN files (default False)
     """
     body = request.get_json(silent=True) or {}
-    path = (body.get("path") or "").strip()
-    recursive = bool(body.get("recursive", False))
-    compress = (body.get("compress") or "auto").strip().lower()
-    if not path:
-        return jsonify({"error": "No path specified"}), 400
-
     try:
-        path = _sanitize_dir_path(path)
-    except ValueError:
-        return jsonify({"error": "Invalid path"}), 400
-    target, error = _resolve_directory(path)
-    if error:
-        return jsonify({"error": "Directory not accessible"}), 400
+        target, recursive, compress, jobs_param, force, no_wrap = _backup_common_validate(body)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
     folder_name = os.path.basename(target)
     timestamp = time.strftime("%Y%m%d-%H%M%S")
 
-    # Determine compression
-    has_pigz = shutil.which("pigz") is not None
-    if compress == "auto":
-        compress = "pigz" if has_pigz else "gzip"
-    elif compress == "pigz" and not has_pigz:
-        compress = "gzip"
+    # The script's naming: backup_TIMESTAMP_FOLDER[.partNN].<ext>
+    ext = {"none": "tar", "gzip": "tar.gz", "pigz": "tar.gz", "zstd": "tar.zst"}[compress]
+    archive_basename = "backup_%s_%s" % (timestamp, folder_name)
+    # Prefix used to find every part file for cancel cleanup / final report.
+    archive_prefix = os.path.join(target, archive_basename)
 
-    if compress == "none":
-        archive_name = "%s_backup_%s.tar" % (folder_name, timestamp)
-        compress_label = "none (tar only)"
-    else:
-        archive_name = "%s_backup_%s.tar.gz" % (folder_name, timestamp)
-        if compress == "pigz":
-            cores = os.cpu_count() or 4
-            compress_label = "pigz -0 (%d threads, store)" % cores
-        else:
-            compress_label = "gzip (single-threaded)"
-
-    archive_path = os.path.join(target, archive_name)
-
-    # Build the shell command
-    if compress == "none":
-        if recursive:
-            cmd = ["tar", "cf", archive_path, "-C", os.path.dirname(target),
-                   folder_name, "--exclude", archive_name]
-        else:
-            cmd = ["bash", "-c",
-                   "cd %s && find . -maxdepth 1 -type f -print0 | tar cf %s --null -T -"
-                   % (shlex.quote(target), shlex.quote(archive_path))]
-    else:
-        # Compressed: pipe tar through gzip/pigz
-        # pigz uses -0 (store) by default — photos are already compressed,
-        # so real compression wastes CPU for negligible size reduction.
-        # pigz -0 still uses multiple threads for parallel I/O.
-        if compress == "pigz":
-            cores = os.cpu_count() or 4
-            comp_cmd = "pigz -0 -p %d" % cores
-        else:
-            comp_cmd = "gzip"
-
-        if recursive:
-            cmd = ["bash", "-c",
-                   "tar cf - -C %s %s --exclude %s | %s > %s"
-                   % (shlex.quote(os.path.dirname(target)),
-                      shlex.quote(folder_name),
-                      shlex.quote(archive_name),
-                      comp_cmd,
-                      shlex.quote(archive_path))]
-        else:
-            cmd = ["bash", "-c",
-                   "cd %s && find . -maxdepth 1 -type f -print0 | tar cf - --null -T - | %s > %s"
-                   % (shlex.quote(target), comp_cmd, shlex.quote(archive_path))]
+    cmd = ["bash", _script("backup_folder.sh"),
+           "--source", target, "--dest", target,
+           "--jobs", jobs_param, "--compress", compress]
+    if recursive:
+        cmd.append("--recursive")
+    if force:
+        cmd.append("--force")
+    if no_wrap:
+        cmd.append("--no-wrap")
 
     job_id = str(uuid.uuid4())[:8]
+    compress_label = {
+        "none": "none (tar only)",
+        "gzip": "gzip (single-threaded)",
+        "pigz": "pigz -0 (parallel, store)",
+        "zstd": "zstd -1 (parallel, light)",
+    }[compress]
     with jobs_lock:
         jobs[job_id] = {
             "status": "running",
-            "log": "Creating backup: %s\nCompression: %s\n" % (archive_name, compress_label),
+            "log": "Creating backup: %s.[.partNN].%s\nWorkers: %s\nCompression: %s\n"
+                   % (archive_basename, ext, jobs_param, compress_label),
             "current_step": 0,
             "steps": ["Backup"],
             "pid": None,
             "created_at": time.time(),
-            "archive_path": archive_path,
+            "archive_prefix": archive_prefix,
+            "archive_ext": ext,
         }
 
+    # Multi-part mode produces a subdirectory ${target}/${archive_basename}/
+    # containing partNN.<ext> files + README.txt. Single-file mode (jobs=1)
+    # still produces a flat ${archive_basename}.<ext> in target.
+    output_dir = archive_prefix  # ${target}/${archive_basename}/
+    single_file = archive_prefix + "." + ext
+
     def _run_backup():
-        _run_step(job_id, 0, cmd, target)
+        rc = _run_step(job_id, 0, cmd, target)
         with jobs_lock:
             job = jobs.get(job_id)
             if not job:
                 return
             if job["status"] == "cancelled":
-                # Clean up incomplete archive
-                if os.path.isfile(archive_path):
+                # The bash signal trap should have removed partials already.
+                # Sweep anything left in case the trap didn't fire cleanly.
+                cleaned = False
+                if os.path.isdir(output_dir):
                     try:
-                        os.remove(archive_path)
-                        job["log"] += "\nIncomplete archive removed: %s\n" % archive_name
+                        shutil.rmtree(output_dir); cleaned = True
                     except OSError:
                         pass
+                if os.path.isfile(single_file):
+                    try:
+                        os.remove(single_file); cleaned = True
+                    except OSError:
+                        pass
+                job["log"] += ("\nCancelled — leftover files removed\n" if cleaned
+                               else "\nCancelled — partial files cleaned up by script\n")
+            elif rc == 2:
+                job["status"] = "failed"
+                job["log"] += "\nRefused: insufficient disk space at destination\n"
+            elif rc == 3:
+                job["status"] = "failed"
+                job["log"] += "\nRefused: destination too tight for safety (pass force=true to override)\n"
             elif job["status"] == "running":
-                if os.path.isfile(archive_path):
-                    size_mb = os.path.getsize(archive_path) / (1024 * 1024)
-                    job["log"] += "\nBackup created: %s (%.1f MB)\n" % (archive_name, size_mb)
+                if os.path.isdir(output_dir):
+                    parts = glob.glob(os.path.join(output_dir, "part*." + ext))
+                    total = sum(os.path.getsize(p) for p in parts)
+                    job["log"] += ("\nBackup folder: %s (%d parts, %.1f MB)\n"
+                                   % (os.path.basename(output_dir), len(parts),
+                                      total / (1024 * 1024)))
+                    job["status"] = "done"
+                elif os.path.isfile(single_file):
+                    size_mb = os.path.getsize(single_file) / (1024 * 1024)
+                    job["log"] += ("\nBackup file: %s (%.1f MB)\n"
+                                   % (os.path.basename(single_file), size_mb))
                     job["status"] = "done"
                 else:
-                    job["log"] += "\nBackup may have failed — archive not found\n"
+                    job["log"] += "\nBackup may have failed — no archive found\n"
                     job["status"] = "failed"
 
     t = threading.Thread(target=_run_backup)
     t.daemon = True
     t.start()
 
-    return jsonify({"job_id": job_id, "archive": archive_name, "compression": compress_label})
+    # Multi-part mode returns the subdirectory name; single-file mode returns
+    # the flat .tar/.tar.gz filename.
+    is_multi = jobs_param != "1"
+    return jsonify({
+        "job_id": job_id,
+        "archive": archive_basename + ("/" if is_multi else "." + ext),
+        "compression": compress_label,
+        "workers": jobs_param,
+    })
 
 
 @app.route("/api/file_metadata")
@@ -3186,11 +3258,25 @@ def api_cancel(job_id):
 
     if pid:
         try:
-            os.kill(pid, 9)
+            # SIGTERM the whole process group (backup_folder.sh + all tar
+            # workers). The bash script's signal trap will clean up partial
+            # archives before exiting. SIGKILL as a fallback 1s later if it
+            # doesn't go down gracefully.
+            os.killpg(os.getpgid(pid), signal.SIGTERM)
+
+            def _fallback_kill():
+                try:
+                    if os.getpgid(pid):
+                        os.killpg(os.getpgid(pid), signal.SIGKILL)
+                except OSError:
+                    pass
+
+            threading.Timer(1.5, _fallback_kill).start()
         except OSError:
             pass
 
-    # Clean up incomplete backup archive if present
+    # Clean up incomplete backup archive if present (single-file jobs).
+    # Multi-part/bundled backups are cleaned up by the bash signal trap.
     if archive_path and os.path.isfile(archive_path):
         try:
             os.remove(archive_path)
@@ -3562,9 +3648,16 @@ def api_backup_run():
     source = data.get("source", "").strip()
     dest = data.get("dest", "").strip()
     recursive = data.get("recursive", False)
+    jobs_param = str(data.get("jobs", "auto")).strip() or "auto"
+    compress = (data.get("compress") or "none").strip().lower()
 
     if not source:
         return jsonify({"error": "source is required"}), 400
+
+    if jobs_param != "auto" and (not jobs_param.isdigit() or int(jobs_param) < 1):
+        return jsonify({"error": "jobs must be a positive integer or 'auto'"}), 400
+    if compress not in ("none", "gzip", "pigz", "zstd"):
+        return jsonify({"error": "compress must be one of: none, gzip, pigz, zstd"}), 400
 
     try:
         source = _sanitize_dir_path(source)
@@ -3584,7 +3677,9 @@ def api_backup_run():
     if not os.path.isdir(dest):
         return jsonify({"error": "Destination directory does not exist"}), 400
 
-    cmd = ["bash", _script("backup_folder.sh"), "--source", source, "--dest", dest]
+    cmd = ["bash", _script("backup_folder.sh"),
+           "--source", source, "--dest", dest,
+           "--jobs", jobs_param, "--compress", compress]
     if recursive:
         cmd.append("--recursive")
 
@@ -3592,8 +3687,8 @@ def api_backup_run():
     with jobs_lock:
         jobs[job_id] = {
             "status": "running",
-            "log": "Backup source: %s\nDestination: %s\nRecursive: %s\n"
-                   % (source, dest, recursive),
+            "log": "Backup source: %s\nDestination: %s\nRecursive: %s\nWorkers: %s\nCompression: %s\n"
+                   % (source, dest, recursive, jobs_param, compress),
             "current_step": 0,
             "steps": ["Backup Folder"],
             "pid": None,

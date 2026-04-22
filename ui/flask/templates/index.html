@@ -58,14 +58,14 @@
                     <button type="button" class="btn btn-sm btn-cancel" id="btn-cancel-backup" style="display:none" title="Cancel backup and remove incomplete archive">
                         <i class="bi bi-x-circle"></i> Cancel
                     </button>
-                    <select class="form-select form-select-sm" id="backup-compress-select" style="width:auto;font-size:11px" title="Compression: photos barely compress — use gzip/pigz only for mixed content">
+                    <select class="form-select form-select-sm" id="backup-compress-select" style="width:auto;font-size:11px" title="Compression: photos barely compress — 'none' is fastest. Parallel multi-part backup is always used for large speedups.">
                         <option value="none" selected>no compression</option>
-                        <option value="auto">auto (pigz/gzip)</option>
-                        <option value="pigz">pigz</option>
+                        <option value="pigz">pigz (parallel)</option>
+                        <option value="zstd">zstd (parallel)</option>
                         <option value="gzip">gzip</option>
                     </select>
                     <div class="form-check" style="font-size:11px">
-                        <input class="form-check-input" type="checkbox" id="backup-recursive-chk">
+                        <input class="form-check-input" type="checkbox" id="backup-recursive-chk" checked>
                         <label class="form-check-label" for="backup-recursive-chk">Recursive</label>
                     </div>
                     <span id="quick-backup-status" style="font-size:11px;color:var(--ps-text-muted)"></span>
@@ -1651,6 +1651,29 @@
                 <div id="preview-metadata-content" class="preview-metadata-content"></div>
             </div>
             <div class="modal-footer" id="photo-preview-footer" style="flex-direction:column;align-items:stretch;gap:4px;padding:10px 16px">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Backup Preflight / Confirm Modal -->
+<div class="modal fade" id="backupConfirmModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-hdd"></i> Backup preflight</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="backup-preflight-body">
+                    <div class="text-muted" style="font-size:12px">Checking disk space...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-photoshell" id="btn-backup-confirm" disabled>
+                    <i class="bi bi-archive"></i> Proceed
+                </button>
             </div>
         </div>
     </div>
