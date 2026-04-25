@@ -446,7 +446,7 @@ generate_model_output() {
 
   rendered_prompt="$(render_prompt_for_file "${file}" "${cached_comment}")"
 
-  if ! output="$(ollama run "${MODEL}" "${rendered_prompt}" "${file}" 2>/dev/null)"; then
+  if ! output="$(ollama run "${MODEL}" --nowordwrap "${rendered_prompt}" "${file}" 2>/dev/null | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g')"; then
     return 1
   fi
 

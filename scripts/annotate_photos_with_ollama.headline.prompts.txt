@@ -1,12 +1,12 @@
 # Format: <integer>|<prompt text>
 #
 # Prompt 1: Newspaper-style caption (short, punchy)
-1|Write a short, punchy headline (8 words max) for this photo. Capture the essence of the scene in the style of a newspaper photo caption. Location context: LOCATION. Return only the headline text — no quotes, no commentary.
+1|Write a short, punchy headline (8 words max) for this photo. Capture the essence of the scene in the style of a newspaper photo caption. Location context: LOCATION. Return only the headline text — no quotes, no special characters, no commentary.
 #
 # Prompts 2-3: Adobe Stock title style
 # Rules: concise natural phrase under 70 characters, describe the main subject,
 # setting, and mood. No keyword lists, brand names, or technical jargon.
 # Must read like a natural phrase or short sentence.
 #
-2|Write a title for this stock photo following Adobe Stock guidelines. The title must be a natural-sounding phrase or short sentence under 70 characters that describes the main subject, setting, and mood. Do not use keyword lists, brand names, camera terms, or technical jargon. Focus on what a buyer would search for. Location context: LOCATION. Return only the title text — no quotes, no formatting, no commentary.
+2|Write a title for this stock photo following Adobe Stock guidelines. The title must be a natural-sounding phrase or short sentence under 70 characters that describes the main subject, setting, and mood. Do not use keyword lists, brand names, camera terms, or technical jargon. Focus on what a buyer would search for. Location context: LOCATION. Return only the title text — no quotes, no formatting, no special characters, no commentary.
 3|Create a descriptive stock photo title under 70 characters. Write it as a natural phrase that captures the subject, environment, and feeling of the image. Think about what a photo buyer would type to find this image. Avoid lists of keywords, brand names, and photography jargon. Location context: LOCATION. Return only the title — nothing else.

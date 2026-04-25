@@ -231,11 +231,13 @@ Descriptions:
     # Call Ollama
     try:
         proc = subprocess.run(
-            ['ollama', 'run', model],
+            ['ollama', 'run', model, '--nowordwrap'],
             input=prompt,
             capture_output=True, text=True, timeout=120
         )
         response = proc.stdout.strip() if proc.stdout else ''
+        # Strip ANSI escape sequences (recent ollama emits control codes)
+        response = re.sub(r'\\x1b\\[[0-9;]*[a-zA-Z]', '', response)
     except subprocess.TimeoutExpired:
         print(f'  WARNING: Ollama timed out on batch {batch_num}. Skipping.')
         sys.stdout.flush()
